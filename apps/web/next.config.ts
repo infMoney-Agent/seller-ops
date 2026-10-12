@@ -1,8 +1,16 @@
+import path from 'node:path';
+
 import type { NextConfig } from 'next';
 import { withSentryConfig } from '@sentry/nextjs';
 
 // Define the base Next.js configuration
 const baseConfig: NextConfig = {
+  // Monorepo: explicitly declare the workspace root so turbopack/webpack do not
+  // mis-infer it from the multiple lockfiles (root + apps/web).
+  turbopack: {
+    root: path.join(__dirname, '../../')
+  },
+  outputFileTracingRoot: path.join(__dirname, '../../'),
   output: process.env.BUILD_STANDALONE === 'true' ? 'standalone' : undefined,
   images: {
     remotePatterns: [
