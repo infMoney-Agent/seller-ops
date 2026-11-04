@@ -4,28 +4,10 @@ import { DataTableColumnHeader } from '@/components/ui/table/data-table-column-h
 import type { Product } from '../../api/types';
 import { Column, ColumnDef } from '@tanstack/react-table';
 import { Icons } from '@/components/icons';
-import Image from 'next/image';
 import { CellAction } from './cell-action';
 import { CATEGORY_OPTIONS } from './options';
 
 export const columns: ColumnDef<Product>[] = [
-  {
-    accessorKey: 'photo_url',
-    header: 'IMAGE',
-    cell: ({ row }) => {
-      return (
-        <div className='relative aspect-square'>
-          <Image
-            src={row.getValue('photo_url')}
-            alt={row.getValue('name')}
-            fill
-            sizes='80px'
-            className='rounded-lg'
-          />
-        </div>
-      );
-    }
-  },
   {
     id: 'name',
     accessorKey: 'name',

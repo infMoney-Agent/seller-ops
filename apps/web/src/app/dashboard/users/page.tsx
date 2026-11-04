@@ -1,30 +1,18 @@
 import PageContainer from '@/components/layout/page-container';
-import UserListingPage from '@/features/users/components/user-listing';
-import { searchParamsCache } from '@/lib/searchparams';
-import type { SearchParams } from 'nuqs/server';
-import { usersInfoContent } from '@/features/users/info-content';
-import { UserFormSheetTrigger } from '@/features/users/components/user-form-sheet';
+import { MembersPanel, type Member, type Invitation } from '@/features/auth/members-panel';
+import { backendFetch, requireSession } from '@/lib/backend';
 
-export const metadata = {
-  title: 'Dashboard: Users'
-};
-
-type PageProps = {
-  searchParams: Promise<SearchParams>;
-};
-
-export default async function UsersPage(props: PageProps) {
-  const searchParams = await props.searchParams;
-  searchParamsCache.parse(searchParams);
-
+export default async function MembersPage() {
+  const session = await requireSession();
+  if (!session.workspaceId) return <p>Select a workspace to view its members.</p>;
+  const owner = session.role === 'owner';
+  const [members, invitations] = await Promise.all([
+    backendFetch<Member[]>('/api/users', session.workspaceId),
+    owner ? backendFetch<Invitation[]>('/api/invitations', session.workspaceId) : []
+  ]);
   return (
-    <PageContainer
-      pageTitle='Users'
-      pageDescription='Manage users (React Query + nuqs table pattern.)'
-      infoContent={usersInfoContent}
-      pageHeaderAction={<UserFormSheetTrigger />}
-    >
-      <UserListingPage />
+    <PageContainer pageTitle='Workspace members'>
+      <MembersPanel members={members} invitations={invitations} owner={owner} />
     </PageContainer>
   );
 }

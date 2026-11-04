@@ -1,28 +1,22 @@
-'use client';
-
 import PageContainer from '@/components/layout/page-container';
-import { OrganizationList } from '@clerk/nextjs';
-import { workspacesInfoContent } from '@/config/infoconfig';
+import { OrgSwitcher } from '@/components/org-switcher';
+import { requireSession } from '@/lib/backend';
+import Link from 'next/link';
 
-export default function WorkspacesPage() {
+export default async function WorkspacesPage() {
+  const session = await requireSession();
   return (
-    <PageContainer
-      pageTitle='Workspaces'
-      pageDescription='Manage your workspaces and switch between them'
-      infoContent={workspacesInfoContent}
-    >
-      <OrganizationList
-        appearance={{
-          elements: {
-            organizationListBox: 'space-y-2',
-            organizationPreview: 'rounded-lg border p-4 hover:bg-accent',
-            organizationPreviewMainIdentifier: 'text-lg font-semibold',
-            organizationPreviewSecondaryIdentifier: 'text-sm text-muted-foreground'
-          }
-        }}
-        afterSelectOrganizationUrl='/dashboard/workspaces/team'
-        afterCreateOrganizationUrl='/dashboard/workspaces/team'
-      />
+    <PageContainer pageTitle='Workspaces'>
+      <div className='max-w-md space-y-4'>
+        <OrgSwitcher />
+        {session.workspaceId ? (
+          <Link className='underline' href='/dashboard/users'>
+            View workspace members
+          </Link>
+        ) : (
+          <p>Ask your administrator to create a workspace or share an invitation.</p>
+        )}
+      </div>
     </PageContainer>
   );
 }

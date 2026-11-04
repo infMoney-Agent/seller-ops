@@ -1,6 +1,8 @@
 import { HydrationBoundary, dehydrate } from '@tanstack/react-query';
 import { getQueryClient } from '@/lib/query-client';
-import { productByIdOptions } from '@/features/products/api/queries';
+import { productKeys } from '@/features/products/api/queries';
+import { backendFetch, requireSession } from '@/lib/backend';
+import type { ProductByIdResponse } from '@/features/products/api/types';
 import PageContainer from '@/components/layout/page-container';
 import ProductViewPage from '@/features/products/components/product-view-page';
 
@@ -11,11 +13,20 @@ export const metadata = {
 type PageProps = { params: Promise<{ productId: string }> };
 
 export default async function Page(props: PageProps) {
+  const session = await requireSession();
+  if (!session.workspaceId) return <p>Select a workspace to view products.</p>;
+  if (session.role !== 'owner' && (await props.params).productId === 'new') {
+    return <p>Only workspace owners can create products.</p>;
+  }
   const params = await props.params;
   const queryClient = getQueryClient();
 
   if (params.productId !== 'new') {
-    void queryClient.prefetchQuery(productByIdOptions(Number(params.productId)));
+    const id = Number(params.productId);
+    queryClient.setQueryData(
+      productKeys.detail(id),
+      await backendFetch<ProductByIdResponse>(`/api/products/${id}`, session.workspaceId)
+    );
   }
 
   return (

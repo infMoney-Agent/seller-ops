@@ -1,0 +1,23 @@
+services:
+  proxy:
+    networks:
+      default:
+        aliases: !reset []
+    ports: !override
+      - "127.0.0.1:18443:18443"
+      - "127.0.0.1:18444:18444"
+    volumes:
+      - ./deploy/casdoor/Caddyfile.local:/etc/caddy/Caddyfile:ro
+  web:
+    environment:
+      SELLER_API_URL: http://proxy:8080
+  api:
+    # The API and Caddy share loopback so the OIDC issuer is the same
+    # address inside the API and in the browser over the SSH tunnel.
+    network_mode: service:proxy
+    environment:
+      APP_ORIGIN: http://localhost:18443
+      OIDC_ISSUER: http://localhost:18444
+  casdoor:
+    environment:
+      origin: http://localhost:18444

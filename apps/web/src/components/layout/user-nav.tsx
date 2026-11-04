@@ -10,10 +10,10 @@ import {
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu';
 import { UserAvatarProfile } from '@/components/user-avatar-profile';
-import { SignOutButton, useUser } from '@clerk/nextjs';
+import { signOut, useSellerUser } from '@/features/auth/session';
 import { useRouter } from 'next/navigation';
 export function UserNav() {
-  const { user } = useUser();
+  const user = useSellerUser();
   const router = useRouter();
   if (user) {
     return (
@@ -39,15 +39,10 @@ export function UserNav() {
             <DropdownMenuItem onClick={() => router.push('/dashboard/profile')}>
               Profile
             </DropdownMenuItem>
-            <DropdownMenuItem>Billing</DropdownMenuItem>
-            <DropdownMenuItem>Settings</DropdownMenuItem>
-            <DropdownMenuItem>New Team</DropdownMenuItem>
           </DropdownMenuGroup>
           <DropdownMenuSeparator />
           <DropdownMenuGroup>
-            <DropdownMenuItem>
-              <SignOutButton redirectUrl='/auth/sign-in' />
-            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => signOut()}>Sign out</DropdownMenuItem>
           </DropdownMenuGroup>
         </DropdownMenuContent>
       </DropdownMenu>

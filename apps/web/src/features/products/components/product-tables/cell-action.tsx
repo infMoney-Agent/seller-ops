@@ -15,6 +15,7 @@ import { Icons } from '@/components/icons';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
+import { useSellerSession } from '@/features/auth/session';
 import { toast } from 'sonner';
 
 interface CellActionProps {
@@ -24,6 +25,7 @@ interface CellActionProps {
 export function CellAction({ data }: CellActionProps) {
   const [open, setOpen] = useState(false);
   const router = useRouter();
+  const owner = useSellerSession().role === 'owner';
 
   const deleteMutation = useMutation({
     ...deleteProductMutation,
@@ -55,11 +57,13 @@ export function CellAction({ data }: CellActionProps) {
           </DropdownMenuGroup>
           <DropdownMenuGroup>
             <DropdownMenuItem onClick={() => router.push(`/dashboard/product/${data.id}`)}>
-              <Icons.edit className='mr-2 h-4 w-4' /> Update
+              <Icons.edit className='mr-2 h-4 w-4' /> {owner ? 'Update' : 'View'}
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setOpen(true)}>
-              <Icons.trash className='mr-2 h-4 w-4' /> Delete
-            </DropdownMenuItem>
+            {owner && (
+              <DropdownMenuItem onClick={() => setOpen(true)}>
+                <Icons.trash className='mr-2 h-4 w-4' /> Delete
+              </DropdownMenuItem>
+            )}
           </DropdownMenuGroup>
         </DropdownMenuContent>
       </DropdownMenu>

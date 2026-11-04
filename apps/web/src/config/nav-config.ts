@@ -154,20 +154,6 @@ export const navGroups: NavGroup[] = [
     label: '',
     items: [
       {
-        title: 'Pro',
-        url: '#',
-        icon: 'pro',
-        isActive: false,
-        items: [
-          {
-            title: 'Exclusive',
-            url: '/dashboard/exclusive',
-            icon: 'exclusive',
-            shortcut: ['e', 'e']
-          }
-        ]
-      },
-      {
         title: 'Account',
         url: '#',
         icon: 'account',
@@ -184,13 +170,6 @@ export const navGroups: NavGroup[] = [
             url: '/dashboard/notifications',
             icon: 'notification',
             shortcut: ['n', 'n']
-          },
-          {
-            title: 'Billing',
-            url: '/dashboard/billing',
-            icon: 'billing',
-            shortcut: ['b', 'b'],
-            access: { requireOrg: true }
           },
           {
             title: 'Login',

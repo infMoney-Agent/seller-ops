@@ -1,0 +1,67 @@
+services:
+  proxy:
+    image: caddy:2.10.2-alpine
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:?Set APP_DOMAIN}
+      AUTH_DOMAIN: ${AUTH_DOMAIN:?Set AUTH_DOMAIN}
+    networks:
+      default:
+        aliases: ["${AUTH_DOMAIN}"]
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/casdoor/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Web.Dockerfile
+    environment:
+      SELLER_API_URL: http://api:8080
+      NEXT_PUBLIC_SENTRY_DISABLED: "true"
+  api:
+    profiles: [app]
+    build: ./apps/server
+    restart: on-failure
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      APP_ORIGIN: https://${APP_DOMAIN}
+      OIDC_ISSUER: https://${AUTH_DOMAIN}
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-}
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-}
+      DATABASE_URL: postgres://seller_app:${APP_DB_PASSWORD:?Set APP_DB_PASSWORD}@db:5432/seller_ops?sslmode=disable
+  casdoor:
+    image: casbin/casdoor:v4.25.0
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      RUNNING_IN_DOCKER: "true"
+      driverName: postgres
+      dataSourceName: host=db port=5432 user=casdoor password=${AUTH_DB_PASSWORD:?Set AUTH_DB_PASSWORD} sslmode=disable dbname=casdoor
+      dbName: casdoor
+      origin: https://${AUTH_DOMAIN}
+      runmode: prod
+  db:
+    image: postgres:17.7-alpine
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD}
+      AUTH_DB_PASSWORD: ${AUTH_DB_PASSWORD}
+    volumes:
+      - database:/var/lib/postgresql/data
+      - ./deploy/casdoor/init-db.sh:/docker-entrypoint-initdb.d/10-seller.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+
+volumes:
+  database:
+  caddy-data:
+  caddy-config:

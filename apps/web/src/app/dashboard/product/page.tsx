@@ -2,6 +2,7 @@ import PageContainer from '@/components/layout/page-container';
 import { buttonVariants } from '@/components/ui/button';
 import ProductListingPage from '@/features/products/components/product-listing';
 import { searchParamsCache } from '@/lib/searchparams';
+import { requireSession } from '@/lib/backend';
 import { cn } from '@/lib/utils';
 import { Icons } from '@/components/icons';
 import Link from 'next/link';
@@ -17,6 +18,7 @@ type pageProps = {
 };
 
 export default async function Page(props: pageProps) {
+  const session = await requireSession();
   const searchParams = await props.searchParams;
   searchParamsCache.parse(searchParams);
 
@@ -26,9 +28,14 @@ export default async function Page(props: pageProps) {
       pageDescription='Manage products (React Query + nuqs table pattern.)'
       infoContent={productInfoContent}
       pageHeaderAction={
-        <Link href='/dashboard/product/new' className={cn(buttonVariants(), 'text-xs md:text-sm')}>
-          <Icons.add className='mr-2 h-4 w-4' /> Add New
-        </Link>
+        session.role === 'owner' ? (
+          <Link
+            href='/dashboard/product/new'
+            className={cn(buttonVariants(), 'text-xs md:text-sm')}
+          >
+            <Icons.add className='mr-2 h-4 w-4' /> Add New
+          </Link>
+        ) : undefined
       }
     >
       <ProductListingPage />
