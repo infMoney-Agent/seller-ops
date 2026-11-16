@@ -1,4 +1,11 @@
-import type { AdReport, GeneratedListing, Monitor, ProductScore, ReviewAnalysis, Snapshot } from './types';
+import type {
+  AdReport,
+  GeneratedListing,
+  Monitor,
+  ProductScore,
+  ReviewAnalysis,
+  Snapshot
+} from './types';
 
 async function request<T>(path: string, method = 'GET', body?: object): Promise<T> {
   const response = await fetch('/api/ecom' + path, {
@@ -9,11 +16,14 @@ async function request<T>(path: string, method = 'GET', body?: object): Promise<
   });
   if (response.status === 401) {
     window.location.assign('/auth/sign-in');
-    throw new Error('Sign in to continue.');
+    throw new Error('请登录后继续。');
   }
   if (!response.ok) {
     const result = await response.json().catch(() => null);
-    throw new Error(typeof result?.detail === 'string' ? result.detail : 'The request could not be completed.');
+    if (response.status === 422) {
+      throw new Error('输入不符合要求，请检查表单后重试。');
+    }
+    throw new Error(typeof result?.detail === 'string' ? result.detail : '请求未能完成。');
   }
   return response.json();
 }
@@ -41,7 +51,9 @@ export const monitorApi = {
     request('/monitor/add', 'POST', params),
   remove: (asin: string) => request('/monitor/remove/' + encodeURIComponent(asin), 'DELETE'),
   snapshots: (asin: string, limit: number) =>
-    request<{ snapshots: Snapshot[] }>('/monitor/snapshots/' + encodeURIComponent(asin) + '?limit=' + limit),
+    request<{ snapshots: Snapshot[] }>(
+      '/monitor/snapshots/' + encodeURIComponent(asin) + '?limit=' + limit
+    ),
   snapshot: (asin: string) => request('/monitor/snapshot/' + encodeURIComponent(asin), 'POST')
 };
 

@@ -210,7 +210,7 @@ def test_alert_bsr_change_triggers():
     curr = CompetitorSnapshot(asin="X", title="T", price=20.0, bsr_rank=500, bsr_category="e", review_count=50, rating=4.0, timestamp="2026-01-02T00:00:00Z")
     triggered, reason = _check_alerts(curr, prev, {"bsr_change_pct": 40})
     assert triggered is True
-    assert "BSR" in reason
+    assert "畅销排名上升" in reason
 
 
 # ─── API endpoints (no DB / LLM needed) ───────────────────────────────────────

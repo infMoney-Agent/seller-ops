@@ -5,20 +5,33 @@ const allowed = new Map([
   ['product-research', new Set(['GET categories', 'POST research', 'GET score/:asin'])],
   ['listing', new Set(['GET languages', 'POST generate', 'POST optimize'])],
   ['reviews', new Set(['POST analyze'])],
-  ['monitor', new Set(['GET list', 'POST add', 'DELETE remove/:asin', 'GET snapshots/:asin', 'POST snapshot/:asin'])],
+  [
+    'monitor',
+    new Set([
+      'GET list',
+      'POST add',
+      'DELETE remove/:asin',
+      'GET snapshots/:asin',
+      'POST snapshot/:asin'
+    ])
+  ],
   ['ads', new Set(['POST optimize'])]
 ]);
 
 async function proxy(request: Request, { params }: { params: Promise<{ path: string[] }> }) {
   const [module, action, asin, ...extra] = (await params).path;
   const signature = request.method + ' ' + action + (asin ? '/:asin' : '');
-  if (extra.length || !allowed.get(module)?.has(signature) || (asin && !/^[A-Z0-9]{10}$/i.test(asin))) {
-    return Response.json({ detail: 'Unknown e-commerce endpoint.' }, { status: 404 });
+  if (
+    extra.length ||
+    !allowed.get(module)?.has(signature) ||
+    (asin && !/^[A-Z0-9]{10}$/i.test(asin))
+  ) {
+    return Response.json({ detail: '电商接口不存在。' }, { status: 404 });
   }
   const url = new URL(request.url);
   const appOrigin = process.env.SELLER_APP_ORIGIN || url.origin;
   if (request.method !== 'GET' && request.headers.get('origin') !== appOrigin) {
-    return Response.json({ detail: 'Invalid request origin.' }, { status: 403 });
+    return Response.json({ detail: '请求来源无效。' }, { status: 403 });
   }
 
   try {
@@ -29,7 +42,7 @@ async function proxy(request: Request, { params }: { params: Promise<{ path: str
       signal: AbortSignal.timeout(10000)
     });
     if (auth.status === 401) {
-      return Response.json({ detail: 'Sign in to continue.' }, { status: 401 });
+      return Response.json({ detail: '请登录后继续。' }, { status: 401 });
     }
     if (!auth.ok) throw new Error('Session check failed');
     const session: SellerSession = await auth.json();
@@ -45,7 +58,7 @@ async function proxy(request: Request, { params }: { params: Promise<{ path: str
         if (done) break;
         if (value.byteLength > buffer.length - length) {
           await reader.cancel();
-          return Response.json({ detail: 'Request too large.' }, { status: 413 });
+          return Response.json({ detail: '请求内容过大。' }, { status: 413 });
         }
         buffer.set(value, length);
         length += value.byteLength;
@@ -54,7 +67,10 @@ async function proxy(request: Request, { params }: { params: Promise<{ path: str
     }
 
     const base = process.env.ECOM_API_URL || 'http://127.0.0.1:18080';
-    const target = new URL('/api/v1/' + module + '/' + action + (asin ? '/' + asin.toUpperCase() : ''), base);
+    const target = new URL(
+      '/api/v1/' + module + '/' + action + (asin ? '/' + asin.toUpperCase() : ''),
+      base
+    );
     target.search = url.search;
     const response = await fetch(target, {
       method: request.method,
@@ -69,7 +85,7 @@ async function proxy(request: Request, { params }: { params: Promise<{ path: str
     });
     if (response.status >= 500) {
       console.error('E-commerce request failed', module, action, response.status);
-      return Response.json({ detail: 'The operation failed. Check the service configuration or retry.' }, { status: 502 });
+      return Response.json({ detail: '操作失败，请检查服务配置或重试。' }, { status: 502 });
     }
     return new Response(response.body, {
       status: response.status,
@@ -77,7 +93,7 @@ async function proxy(request: Request, { params }: { params: Promise<{ path: str
     });
   } catch (error) {
     console.error('E-commerce proxy failed', error);
-    return Response.json({ detail: 'The e-commerce service is unavailable.' }, { status: 502 });
+    return Response.json({ detail: '电商服务暂时不可用。' }, { status: 502 });
   }
 }
 

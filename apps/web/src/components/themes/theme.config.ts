@@ -22,23 +22,23 @@ export const THEMES = [
     value: 'vercel'
   },
   {
-    name: 'Mono',
+    name: '单色',
     value: 'mono'
   },
   {
-    name: 'Notebook',
+    name: '笔记本',
     value: 'notebook'
   },
   {
-    name: 'Light Green',
+    name: '浅绿',
     value: 'light-green'
   },
   {
-    name: 'Zen',
+    name: '禅意',
     value: 'zen'
   },
   {
-    name: 'Astro Vista',
+    name: '星际视野',
     value: 'astro-vista'
   },
   {

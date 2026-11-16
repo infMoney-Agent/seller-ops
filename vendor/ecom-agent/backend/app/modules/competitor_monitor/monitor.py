@@ -13,23 +13,23 @@ def _check_alerts(snapshot: CompetitorSnapshot, previous: CompetitorSnapshot | N
     if "price_drop_pct" in rules and previous.price > 0:
         drop = (previous.price - snapshot.price) / previous.price * 100
         if drop >= rules["price_drop_pct"]:
-            return True, f"Price dropped {drop:.1f}% (${previous.price:.2f} → ${snapshot.price:.2f})"
+            return True, f"价格下降 {drop:.1f}% (${previous.price:.2f} → ${snapshot.price:.2f})"
 
     if "price_rise_pct" in rules and previous.price > 0:
         rise = (snapshot.price - previous.price) / previous.price * 100
         if rise >= rules["price_rise_pct"]:
-            return True, f"Price rose {rise:.1f}% (${previous.price:.2f} → ${snapshot.price:.2f})"
+            return True, f"价格上涨 {rise:.1f}% (${previous.price:.2f} → ${snapshot.price:.2f})"
 
     if "bsr_change_pct" in rules and previous.bsr_rank and snapshot.bsr_rank:
         change = abs(snapshot.bsr_rank - previous.bsr_rank) / previous.bsr_rank * 100
         if change >= rules["bsr_change_pct"]:
-            direction = "improved" if snapshot.bsr_rank < previous.bsr_rank else "dropped"
-            return True, f"BSR {direction} by {change:.1f}% (#{previous.bsr_rank} → #{snapshot.bsr_rank})"
+            direction = "上升" if snapshot.bsr_rank < previous.bsr_rank else "下降"
+            return True, f"畅销排名{direction} {change:.1f}% (#{previous.bsr_rank} → #{snapshot.bsr_rank})"
 
     if "review_spike" in rules:
         new_reviews = snapshot.review_count - previous.review_count
         if new_reviews >= rules["review_spike"]:
-            return True, f"Review spike: +{new_reviews} new reviews"
+            return True, f"评论数突增，新增 {new_reviews} 条"
 
     return False, ""
 

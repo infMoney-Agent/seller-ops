@@ -24,13 +24,13 @@ export function OrgSwitcher() {
     <div className='space-y-1 px-2'>
       <select
         className='w-full rounded border p-2'
-        aria-label='Workspace'
+        aria-label='工作区'
         value={session.workspaceId || ''}
         disabled={busy || !session.workspaces.length}
         onChange={(event) => void change(Number(event.target.value))}
       >
         <option value='' disabled>
-          Select a workspace
+          选择工作区
         </option>
         {session.workspaces.map((workspace) => (
           <option key={workspace.id} value={workspace.id}>

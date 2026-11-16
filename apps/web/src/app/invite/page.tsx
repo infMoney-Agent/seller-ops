@@ -8,10 +8,10 @@ export default function InvitePage() {
   const [busy, setBusy] = useState(false);
   return (
     <main className='mx-auto max-w-md space-y-4 p-8'>
-      <h1 className='text-2xl font-semibold'>Workspace invitation</h1>
-      <p>Sign in with the invited email. Then reopen this invitation link to accept it.</p>
+      <h1 className='text-2xl font-semibold'>工作区邀请</h1>
+      <p>请使用受邀邮箱登录，然后重新打开此链接接受邀请。</p>
       <form action='/api/auth/login' method='get'>
-        <button className='underline'>Sign in</button>
+        <button className='underline'>登录</button>
       </form>
       <button
         type='button'
@@ -30,7 +30,7 @@ export default function InvitePage() {
           }
         }}
       >
-        Accept invitation
+        接受邀请
       </button>
       {message && <p role='alert'>{message}</p>}
     </main>

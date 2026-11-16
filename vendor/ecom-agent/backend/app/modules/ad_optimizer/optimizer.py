@@ -5,7 +5,8 @@ from app.modules.ad_optimizer.models import AdOptimizationReport, KeywordRecomme
 
 SYSTEM_PROMPT = """You are an Amazon PPC advertising expert with deep knowledge of Sponsored Products optimization.
 Analyze campaign performance data and provide data-driven optimization recommendations.
-Always respond with valid JSON only, no markdown fences."""
+Always respond with valid JSON only, no markdown fences.
+Write the executive summary and bid recommendation reasons in Simplified Chinese. Keep keyword text and action values as supplied."""
 
 OPTIMIZATION_TEMPLATE = """Analyze these Amazon Sponsored Products campaign metrics and provide optimization recommendations.
 
@@ -61,7 +62,7 @@ async def optimize_ads(
             keyword_recommendations=[],
             budget_recommendations=[],
             negative_keyword_suggestions=[],
-            executive_summary="No campaigns found.",
+            executive_summary="未找到广告活动。",
             estimated_monthly_savings=0,
             estimated_monthly_sales_increase=0,
         )

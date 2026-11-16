@@ -20,31 +20,29 @@ export const metadata: Metadata = {
     ? { metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL) }
     : {}),
   title: {
-    default: 'Shadcn Dashboard - Next.js Admin Dashboard Template',
-    template: '%s | Shadcn Dashboard'
+    default: '电商运营工作台',
+    template: '%s · 电商运营工作台'
   },
-  description:
-    'Free, open source admin dashboard starter built with Next.js 16, shadcn/ui, Tailwind CSS, and TypeScript.',
+  description: '管理亚马逊选品、商品文案、评论、竞品和广告。',
   openGraph: {
-    title: 'Shadcn Dashboard - Next.js Admin Dashboard Template',
-    description:
-      'Free, open source admin dashboard starter built with Next.js 16, shadcn/ui, Tailwind CSS, and TypeScript.',
-    siteName: 'Shadcn Dashboard',
+    title: '电商运营工作台',
+    description: '管理亚马逊选品、商品文案、评论、竞品和广告。',
+    siteName: '电商运营工作台',
     type: 'website',
+    locale: 'zh_CN',
     images: [
       {
         url: '/shadcn-dashboard.png',
         width: 3200,
         height: 1600,
-        alt: 'Shadcn Dashboard overview page'
+        alt: '电商运营总览'
       }
     ]
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Shadcn Dashboard - Next.js Admin Dashboard Template',
-    description:
-      'Free, open source admin dashboard starter built with Next.js 16, shadcn/ui, Tailwind CSS, and TypeScript.',
+    title: '电商运营工作台',
+    description: '管理亚马逊选品、商品文案、评论、竞品和广告。',
     images: ['/shadcn-dashboard.png']
   }
 };
@@ -60,7 +58,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const themeToApply = isValidTheme ? activeThemeValue! : DEFAULT_THEME;
 
   return (
-    <html lang='en' suppressHydrationWarning data-theme={themeToApply}>
+    <html lang='zh-CN' suppressHydrationWarning data-theme={themeToApply}>
       <head>
         <script
           dangerouslySetInnerHTML={{
@@ -91,7 +89,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             enableColorScheme
           >
             <Providers activeThemeValue={themeToApply}>
-              <Toaster />
+              <Toaster containerAriaLabel='通知' />
               {children}
             </Providers>
           </ThemeProvider>

@@ -8,7 +8,8 @@ from app.modules.review_analyzer.models import ReviewAnalysis
 
 SYSTEM_PROMPT = """You are an expert e-commerce product analyst specializing in customer review analysis.
 Extract actionable insights from Amazon reviews to help sellers improve products and listings.
-Always respond with valid JSON only, no markdown fences."""
+Always respond with valid JSON only, no markdown fences.
+Write summaries, pain points, praise, improvement suggestions, and listing recommendations in Simplified Chinese. Keep quoted search terms and keywords in their original language."""
 
 ANALYSIS_TEMPLATE = """Analyze these Amazon product reviews for ASIN {asin}.
 
@@ -70,7 +71,7 @@ async def analyze_reviews(
             common_keywords=[],
             rating_distribution={},
             verified_purchase_ratio=0.0,
-            summary="No reviews found.",
+            summary="未找到评论。",
             listing_recommendations=[],
         )
 

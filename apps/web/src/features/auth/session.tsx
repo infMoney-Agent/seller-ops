@@ -35,6 +35,22 @@ export function useSellerUser() {
   return { fullName: session.name, emailAddresses: [{ emailAddress: session.email }] };
 }
 
+const accountErrors: Record<string, string> = {
+  'sign in required': '请先登录。',
+  'session expired': '登录已过期，请重新登录。',
+  'workspace access denied': '你没有访问此工作区的权限。',
+  'Workspace changed; reload this page': '工作区已切换，请刷新页面。',
+  'workspace not found': '未找到工作区。',
+  'member not found': '未找到成员。',
+  'invalid role': '无效的成员角色。',
+  'workspace requires an owner': '工作区必须至少有一位所有者。',
+  'invalid email': '邮箱地址无效。',
+  'invitation not found': '未找到邀请。',
+  'invitation unavailable': '此邀请已失效，或与当前登录邮箱不匹配。',
+  'invalid request origin': '请求来源无效。',
+  'invalid request': '请求参数无效。'
+};
+
 export async function request<T>(path: string, method = 'GET', body?: object): Promise<T> {
   const headers = new Headers(body ? { 'Content-Type': 'application/json' } : undefined);
   const workspace =
@@ -48,7 +64,7 @@ export async function request<T>(path: string, method = 'GET', body?: object): P
   });
   if (!response.ok) {
     const data = await response.json().catch(() => null);
-    throw new Error(data?.message ?? `Request failed (${response.status})`);
+    throw new Error(accountErrors[data?.message] ?? `请求失败（${response.status}）`);
   }
   return response.status === 204 ? (undefined as T) : response.json();
 }

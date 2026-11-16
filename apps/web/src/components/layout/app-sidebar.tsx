@@ -141,18 +141,18 @@ export default function AppSidebar() {
                 <DropdownMenuGroup>
                   <DropdownMenuItem onClick={() => router.push('/dashboard/profile')}>
                     <Icons.account className='mr-2 h-4 w-4' />
-                    Profile
+                    个人资料
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => router.push('/dashboard/notifications')}>
                     <Icons.notification className='mr-2 h-4 w-4' />
-                    Notifications
+                    通知
                   </DropdownMenuItem>
                 </DropdownMenuGroup>
                 <DropdownMenuSeparator />
                 <DropdownMenuGroup>
                   <DropdownMenuItem onClick={() => signOut()}>
                     <Icons.logout aria-hidden className='mr-2 h-4 w-4' />
-                    Sign out
+                    退出登录
                   </DropdownMenuItem>
                 </DropdownMenuGroup>
               </DropdownMenuContent>

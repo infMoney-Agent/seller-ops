@@ -52,7 +52,7 @@ export function MembersPanel({
             {owner ? (
               <>
                 <select
-                  aria-label={`Role for ${member.email}`}
+                  aria-label={`成员角色： ${member.email}`}
                   disabled={busy}
                   value={member.role}
                   onChange={(event) => {
@@ -60,20 +60,20 @@ export function MembersPanel({
                     void mutate(() => request(`/api/users/${member.id}`, 'PATCH', { role }));
                   }}
                 >
-                  <option value='owner'>Owner</option>
-                  <option value='member'>Member</option>
+                  <option value='owner'>所有者</option>
+                  <option value='member'>成员</option>
                 </select>
                 <button
                   type='button'
                   className='underline'
                   disabled={busy}
                   onClick={() => {
-                    if (window.confirm(`Remove ${member.email} from this workspace?`)) {
+                    if (window.confirm(`移除 ${member.email} 从此工作区移除吗？`)) {
                       void mutate(() => request(`/api/users/${member.id}`, 'DELETE'));
                     }
                   }}
                 >
-                  Remove
+                  移除
                 </button>
               </>
             ) : (
@@ -98,22 +98,22 @@ export function MembersPanel({
           >
             <input
               className='rounded border p-2'
-              aria-label='Verified email'
+              aria-label='已验证的邮箱'
               required
               type='email'
               value={email}
               onChange={(event) => setEmail(event.target.value)}
             />
             <button className='underline' disabled={busy}>
-              Create invitation
+              创建邀请
             </button>
           </form>
-          {link && <p className='break-all'>Share this link with the invitee: {link}</p>}
+          {link && <p className='break-all'>请将此链接分享给受邀成员： {link}</p>}
           <ul className='space-y-2'>
             {currentInvites.map((invite) => (
               <li key={invite.id} className='flex gap-3'>
                 <span>
-                  {invite.email} · expires {invite.expiresAt.slice(0, 10)}
+                  {invite.email} · 到期时间 {invite.expiresAt.slice(0, 10)}
                 </span>
                 <button
                   type='button'
@@ -123,7 +123,7 @@ export function MembersPanel({
                     void mutate(() => request(`/api/invitations/${invite.id}`, 'DELETE'))
                   }
                 >
-                  Revoke
+                  撤销
                 </button>
               </li>
             ))}
