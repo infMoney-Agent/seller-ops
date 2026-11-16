@@ -23,7 +23,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const session = await requireSession();
   // Persisting the sidebar state in the cookie.
   const cookieStore = await cookies();
-  const defaultOpen = cookieStore.get('sidebar_state')?.value === 'true';
+  const defaultOpen = cookieStore.get('sidebar_state')?.value !== 'false';
   return (
     <SellerSessionProvider session={session}>
       <div className='contents' data-seller-workspace={session.workspaceId}>
