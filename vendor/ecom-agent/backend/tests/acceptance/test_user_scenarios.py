@@ -374,8 +374,10 @@ def test_acc04_monitor_add_confirms_tracking(client):
     User adds a competitor ASIN with custom alert rules.
     Should get a confirmation that the ASIN is being tracked.
     """
-    resp = client.post("/api/v1/monitor/add", json={
-        "asin": "B0MONITOR001",
+    headers = {"X-Seller-User": "201"}
+    asin = "B0MONIT001"
+    resp = client.post("/api/v1/monitor/add", headers=headers, json={
+        "asin": asin,
         "label": "Main competitor — premium water bottle",
         "alert_rules": {
             "price_drop_pct": 10,
@@ -385,21 +387,25 @@ def test_acc04_monitor_add_confirms_tracking(client):
 
     assert resp.status_code == 200, f"Monitor add failed: {resp.text}"
     data = resp.json()
-    assert data.get("status") == "added", (
-        f"Response should confirm addition with status='added', got: {data}"
-    )
+    try:
+        assert data.get("status") == "added", (
+            f"Response should confirm addition with status='added', got: {data}"
+        )
+    finally:
+        client.delete(f"/api/v1/monitor/remove/{asin}", headers=headers)
 
 
 def test_acc04_monitor_remove_cleans_up(client):
     """User removes a monitored ASIN — should succeed without errors."""
-    asin = "B0MONITOR_REMOVE"
-    client.post("/api/v1/monitor/add", json={
+    asin = "B0MONIT002"
+    headers = {"X-Seller-User": "201"}
+    client.post("/api/v1/monitor/add", headers=headers, json={
         "asin": asin,
         "label": "temp",
         "alert_rules": {},
     })
 
-    resp = client.delete(f"/api/v1/monitor/remove/{asin}")
+    resp = client.delete(f"/api/v1/monitor/remove/{asin}", headers=headers)
     assert resp.status_code == 200, f"Monitor remove failed: {resp.text}"
 
 

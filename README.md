@@ -162,3 +162,27 @@ npm run format:check # 检查代码格式
 ## 认证与部署
 
 登录由自托管 Casdoor 提供。Go 服务负责工作区权限和产品接口，PostgreSQL 持久化会话、成员与产品。Next.js 通过内部地址 `SELLER_API_URL` 连接 Go 服务。完整配置与测试步骤见 [Casdoor 部署说明](deploy/casdoor/README.md)。
+
+## E-commerce workspace
+
+Seller Ops opens the e-commerce dashboard after Casdoor sign-in. Product
+Research, Listing Generator, Review Analyzer, Competitor Monitor, and Ad
+Optimizer are available in the sidebar. Account, profile, and workspace
+management use the existing Seller Ops pages.
+
+The existing Casdoor deployment with the Compose app profile starts the
+e-commerce API, Redis, and scheduled monitor worker as well as the web app.
+The browser uses Seller Ops' authenticated API routes. The FastAPI and Redis
+services use the Compose network without published ports. Monitors and their
+snapshots are stored by Seller Ops account ID.
+
+For live operations, provide credentials in the deployment environment for
+your selected LLM provider and any Amazon APIs you use. The starting variable
+names are in vendor/ecom-agent/.env.example. Playwright Chromium is installed
+by the API image. Provider credentials are shared by the deployment.
+
+For a native server setup, use SELLER_API_URL for the existing Go authentication
+service, SELLER_APP_ORIGIN for the browser-facing origin registered in Casdoor,
+and ECOM_API_URL for the private FastAPI URL. Bind the FastAPI and Redis
+services to loopback and configure Redis persistence. Run the Celery worker and
+beat scheduler from vendor/ecom-agent/backend for hourly monitor snapshots.

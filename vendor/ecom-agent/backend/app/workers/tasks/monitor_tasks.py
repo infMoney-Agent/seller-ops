@@ -10,40 +10,34 @@ def run_scheduled_monitors(self):
 
 
 async def _run_monitors():
-    import redis.asyncio as aioredis
+    from datetime import datetime, timedelta, timezone
     import json
+
+    from redis.asyncio import Redis
+
     from app.core.config import get_settings
-    from app.modules.competitor_monitor import take_snapshot, MonitoredASIN
+    from app.modules.competitor_monitor import MonitoredASIN
+    from app.modules.competitor_monitor.storage import save_snapshot
 
-    settings = get_settings()
-    r = await aioredis.from_url(settings.REDIS_URL)
-    keys = await r.keys("monitor:asin:*")
-
-    for key in keys:
-        raw = await r.get(key)
-        if not raw:
-            continue
-        data = json.loads(raw)
-        monitored = MonitoredASIN(
-            asin=data["asin"],
-            platform=data.get("platform", "amazon"),
-            label=data.get("label", ""),
-            check_interval_minutes=data.get("check_interval_minutes", 60),
-            alert_rules=data.get("alert_rules", {}),
-            snapshots=[],
-        )
-        try:
-            snapshot = await take_snapshot(monitored)
-            # Persist snapshot to Redis list
-            snap_key = f"snapshots:{monitored.asin}"
-            import dataclasses
-            await r.lpush(snap_key, json.dumps(dataclasses.asdict(snapshot)))
-            await r.ltrim(snap_key, 0, 999)  # keep last 1000 snapshots per ASIN
-            logger.info("snapshot_taken", asin=monitored.asin, price=snapshot.price)
-        except Exception as exc:
-            logger.error("snapshot_failed", asin=monitored.asin, error=str(exc))
-
-    await r.aclose()
+    async with Redis.from_url(get_settings().REDIS_URL) as redis:
+        async for key in redis.scan_iter(match="seller:*:monitor:*"):
+            raw = await redis.get(key)
+            if not raw:
+                continue
+            monitored = MonitoredASIN(**json.loads(raw))
+            account = key.decode().rsplit(":", 2)[0]
+            snapshot_key = f"{account}:snapshots:{monitored.asin}"
+            try:
+                previous = await redis.lindex(snapshot_key, 0)
+                if previous:
+                    timestamp = datetime.fromisoformat(json.loads(previous)["timestamp"])
+                    interval = timedelta(minutes=monitored.check_interval_minutes)
+                    if datetime.now(timezone.utc) - timestamp < interval:
+                        continue
+                snapshot = await save_snapshot(redis, snapshot_key, monitored)
+                logger.info("snapshot_taken", asin=monitored.asin, price=snapshot.price)
+            except Exception as exc:
+                logger.error("snapshot_failed", asin=monitored.asin, error=str(exc))
 
 
 @celery_app.task(name="app.workers.tasks.monitor_tasks.scrape_product_research")

@@ -1,86 +1,76 @@
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
-import json, dataclasses
+from dataclasses import asdict
+import json
+from typing import Annotated
 
-from app.modules.competitor_monitor import take_snapshot, MonitoredASIN, CompetitorSnapshot
+from fastapi import APIRouter, Depends, Header, Path, Query
+from pydantic import BaseModel, Field
+from redis.asyncio import Redis
+
+from app.core.config import get_settings
+from app.modules.competitor_monitor import MonitoredASIN
+from app.modules.competitor_monitor.storage import save_snapshot
 
 router = APIRouter(prefix="/monitor", tags=["Competitor Monitor"])
+ASIN_PATTERN = r"^[A-Za-z0-9]{10}$"
+AsinPath = Annotated[str, Path(pattern=ASIN_PATTERN)]
 
 
 class AddMonitorRequest(BaseModel):
-    asin: str
+    asin: str = Field(pattern=ASIN_PATTERN)
     platform: str = "amazon"
-    label: str = ""
-    check_interval_minutes: int = 60
-    alert_rules: dict = {}
+    label: str = Field(default="", max_length=200)
+    check_interval_minutes: int = Field(default=60, ge=60, le=10080)
+    alert_rules: dict[str, float] = Field(default_factory=dict)
+
+
+def namespace(x_seller_user: Annotated[int, Header(gt=0)]) -> str:
+    # The private service receives the user ID from the authenticated Next.js proxy.
+    return f"seller:{x_seller_user}"
+
+
+Account = Annotated[str, Depends(namespace)]
 
 
 @router.post("/add")
-async def add_monitor(req: AddMonitorRequest):
-    import redis.asyncio as aioredis
-    from app.core.config import get_settings
-    settings = get_settings()
-    r = await aioredis.from_url(settings.REDIS_URL)
-    key = f"monitor:asin:{req.asin}"
-    await r.set(key, json.dumps(req.model_dump()))
-    await r.aclose()
-    return {"status": "added", "asin": req.asin}
+async def add_monitor(req: AddMonitorRequest, account: Account):
+    asin = req.asin.upper()
+    async with Redis.from_url(get_settings().REDIS_URL) as redis:
+        await redis.set(f"{account}:monitor:{asin}", req.model_copy(update={"asin": asin}).model_dump_json())
+    return {"status": "added", "asin": asin}
 
 
 @router.delete("/remove/{asin}")
-async def remove_monitor(asin: str):
-    import redis.asyncio as aioredis
-    from app.core.config import get_settings
-    settings = get_settings()
-    r = await aioredis.from_url(settings.REDIS_URL)
-    deleted = await r.delete(f"monitor:asin:{asin}")
-    await r.aclose()
+async def remove_monitor(asin: AsinPath, account: Account):
+    asin = asin.upper()
+    async with Redis.from_url(get_settings().REDIS_URL) as redis:
+        deleted = await redis.delete(f"{account}:monitor:{asin}")
     return {"status": "removed" if deleted else "not_found", "asin": asin}
 
 
 @router.get("/list")
-async def list_monitors():
-    import redis.asyncio as aioredis
-    from app.core.config import get_settings
-    settings = get_settings()
-    r = await aioredis.from_url(settings.REDIS_URL)
-    keys = await r.keys("monitor:asin:*")
+async def list_monitors(account: Account):
     monitors = []
-    for key in keys:
-        raw = await r.get(key)
-        if raw:
-            monitors.append(json.loads(raw))
-    await r.aclose()
-    return {"monitors": monitors}
+    async with Redis.from_url(get_settings().REDIS_URL) as redis:
+        async for key in redis.scan_iter(match=f"{account}:monitor:*"):
+            raw = await redis.get(key)
+            if raw:
+                monitors.append(json.loads(raw))
+    return {"monitors": sorted(monitors, key=lambda monitor: monitor["asin"])}
 
 
 @router.get("/snapshots/{asin}")
-async def get_snapshots(asin: str, limit: int = 100):
-    import redis.asyncio as aioredis
-    from app.core.config import get_settings
-    settings = get_settings()
-    r = await aioredis.from_url(settings.REDIS_URL)
-    raw_list = await r.lrange(f"snapshots:{asin}", 0, limit - 1)
-    await r.aclose()
-    snapshots = [json.loads(s) for s in raw_list]
-    return {"asin": asin, "snapshots": snapshots}
+async def get_snapshots(asin: AsinPath, account: Account, limit: Annotated[int, Query(ge=1, le=1000)] = 100):
+    asin = asin.upper()
+    async with Redis.from_url(get_settings().REDIS_URL) as redis:
+        data = await redis.lrange(f"{account}:snapshots:{asin}", 0, limit - 1)
+    return {"asin": asin, "snapshots": [json.loads(item) for item in data]}
 
 
 @router.post("/snapshot/{asin}")
-async def manual_snapshot(asin: str, platform: str = "amazon"):
-    """Trigger an immediate snapshot for an ASIN."""
-    monitored = MonitoredASIN(asin=asin, platform=platform, label="manual")
-    try:
-        snapshot = await take_snapshot(monitored)
-
-        import redis.asyncio as aioredis
-        from app.core.config import get_settings
-        settings = get_settings()
-        r = await aioredis.from_url(settings.REDIS_URL)
-        await r.lpush(f"snapshots:{asin}", json.dumps(dataclasses.asdict(snapshot)))
-        await r.ltrim(f"snapshots:{asin}", 0, 999)
-        await r.aclose()
-
-        return dataclasses.asdict(snapshot)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+async def manual_snapshot(asin: AsinPath, account: Account):
+    asin = asin.upper()
+    async with Redis.from_url(get_settings().REDIS_URL) as redis:
+        raw = await redis.get(f"{account}:monitor:{asin}")
+        monitored = MonitoredASIN(**json.loads(raw)) if raw else MonitoredASIN(asin=asin, platform="amazon", label="manual")
+        snapshot = await save_snapshot(redis, f"{account}:snapshots:{asin}", monitored)
+    return asdict(snapshot)

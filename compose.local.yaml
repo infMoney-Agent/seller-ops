@@ -11,6 +11,7 @@ services:
   web:
     environment:
       SELLER_API_URL: http://proxy:8080
+      SELLER_APP_ORIGIN: http://localhost:18443
   api:
     # The API and Caddy share loopback so the OIDC issuer is the same
     # address inside the API and in the browser over the SSH tunnel.

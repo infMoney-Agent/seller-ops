@@ -21,6 +21,8 @@ services:
     environment:
       SELLER_API_URL: http://api:8080
       NEXT_PUBLIC_SENTRY_DISABLED: "true"
+      SELLER_APP_ORIGIN: https://${APP_DOMAIN}
+      ECOM_API_URL: http://ecom-api:8000
   api:
     profiles: [app]
     build: ./apps/server
@@ -61,7 +63,69 @@ services:
       timeout: 3s
       retries: 15
 
+  ecom-api:
+    profiles: [app]
+    build: ./vendor/ecom-agent/backend
+    restart: on-failure
+    depends_on:
+      ecom-redis:
+        condition: service_healthy
+    environment: &ecom-env
+      APP_ENV: production
+      DATABASE_URL: sqlite+aiosqlite:////data/ecom.db
+      REDIS_URL: redis://ecom-redis:6379/0
+      CELERY_BROKER_URL: redis://ecom-redis:6379/0
+      CELERY_RESULT_BACKEND: redis://ecom-redis:6379/1
+      LLM_PROVIDER: ${LLM_PROVIDER:-openai}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://localhost:11434}
+      AMAZON_CLIENT_ID: ${AMAZON_CLIENT_ID:-}
+      AMAZON_CLIENT_SECRET: ${AMAZON_CLIENT_SECRET:-}
+      AMAZON_REFRESH_TOKEN: ${AMAZON_REFRESH_TOKEN:-}
+      AMAZON_MARKETPLACE_ID: ${AMAZON_MARKETPLACE_ID:-ATVPDKIKX0DER}
+      AMAZON_ADS_CLIENT_ID: ${AMAZON_ADS_CLIENT_ID:-}
+      AMAZON_ADS_CLIENT_SECRET: ${AMAZON_ADS_CLIENT_SECRET:-}
+      AMAZON_ADS_REFRESH_TOKEN: ${AMAZON_ADS_REFRESH_TOKEN:-}
+      AMAZON_ADS_PROFILE_ID: ${AMAZON_ADS_PROFILE_ID:-}
+    volumes:
+      - ecom-data:/data
+  ecom-worker:
+    profiles: [app]
+    build: ./vendor/ecom-agent/backend
+    restart: on-failure
+    depends_on:
+      ecom-redis:
+        condition: service_healthy
+    environment: *ecom-env
+    command: celery -A app.workers.celery_app worker --loglevel=info
+  ecom-beat:
+    profiles: [app]
+    build: ./vendor/ecom-agent/backend
+    restart: on-failure
+    depends_on:
+      ecom-redis:
+        condition: service_healthy
+    environment: *ecom-env
+    command: celery -A app.workers.celery_app beat --loglevel=info
+  ecom-redis:
+    profiles: [app]
+    image: redis:7-alpine
+    restart: on-failure
+    command: redis-server --appendonly yes
+    volumes:
+      - ecom-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+
 volumes:
+  ecom-data:
+  ecom-redis-data:
   database:
   caddy-data:
   caddy-config:

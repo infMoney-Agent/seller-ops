@@ -242,17 +242,26 @@ def test_languages_endpoint(client):
 
 
 def test_monitor_add_and_list(client):
-    resp = client.post("/api/v1/monitor/add", json={
-        "asin": "B0TEST00001",
+    owner = {"X-Seller-User": "101"}
+    another_user = {"X-Seller-User": "102"}
+    asin = "B0TEST0001"
+    assert client.get("/api/v1/monitor/list").status_code == 422
+    response = client.post("/api/v1/monitor/add", headers=owner, json={
+        "asin": asin,
         "label": "test",
         "alert_rules": {"price_drop_pct": 10},
     })
-    assert resp.status_code == 200
-    assert resp.json()["status"] == "added"
+    assert response.status_code == 200
+    assert response.json()["status"] == "added"
 
-    # skip list test since it requires Redis
-    resp2 = client.delete("/api/v1/monitor/remove/B0TEST00001")
-    assert resp2.status_code == 200
+    try:
+        assert any(monitor["asin"] == asin for monitor in
+                   client.get("/api/v1/monitor/list", headers=owner).json()["monitors"])
+        assert all(monitor["asin"] != asin for monitor in
+                   client.get("/api/v1/monitor/list", headers=another_user).json()["monitors"])
+        assert client.delete(f"/api/v1/monitor/remove/{asin}", headers=another_user).json()["status"] == "not_found"
+    finally:
+        assert client.delete(f"/api/v1/monitor/remove/{asin}", headers=owner).json()["status"] == "removed"
 
 
 def test_listing_generate_missing_keyword(client):
