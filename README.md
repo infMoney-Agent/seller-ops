@@ -1,83 +1,47 @@
-# seller-ops
+# Seller Ops · 电商运营工作台
 
-基于 Next.js 16 + shadcn/ui + TypeScript 的管理后台项目，采用 monorepo 结构。
+Seller Ops 是一个自托管的亚马逊运营工作台。登录后进入简体中文仪表盘，可使用选品研究、商品页面生成、评论分析、竞品监控和广告优化。账号登录由 Casdoor 提供。
 
-## 目录结构
+## 功能与当前状态
 
-```
-seller-ops/
-├── apps/
-│   └── web/          # Next.js 应用（源码、配置、依赖均在此目录）
-├── docs/             # 项目文档
-└── package.json      # 根 package.json（脚本代理到 apps/web）
-```
+| 模块 | 实现与使用条件 |
+| --- | --- |
+| 选品研究 | 用 Playwright 读取亚马逊美国站畅销榜，在 10 个预设类目中逐件调用模型评分，再按综合分筛选和排序。需要模型配置和畅销榜访问。 |
+| 商品页面生成 | 根据关键词和商品信息生成标题、五点描述、商品描述、搜索词和 A+ 草稿，也可按 ASIN 读取商品后优化。支持六种输出语言，需要模型配置，生成的草稿可复制到卖家平台。 |
+| 评论分析 | 按 ASIN 读取评论并归纳差评痛点、好评亮点与商品改进建议。需要访问亚马逊评论页面和配置模型。 |
+| 竞品监控 | 按登录账号保存监控列表和历史记录。支持手动记录，后台每小时检查到期的 ASIN。使用 Redis、Celery 和 Playwright。 |
+| 广告优化 | 读取广告活动并生成出价建议，需要 Amazon Advertising 账户授权和模型配置。当前适配器的花费、销售额等指标仍是占位值，真实投放表现需要进一步接入。 |
 
-## 直接在 Ubuntu 上启动进程
+选品研究读取榜单当前页面，未实现翻页，也未提取评论数。综合分来自模型，结果只展示在本次页面里。当前版本没有接入卖家精灵采集、产品库导入或人工复核。模型未配置或单品评分失败时，现有实现可能返回空结果。选品、评论和广告的模型分析使用简体中文，商品页面文案按所选语言生成。
 
-这套方式用于经 SSH 转发的本地测试。准备 Node.js 和 Web 依赖、Go（版本见 `apps/server/go.mod`）、PostgreSQL，以及带前端资源的 Casdoor。Casdoor 可按官方说明运行。业务数据库仍使用 PostgreSQL。 [Casdoor 安装说明](https://casdoor.ai/docs/basic/server-installation/)
+## 项目结构
 
-1. 启动 PostgreSQL，创建一个供 Go 使用的空数据库 `seller_ops`，准备该账号的连接串。Casdoor 可使用单独的 SQLite 数据库。在 Casdoor 的 `conf/app.conf` 中设置以下值，从 Casdoor 安装目录运行 `./casdoor`。
+| 路径 | 职责 |
+| --- | --- |
+| [apps/web](apps/web) | Next.js 前端、Casdoor 会话接入与同域业务 API 代理 |
+| [apps/server](apps/server) | Go 服务，处理 OIDC 登录、会话、工作区、成员和邀请 |
+| [vendor/ecom-agent/backend](vendor/ecom-agent/backend) | FastAPI 电商接口、Playwright 采集、模型调用和 Celery 任务 |
+| [vendor/ecom-agent](vendor/ecom-agent) | EcomAgent 上游源码与许可证，集成版入口由 Seller Ops 提供 |
+| [deploy/casdoor](deploy/casdoor) | Casdoor、Caddy 和 PostgreSQL 的初始化及部署文档 |
 
-   ```ini
-   httpaddr = 127.0.0.1
-   httpport = 18444
-   origin = http://localhost:18444
-   runmode = prod
-   driverName = sqlite
-   dataSourceName = file:casdoor.db?cache=shared
-   dbName = casdoor
-   ```
+浏览器通过 Next.js 访问电商接口，Next.js 验证 Casdoor 会话后转发到内部 FastAPI。Compose 将会话、工作区等数据和 Casdoor 数据存到 PostgreSQL，电商服务使用独立 SQLite 卷，竞品列表和快照持久化到 Redis。
 
-2. 在 Windows PowerShell 保持 SSH 转发开启。
+## 启动方式
 
-   ```powershell
-   ssh -N -o ExitOnForwardFailure=yes -L 127.0.0.1:18443:127.0.0.1:18443 -L 127.0.0.1:18444:127.0.0.1:18444 yijiangli@43.139.227.179
-   ```
+有 HTTPS 域名时，按 [Casdoor 部署说明](deploy/casdoor/README.md) 初始化身份服务，再以 Compose 的 app 配置组启动整套应用。
 
-   用 Edge 或 Chrome 打开 [Casdoor](http://localhost:18444)，按下文「首次配置 Casdoor」设置账号和 OIDC 应用。回调地址为 `http://localhost:18443/api/auth/callback`。在 Ubuntu 上可用 `curl -fsS http://localhost:18444/.well-known/openid-configuration` 确认 Casdoor 的 issuer 为 `http://localhost:18444`。
+### 通过 SSH 转发运行 Compose 测试环境
 
-3. 在 Ubuntu 的一个终端启动 Go 服务。以下示例连接本机 PostgreSQL，请按实际账号、端口和密码填写连接串。
+准备 Docker Engine 和 Docker Compose 2.24.4 或更新版本。在服务器的项目根目录执行：
 
-   ```bash
-   cd /data/workspace/yijiangli/seller-ops/apps/server
-   export SELLER_LISTEN_ADDR=127.0.0.1:8080
-   export APP_ORIGIN=http://localhost:18443
-   export OIDC_ISSUER=http://localhost:18444
-   read -r -s -p 'DATABASE_URL: ' DATABASE_URL
-   printf '\n'
-   read -r -p 'OIDC_CLIENT_ID: ' OIDC_CLIENT_ID
-   read -r -s -p 'OIDC_CLIENT_SECRET: ' OIDC_CLIENT_SECRET
-   printf '\n'
-   export DATABASE_URL OIDC_CLIENT_ID OIDC_CLIENT_SECRET
-   go run .
-   ```
-
-4. 在另一个 Ubuntu 终端启动 Next.js，并用 Windows 浏览器打开 [seller-ops](http://localhost:18443)。
-
-   ```bash
-   cd /data/workspace/yijiangli/seller-ops/apps/web
-   SELLER_API_URL=http://127.0.0.1:8080 npm run dev -- --hostname 127.0.0.1 --port 18443
-   ```
-
-   测试账号登录一次后，在另一个已配置同一 `DATABASE_URL` 的 Ubuntu 终端进入 `apps/server`，运行 `go run . create-workspace "Test A" owner@example.com`。把示例邮箱换成测试账号的已验证邮箱。刷新浏览器即可选择工作区。
-
-## 无公网域名时启动整套应用
-
-以下配置用于个人测试。服务器需要 Docker Engine 和 Docker Compose 2.24.4 或更新版本，SSH 账号需要能运行 `docker compose`。应用和 Casdoor 通过 SSH 转发访问，服务器只发布回环端口。
-
-### 1. 在 Ubuntu 上准备配置
-
-在项目根目录执行。以下命令首次创建配置文件，之后请直接编辑已有文件。
-
-```bash
-cd /data/workspace/yijiangli/seller-ops
+~~~bash
 mkdir -p -m 700 "$HOME/.config/seller-ops-local"
-local_dir="$HOME/.config/seller-ops-local"
+env_file="$HOME/.config/seller-ops-local/compose.env"
 
-if [ ! -e "$local_dir/compose.env" ]; then
+if [ ! -e "$env_file" ]; then
   (
     umask 077
-    cat > "$local_dir/compose.env" <<EOF
+    cat > "$env_file" <<ENV
 APP_DOMAIN=localhost:18443
 AUTH_DOMAIN=localhost:18444
 POSTGRES_PASSWORD=$(openssl rand -hex 32)
@@ -85,7 +49,7 @@ APP_DB_PASSWORD=$(openssl rand -hex 32)
 AUTH_DB_PASSWORD=$(openssl rand -hex 32)
 OIDC_CLIENT_ID=
 OIDC_CLIENT_SECRET=
-EOF
+ENV
   )
 fi
 
@@ -95,94 +59,83 @@ seller_local() {
 }
 
 seller_local up -d db casdoor proxy
-```
+~~~
 
-重新登录 Ubuntu 时，需要在项目根目录重新定义 `seller_local` 函数。
+在自己电脑的 PowerShell 或终端中建立 SSH 转发。将示例账号和主机替换为实际值，并保持命令运行。
 
-### 2. 在 Windows 上建立 SSH 转发
+~~~powershell
+ssh -N -o ExitOnForwardFailure=yes -L 127.0.0.1:18443:127.0.0.1:18443 -L 127.0.0.1:18444:127.0.0.1:18444 user@server.example
+~~~
 
-在 PowerShell 窗口保持转发开启。请用 Edge 或 Chrome 访问下方的 `localhost` 地址，浏览器可以在该地址使用应用的 Secure Cookie。
+1. 打开 [Casdoor 管理台](http://localhost:18444)，修改初始管理员密码，创建组织、OIDC 应用和邮箱已验证的账号。关闭公开注册，将回调地址设为 `http://localhost:18443/api/auth/callback`。OIDC 应用应签发包含 `iss`、`sub`、`nonce`、`email` 和 `email_verified` 声明的 ID Token。
+2. 将 OIDC 客户端 ID 和密钥填写到服务器的 `compose.env`。需要真实评分或生成时，按下节填写模型配置。
+3. 在项目根目录运行以下命令。重新开启服务器终端后，先重新定义上面的 `seller_local` 函数。
 
-```powershell
-ssh -N -o ExitOnForwardFailure=yes -L 127.0.0.1:18443:127.0.0.1:18443 -L 127.0.0.1:18444:127.0.0.1:18444 yijiangli@43.139.227.179
-```
-
-### 3. 首次配置 Casdoor
-
-用 Edge 或 Chrome 打开 [Casdoor 管理界面](http://localhost:18444)。修改初始管理员密码，创建身份组织、OIDC 应用和邮箱已验证的测试账号。关闭公开注册，回调地址填 `http://localhost:18443/api/auth/callback`。应用使用签名 ID Token，并提供 `iss`、`sub`、`nonce`、`email` 和 `email_verified` 声明。
-
-将客户端 ID 和密钥填入服务器上的 `$HOME/.config/seller-ops-local/compose.env`。
-
-### 4. 启动应用并创建工作区
-
-回到 Ubuntu 项目目录执行。
-
-```bash
+~~~bash
+seller_local --profile app config --quiet
 seller_local --profile app up -d --build
 seller_local --profile app ps
-```
+~~~
 
-打开 [seller-ops](http://localhost:18443)，用测试账号登录一次。然后将下方邮箱换成该账号的邮箱，创建首个工作区。
+打开 [Seller Ops](http://localhost:18443)。需要工作区时，所有者先使用已验证邮箱登录一次，再将示例邮箱换成该账号的邮箱并创建工作区。
 
-```bash
-seller_local --profile app exec api seller-server create-workspace "Test A" owner@example.com
-```
+~~~bash
+seller_local --profile app exec api seller-server create-workspace "运营测试" owner@example.com
+~~~
 
-刷新页面后可选择工作区。排查启动问题可用 `seller_local --profile app logs --tail=100 api web proxy casdoor`。停止测试环境可用 `seller_local --profile app down`，数据库卷会保留。
+查看服务日志或停止测试环境：
 
-## 仅运行前端开发服务器
+~~~bash
+seller_local --profile app logs --tail=100 web api casdoor ecom-api ecom-worker ecom-beat ecom-redis
+seller_local --profile app down
+~~~
 
-### 方式一：在根目录执行（推荐）
+### 模型和亚马逊配置
 
-```bash
-npm install          # 安装依赖
-npm run dev          # 启动开发服务器，访问 http://localhost:3000
-npm run build        # 构建生产版本
-npm run start        # 启动生产服务器
-```
+在部署使用的私有环境文件里设置所需变量。[EcomAgent 环境变量示例](vendor/ecom-agent/.env.example)
 
-### 方式二：在 apps/web 目录执行
+| 场景 | 配置 |
+| --- | --- |
+| OpenAI | `LLM_PROVIDER=openai`，设置 `OPENAI_API_KEY`，可用 `OPENAI_MODEL` 指定模型 |
+| Anthropic 或 Gemini | `LLM_PROVIDER=anthropic` 或 `gemini`，分别设置 `ANTHROPIC_API_KEY` 或 `GEMINI_API_KEY` |
+| Ollama | `LLM_PROVIDER=ollama`，设置业务服务可访问的 `OLLAMA_BASE_URL`。容器中的 `localhost` 指向该容器 |
+| 亚马逊网页采集 | 业务服务需可访问 Amazon，Compose 的电商镜像会安装 Chromium |
+| 广告优化 | 当前实现使用 `AMAZON_CLIENT_ID`、`AMAZON_CLIENT_SECRET`、`AMAZON_REFRESH_TOKEN` 获取 LWA 令牌，并用 `AMAZON_ADS_CLIENT_ID`、`AMAZON_ADS_PROFILE_ID` 请求广告活动 |
 
-```bash
-cd apps/web
-npm install
-npm run dev
-```
+同一部署使用共享的模型和亚马逊配置。更新 Compose 环境文件后，重新执行 `seller_local --profile app up -d` 让配置生效。
 
-## 其他命令
+### Ubuntu 原生进程
 
-```bash
-npm run typecheck    # TypeScript 类型检查
-npm run lint         # 代码检查
-npm run lint:fix     # 代码检查并修复
-npm run format       # 格式化代码
-npm run format:check # 检查代码格式
-```
+已运行 PostgreSQL、Casdoor 和 Redis 的服务器可以直接启动进程。Go 版本见 [go.mod](apps/server/go.mod)，Web 构建镜像使用 Node.js 22，电商镜像使用 Python 3.12。下表的地址对应上面的 SSH 转发命令。
 
-## 认证与部署
+| 服务 | 启动目录与命令 | 配置 |
+| --- | --- | --- |
+| Casdoor | Casdoor 安装目录，运行 `./casdoor` | 监听 `127.0.0.1:18444`，origin 为 `http://localhost:18444` |
+| Go | `apps/server`，运行 `go run .` | `SELLER_LISTEN_ADDR=127.0.0.1:8080`、`APP_ORIGIN=http://localhost:18443`、`OIDC_ISSUER=http://localhost:18444`，以及 PostgreSQL 的 `DATABASE_URL` 和 OIDC 凭据 |
+| FastAPI | `vendor/ecom-agent/backend`，运行 `python -m uvicorn app.main:app --host 127.0.0.1 --port 18080` | 独立的 `DATABASE_URL`（例如 `sqlite+aiosqlite:///./ecom.db`）、`REDIS_URL` 和所需模型配置 |
+| Celery | 同 FastAPI，分别运行 `celery -A app.workers.celery_app worker --loglevel=info` 和 `celery -A app.workers.celery_app beat --loglevel=info` | 与业务服务使用同一 Redis，设置 `CELERY_BROKER_URL` 和 `CELERY_RESULT_BACKEND` |
+| Next.js | `apps/web`，运行 `npm run dev -- --hostname 127.0.0.1 --port 18443` | `SELLER_API_URL=http://127.0.0.1:8080`、`SELLER_APP_ORIGIN=http://localhost:18443`、`ECOM_API_URL=http://127.0.0.1:18080` |
 
-登录由自托管 Casdoor 提供。Go 服务负责工作区权限和产品接口，PostgreSQL 持久化会话、成员与产品。Next.js 通过内部地址 `SELLER_API_URL` 连接 Go 服务。完整配置与测试步骤见 [Casdoor 部署说明](deploy/casdoor/README.md)。
+FastAPI 与 Celery 使用同一个 Python 环境。先安装 [Python 依赖](vendor/ecom-agent/backend/requirements.txt)，再执行 `playwright install chromium`；缺少 Ubuntu 系统库时，按 Playwright 的提示安装依赖。Redis 应绑定回环地址并启用持久化。已验证邮箱的用户登录后，可在 `apps/server` 运行 `go run . create-workspace "运营测试" owner@example.com` 创建工作区。
 
-## E-commerce workspace
+## 开发与检查
 
-Seller Ops opens the e-commerce dashboard after Casdoor sign-in. Product
-Research, Listing Generator, Review Analyzer, Competitor Monitor, and Ad
-Optimizer are available in the sidebar. Account, profile, and workspace
-management use the existing Seller Ops pages.
+以下 Web 命令在项目根目录运行，开发服务默认位于 [localhost:3000](http://localhost:3000)。需要验证登录或业务请求时，按上一节配置后端和一致的 OIDC 回调地址。
 
-The existing Casdoor deployment with the Compose app profile starts the
-e-commerce API, Redis, and scheduled monitor worker as well as the web app.
-The browser uses Seller Ops' authenticated API routes. The FastAPI and Redis
-services use the Compose network without published ports. Monitors and their
-snapshots are stored by Seller Ops account ID.
+~~~bash
+(cd apps/web && bun install --frozen-lockfile)
+npm run typecheck
+npm run lint
+NEXT_PUBLIC_SENTRY_DISABLED=true npm run build
+~~~
 
-For live operations, provide credentials in the deployment environment for
-your selected LLM provider and any Amazon APIs you use. The starting variable
-names are in vendor/ecom-agent/.env.example. Playwright Chromium is installed
-by the API image. Provider credentials are shared by the deployment.
+后端离线测试需要一个供测试使用的 Redis 数据库，pytest 默认排除真实模型调用测试。Go 数据库集成测试需要单独的空 PostgreSQL 数据库，设置 `TEST_DATABASE_URL` 后在 `apps/server` 运行 go test ./...。
 
-For a native server setup, use SELLER_API_URL for the existing Go authentication
-service, SELLER_APP_ORIGIN for the browser-facing origin registered in Casdoor,
-and ECOM_API_URL for the private FastAPI URL. Bind the FastAPI and Redis
-services to loopback and configure Redis persistence. Run the Celery worker and
-beat scheduler from vendor/ecom-agent/backend for hourly monitor snapshots.
+~~~bash
+cd vendor/ecom-agent/backend
+python -m pytest -q
+~~~
+
+## 许可证
+
+仓库许可证见 [LICENSE](LICENSE)，引入的 EcomAgent 组件见 [EcomAgent MIT 许可证](vendor/ecom-agent/LICENSE)。
