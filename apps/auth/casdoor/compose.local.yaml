@@ -7,7 +7,7 @@ services:
       - "127.0.0.1:18443:18443"
       - "127.0.0.1:18444:18444"
     volumes:
-      - ./deploy/casdoor/Caddyfile.local:/etc/caddy/Caddyfile:ro
+      - ./apps/auth/casdoor/Caddyfile.local:/etc/caddy/Caddyfile:ro
   web:
     environment:
       SELLER_API_URL: http://proxy:8080
