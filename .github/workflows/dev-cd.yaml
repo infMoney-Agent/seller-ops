@@ -1,4 +1,4 @@
-name: Deploy dev
+name: dev-cd
 on:
   push:
     branches: [dev]
@@ -9,7 +9,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   verify:
-    uses: ./.github/workflows/ci.yaml
+    uses: ./.github/workflows/dev-ci.yaml
   images:
     name: Build and publish ${{ matrix.image }}
     needs: verify

@@ -49,7 +49,6 @@ const DOC_RULES = {
         '── auth'
       ],
       blocks: [
-        { start: '##### Clerk setup', end: 'docs/clerk_setup.md).' },
         { start: '**Can I use it without Clerk?**', end: 'wire in your own auth solution.' }
       ]
     },
@@ -82,7 +81,6 @@ const DOC_RULES = {
         { start: '**Navigation items not showing**', end: 'org/permission/role' }
       ]
     },
-    { file: 'CLAUDE.md', lines: ['nav-rbac.md', 'clerk_setup.md'] },
     {
       file: 'env.example.txt',
       envSections: [
@@ -162,8 +160,6 @@ const FEATURES = {
       '.clerk'
     ],
     files: [
-      'docs/clerk_setup.md',
-      'docs/nav-rbac.md',
       'src/components/org-switcher.tsx',
       'src/components/user-avatar-profile.tsx'
     ],
