@@ -1,51 +1,11 @@
-# Deployment
+# 前端部署
 
-The starter deploys to Vercel out of the box, or anywhere Docker runs. `next.config.ts` sets `output: 'standalone'`, so production builds are optimized for self-hosting.
+Seller Ops 的入口由 Next.js 提供，并通过内部网络连接 Go 认证服务和 FastAPI 业务后端。完整部署步骤见 [项目部署说明](../../../docs/deployment.md)。
 
-## Vercel (Recommended)
+独立构建前端镜像时，从仓库根目录执行：
 
-1. Connect the repository to Vercel
-2. Add environment variables in the dashboard
-3. Deploy
+~~~bash
+docker build -f apps/web/Web.Dockerfile -t seller-ops-web .
+~~~
 
-For other platforms, see the [Next.js deployment docs](https://nextjs.org/docs/app/getting-started/deploying).
-
-## Environment Variables for Production
-
-Ensure these are set in your deployment platform:
-
-- `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`
-- `CLERK_SECRET_KEY`
-- All `NEXT_PUBLIC_*` variables for client-side access
-- `SENTRY_*` variables if using error tracking
-
-Sentry source maps are uploaded automatically in CI.
-
-## Docker
-
-Two production-ready Dockerfiles are included: `Dockerfile` (Node.js) and `Dockerfile.bun` (Bun). Pass `NEXT_PUBLIC_*` variables as `--build-arg` at build time and runtime secrets via `-e` at run time.
-
-Build the image:
-
-```bash
-# Node.js
-docker build \
-  --build-arg NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_live_xxxxx \
-  -t shadcn-dashboard .
-
-# OR Bun
-docker build -f Dockerfile.bun \
-  --build-arg NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_live_xxxxx \
-  -t shadcn-dashboard .
-```
-
-Run the container:
-
-```bash
-docker run -d -p 3000:3000 \
-  -e NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_live_xxxxx \
-  -e CLERK_SECRET_KEY=sk_live_xxxxx \
-  --restart unless-stopped \
-  --name shadcn-dashboard \
-  shadcn-dashboard
-```
+运行前端时设置 SELLER_API_URL、SELLER_APP_ORIGIN 和 ECOM_API_URL，具体地址见 [项目 README](../../../README.md)。

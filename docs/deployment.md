@@ -6,20 +6,20 @@
 2. 先只启动数据库和 Casdoor，用回环端口完成初始化。
 
    ```sh
-   docker compose --env-file /path/to/seller.env -p seller-test -f compose.casdoor.yaml -f apps/auth/casdoor/bootstrap.yaml up -d db casdoor
+   docker compose --env-file /path/to/seller.env -p seller-test -f compose.yaml -f apps/auth/casdoor/bootstrap.yaml up -d db casdoor
    ```
 
    通过 SSH 的 `-L 18000:127.0.0.1:18000` 在本机浏览器访问 `http://localhost:18000`。立即修改初始化管理员密码。新建一个身份组织和 OIDC 应用，关闭公开注册，配置精确回调 `https://<APP_DOMAIN>/api/auth/callback`，使用签名 ID Token，并确认登录返回标准的 `iss`、`sub`、`nonce`、`email` 和 `email_verified` 声明。录入测试账号并完成邮箱验证。将客户端 ID 和密钥填入环境文件。
 3. 将两个测试域名指向测试服务器，启动测试栈。这里省略 bootstrap 文件以移除 Casdoor 的回环端口映射。
 
    ```sh
-   docker compose --env-file /path/to/seller.env -p seller-test -f compose.casdoor.yaml --profile app up -d --build
+   docker compose --env-file /path/to/seller.env -p seller-test -f compose.yaml --profile app up -d --build
    ```
 
 4. 测试所有者先登录一次，再从服务器创建工作区。
 
    ```sh
-   docker compose --env-file /path/to/seller.env -p seller-test -f compose.casdoor.yaml --profile app exec api seller-server create-workspace "Test A" owner@example.com
+   docker compose --env-file /path/to/seller.env -p seller-test -f compose.yaml --profile app exec api seller-server create-workspace "Test A" owner@example.com
    ```
 
    建两个工作区和至少三个测试账号，验证工作区切换、产品读写、成员权限及邀请，确认不同工作区的搜索和产品详情互相隔离。

@@ -59,7 +59,7 @@ fi
 
 seller_local() {
   docker compose --env-file "$HOME/.config/seller-ops-local/compose.env" \
-    -p seller-local -f compose.casdoor.yaml -f compose.local.yaml "$@"
+    -p seller-local -f compose.yaml -f apps/auth/casdoor/compose.local.yaml "$@"
 }
 
 seller_local up -d db casdoor proxy
