@@ -11,7 +11,7 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - ./deploy/casdoor/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./apps/auth/casdoor/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data
       - caddy-config:/config
   web:
@@ -25,7 +25,7 @@ services:
       ECOM_API_URL: http://ecom-api:8000
   api:
     profiles: [app]
-    build: ./apps/server
+    build: ./apps/auth
     restart: on-failure
     depends_on:
       db:
@@ -56,7 +56,7 @@ services:
       AUTH_DB_PASSWORD: ${AUTH_DB_PASSWORD}
     volumes:
       - database:/var/lib/postgresql/data
-      - ./deploy/casdoor/init-db.sh:/docker-entrypoint-initdb.d/10-seller.sh:ro
+      - ./apps/auth/casdoor/init-db.sh:/docker-entrypoint-initdb.d/10-seller.sh:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres"]
       interval: 5s
@@ -65,7 +65,7 @@ services:
 
   ecom-api:
     profiles: [app]
-    build: ./vendor/ecom-agent/backend
+    build: ./apps/backend
     restart: on-failure
     depends_on:
       ecom-redis:
@@ -94,7 +94,7 @@ services:
       - ecom-data:/data
   ecom-worker:
     profiles: [app]
-    build: ./vendor/ecom-agent/backend
+    build: ./apps/backend
     restart: on-failure
     depends_on:
       ecom-redis:
@@ -103,7 +103,7 @@ services:
     command: celery -A app.workers.celery_app worker --loglevel=info
   ecom-beat:
     profiles: [app]
-    build: ./vendor/ecom-agent/backend
+    build: ./apps/backend
     restart: on-failure
     depends_on:
       ecom-redis:

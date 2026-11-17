@@ -16,19 +16,23 @@ Seller Ops 是一个自托管的亚马逊运营工作台。登录后进入简体
 
 ## 项目结构
 
-| 路径 | 职责 |
-| --- | --- |
-| [apps/web](apps/web) | Next.js 前端、Casdoor 会话接入与同域业务 API 代理 |
-| [apps/server](apps/server) | Go 服务，处理 OIDC 登录、会话、工作区、成员和邀请 |
-| [vendor/ecom-agent/backend](vendor/ecom-agent/backend) | FastAPI 电商接口、Playwright 采集、模型调用和 Celery 任务 |
-| [vendor/ecom-agent](vendor/ecom-agent) | EcomAgent 上游源码与许可证，集成版入口由 Seller Ops 提供 |
-| [deploy/casdoor](deploy/casdoor) | Casdoor、Caddy 和 PostgreSQL 的初始化及部署文档 |
+~~~text
+seller-ops/
+├── apps/
+│   ├── web/       # Next.js 前端和同域 API 代理
+│   ├── auth/      # Go 登录管理、工作区与成员权限
+│   └── backend/   # FastAPI 电商业务、采集和 Celery 任务
+├── docs/          # 项目部署文档
+└── package.json   # 根目录脚本代理到 apps/web
+~~~
+
+Casdoor 初始化文件位于 [apps/auth/casdoor](apps/auth/casdoor)。Go 服务通过 OIDC 接入 Casdoor，Casdoor 进程由 Compose 或宿主机启动。
 
 浏览器通过 Next.js 访问电商接口，Next.js 验证 Casdoor 会话后转发到内部 FastAPI。Compose 将会话、工作区等数据和 Casdoor 数据存到 PostgreSQL，电商服务使用独立 SQLite 卷，竞品列表和快照持久化到 Redis。
 
 ## 启动方式
 
-有 HTTPS 域名时，按 [Casdoor 部署说明](deploy/casdoor/README.md) 初始化身份服务，再以 Compose 的 app 配置组启动整套应用。
+有 HTTPS 域名时，按 [Casdoor 部署说明](docs/deployment.md) 初始化身份服务，再以 Compose 的 app 配置组启动整套应用。
 
 ### 通过 SSH 转发运行 Compose 测试环境
 
@@ -92,7 +96,7 @@ seller_local --profile app down
 
 ### 模型和亚马逊配置
 
-在部署使用的私有环境文件里设置所需变量。[EcomAgent 环境变量示例](vendor/ecom-agent/.env.example)
+在部署使用的私有环境文件里设置所需变量。[EcomAgent 环境变量示例](apps/backend/.env.example)
 
 | 场景 | 配置 |
 | --- | --- |
@@ -106,17 +110,17 @@ seller_local --profile app down
 
 ### Ubuntu 原生进程
 
-已运行 PostgreSQL、Casdoor 和 Redis 的服务器可以直接启动进程。Go 版本见 [go.mod](apps/server/go.mod)，Web 构建镜像使用 Node.js 22，电商镜像使用 Python 3.12。下表的地址对应上面的 SSH 转发命令。
+已运行 PostgreSQL、Casdoor 和 Redis 的服务器可以直接启动进程。Go 版本见 [go.mod](apps/auth/go.mod)，Web 构建镜像使用 Node.js 22，电商镜像使用 Python 3.12。下表的地址对应上面的 SSH 转发命令。
 
 | 服务 | 启动目录与命令 | 配置 |
 | --- | --- | --- |
 | Casdoor | Casdoor 安装目录，运行 `./casdoor` | 监听 `127.0.0.1:18444`，origin 为 `http://localhost:18444` |
-| Go | `apps/server`，运行 `go run .` | `SELLER_LISTEN_ADDR=127.0.0.1:8080`、`APP_ORIGIN=http://localhost:18443`、`OIDC_ISSUER=http://localhost:18444`，以及 PostgreSQL 的 `DATABASE_URL` 和 OIDC 凭据 |
-| FastAPI | `vendor/ecom-agent/backend`，运行 `python -m uvicorn app.main:app --host 127.0.0.1 --port 18080` | 独立的 `DATABASE_URL`（例如 `sqlite+aiosqlite:///./ecom.db`）、`REDIS_URL` 和所需模型配置 |
+| Go | `apps/auth`，运行 `go run .` | `SELLER_LISTEN_ADDR=127.0.0.1:8080`、`APP_ORIGIN=http://localhost:18443`、`OIDC_ISSUER=http://localhost:18444`，以及 PostgreSQL 的 `DATABASE_URL` 和 OIDC 凭据 |
+| FastAPI | `apps/backend`，运行 `python -m uvicorn app.main:app --host 127.0.0.1 --port 18080` | 独立的 `DATABASE_URL`（例如 `sqlite+aiosqlite:///./ecom.db`）、`REDIS_URL` 和所需模型配置 |
 | Celery | 同 FastAPI，分别运行 `celery -A app.workers.celery_app worker --loglevel=info` 和 `celery -A app.workers.celery_app beat --loglevel=info` | 与业务服务使用同一 Redis，设置 `CELERY_BROKER_URL` 和 `CELERY_RESULT_BACKEND` |
 | Next.js | `apps/web`，运行 `npm run dev -- --hostname 127.0.0.1 --port 18443` | `SELLER_API_URL=http://127.0.0.1:8080`、`SELLER_APP_ORIGIN=http://localhost:18443`、`ECOM_API_URL=http://127.0.0.1:18080` |
 
-FastAPI 与 Celery 使用同一个 Python 环境。先安装 [Python 依赖](vendor/ecom-agent/backend/requirements.txt)，再执行 `playwright install chromium`；缺少 Ubuntu 系统库时，按 Playwright 的提示安装依赖。Redis 应绑定回环地址并启用持久化。已验证邮箱的用户登录后，可在 `apps/server` 运行 `go run . create-workspace "运营测试" owner@example.com` 创建工作区。
+FastAPI 与 Celery 使用同一个 Python 环境。先安装 [Python 依赖](apps/backend/requirements.txt)，再执行 `playwright install chromium`；缺少 Ubuntu 系统库时，按 Playwright 的提示安装依赖。Redis 应绑定回环地址并启用持久化。已验证邮箱的用户登录后，可在 `apps/auth` 运行 `go run . create-workspace "运营测试" owner@example.com` 创建工作区。
 
 ## 开发与检查
 
@@ -129,13 +133,17 @@ npm run lint
 NEXT_PUBLIC_SENTRY_DISABLED=true npm run build
 ~~~
 
-后端离线测试需要一个供测试使用的 Redis 数据库，pytest 默认排除真实模型调用测试。Go 数据库集成测试需要单独的空 PostgreSQL 数据库，设置 `TEST_DATABASE_URL` 后在 `apps/server` 运行 go test ./...。
+后端离线测试需要一个供测试使用的 Redis 数据库，pytest 默认排除真实模型调用测试。Go 数据库集成测试需要单独的空 PostgreSQL 数据库，设置 `TEST_DATABASE_URL` 后在 `apps/auth` 运行 go test ./...。
 
 ~~~bash
-cd vendor/ecom-agent/backend
+cd apps/backend
 python -m pytest -q
 ~~~
 
+## 上游参考
+
+原始源码可查阅 [EcomAgent 上游仓库](https://github.com/yoligehude14753/ecom-agent)或本项目的 [原始导入记录](https://github.com/infMoney-Agent/seller-ops/tree/9374da7/vendor/ecom-agent)。
+
 ## 许可证
 
-仓库许可证见 [LICENSE](LICENSE)，引入的 EcomAgent 组件见 [EcomAgent MIT 许可证](vendor/ecom-agent/LICENSE)。
+仓库许可证见 [LICENSE](LICENSE)，引入的 EcomAgent 组件见 [电商后端 MIT 许可证](apps/backend/LICENSE)及 [前端改编代码许可证](apps/web/src/features/ecom/LICENSE)。
