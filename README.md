@@ -147,3 +147,7 @@ python -m pytest -q
 ## 许可证
 
 仓库许可证见 [LICENSE](LICENSE)，引入的 EcomAgent 组件见 [电商后端 MIT 许可证](apps/backend/LICENSE)及 [前端改编代码许可证](apps/web/src/features/ecom/LICENSE)。
+
+## CI/CD
+
+合入 dev 的检查、镜像发布和服务器自动部署见 [CI/CD 说明](docs/ci-cd.md)。
