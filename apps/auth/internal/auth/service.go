@@ -116,8 +116,20 @@ func (s *Service) callback(w http.ResponseWriter, r *http.Request) {
   INSERT INTO users(issuer,subject,email,email_verified,name) VALUES($1,$2,$3,$4,$5)
   ON CONFLICT(issuer,subject) DO UPDATE SET email=excluded.email,email_verified=excluded.email_verified,name=excluded.name
   RETURNING id
- ) INSERT INTO sessions(token_hash,user_id,tenant_id,expires_at)
- SELECT $6,account.id,(SELECT min(tenant_id) FROM memberships WHERE user_id=account.id),now()+interval '12 hours' FROM account`,
+), ensure_tenant AS (
+  INSERT INTO tenants(name)
+  SELECT $5 || ' 的工作区' FROM account
+  WHERE NOT EXISTS (SELECT 1 FROM memberships WHERE user_id=account.id)
+  RETURNING id
+), ensure_membership AS (
+  INSERT INTO memberships(tenant_id,user_id,role)
+  SELECT ensure_tenant.id, account.id, 'owner' FROM ensure_tenant CROSS JOIN account
+  RETURNING tenant_id
+) INSERT INTO sessions(token_hash,user_id,tenant_id,expires_at)
+SELECT $6,account.id,COALESCE(
+  (SELECT tenant_id FROM ensure_membership),
+  (SELECT min(tenant_id) FROM memberships WHERE user_id=account.id)
+),now()+interval '12 hours' FROM account`,
 		identity.Issuer, identity.Subject, claims.Email, claims.Verified, claims.Name, HashToken(key))
 	if err != nil {
 		httpresponse.Internal(w, err)

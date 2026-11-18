@@ -16,13 +16,7 @@
    docker compose --env-file /path/to/seller.env -p seller-test -f compose.yaml --profile app up -d --build
    ```
 
-4. 测试所有者先登录一次，再从服务器创建工作区。
-
-   ```sh
-   docker compose --env-file /path/to/seller.env -p seller-test -f compose.yaml --profile app exec api seller-server create-workspace "Test A" owner@example.com
-   ```
-
-   建两个工作区和至少三个测试账号，验证工作区切换、产品读写、成员权限及邀请，确认不同工作区的搜索和产品详情互相隔离。
-5. 验收后再安排切换正式入口。切换前备份旧部署配置与数据库，并单独备份新 PostgreSQL 的 `casdoor` 和 `seller_ops` 两个数据库。回滚时恢复旧入口与配置，保留新数据库卷。
+4. 测试账号使用已验证邮箱登录，系统自动绑定租户，不提供工作区切换。验证不同账号/租户的商品、成员和业务数据隔离；同时检查 `backend` 的聚合健康和后台任务。
+5. 验收后再安排切换正式入口。切换前备份旧部署配置与数据库，并单独备份新 PostgreSQL 的 `casdoor`、`seller_ops` 和独立初筛 `seller_screening` 数据库。回滚时恢复旧入口与配置，保留新数据库卷。
 
 Go 数据库集成测试需要一个空的临时 PostgreSQL 数据库。设置 `TEST_DATABASE_URL` 后，在 `apps/auth` 运行 `go test ./...`。测试会写入测试账号、工作区和产品。

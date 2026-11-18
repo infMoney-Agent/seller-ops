@@ -6,7 +6,7 @@ async function proxy(request: Request) {
     return new Response(null, { status: 404 });
   }
   const headers = new Headers();
-  for (const name of ['cookie', 'origin', 'content-type', 'x-seller-workspace']) {
+  for (const name of ['cookie', 'origin', 'content-type']) {
     const value = request.headers.get(name);
     if (value) headers.set(name, value);
   }

@@ -16,8 +16,6 @@ const routeLabels: Record<string, string> = {
   '/dashboard/ecom/reviews': '评论分析',
   '/dashboard/ecom/monitor': '竞品监控',
   '/dashboard/ecom/ads': '广告优化',
-  '/dashboard/workspaces': '工作区',
-  '/dashboard/workspaces/team': '团队管理',
   '/dashboard/profile': '个人资料',
   '/dashboard/notifications': '通知',
   '/dashboard/users': '工作区成员',

@@ -6,6 +6,7 @@ export const navGroups: NavGroup[] = [
     items: [
       { title: '运营总览', url: '/dashboard/ecom', icon: 'dashboard' },
       { title: '选品研究', url: '/dashboard/ecom/research', icon: 'ecomSearch' },
+      { title: '产品初筛', url: '/dashboard/ecom/screening', icon: 'product' },
       { title: '商品页面生成', url: '/dashboard/ecom/listing', icon: 'ecomFileText' },
       { title: '评论分析', url: '/dashboard/ecom/reviews', icon: 'ecomStar' },
       { title: '竞品监控', url: '/dashboard/ecom/monitor', icon: 'ecomEye' },
@@ -15,10 +16,9 @@ export const navGroups: NavGroup[] = [
   {
     label: '账号管理',
     items: [
-      { title: '工作区', url: '/dashboard/workspaces', icon: 'workspace' },
       {
         title: '团队管理',
-        url: '/dashboard/workspaces/team',
+        url: '/dashboard/users',
         icon: 'teams',
         access: { requireOrg: true }
       },

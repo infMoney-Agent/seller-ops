@@ -63,10 +63,9 @@ func TestWorkspaceIsolation(t *testing.T) {
 		return token
 	}
 	a, b, m := makeSession(alice, first), makeSession(bob, second), makeSession(member, first)
-	s := &server{db: db, origin: "https://test.example.com", auth: auth.New(db, oauth2.Config{}, nil)}
+	s := &server{db: db, origins: []string{"https://test.example.com"}, auth: auth.New(db, oauth2.Config{}, nil)}
 	mux := http.NewServeMux()
 	s.registerBusiness(mux)
-	mux.HandleFunc("POST /api/auth/workspace", s.switchWorkspace)
 	s.auth.Register(mux)
 	call := func(method, path, token, body string, status int) *httptest.ResponseRecorder {
 		t.Helper()
@@ -101,7 +100,6 @@ func TestWorkspaceIsolation(t *testing.T) {
 	if !strings.Contains(result.Body.String(), `"total_products":1`) {
 		t.Fatal(result.Body.String())
 	}
-	call("POST", "/api/auth/workspace", a, `{"workspaceId":`+strconv.FormatInt(second, 10)+`}`, 404)
 	call("DELETE", "/api/users/"+strconv.FormatInt(alice, 10), a, "", 409)
 	call("DELETE", "/api/users/"+strconv.FormatInt(member, 10), a, "", 204)
 	call("GET", path, m, "", 403)

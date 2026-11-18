@@ -13,7 +13,7 @@ import { useRouter } from 'next/navigation';
 const MAX_VISIBLE = 5;
 
 const actionRoutes: Record<string, string> = {
-  view: '/dashboard/workspaces',
+  view: '/dashboard/users',
   'view-product': '/dashboard/product',
   billing: '/dashboard/billing',
   open: '/dashboard/kanban',

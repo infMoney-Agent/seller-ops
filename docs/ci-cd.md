@@ -1,11 +1,15 @@
 # dev 分支的 CI/CD
 
-向 dev 提交 PR 后，dev-ci 并行检查 Web 的类型和生产构建、Go 的 PostgreSQL 集成测试，以及 FastAPI 的 Redis 离线测试。Dev CI required 汇总结果。当前 GitHub 套餐不支持私有仓库的分支保护。在升级到支持该功能的套餐后，为 dev 要求通过 PR 合入，设 Dev CI required 为必过检查，要求分支与 dev 保持同步，并将规则应用于管理员。现存的前端 lint 问题暂未纳入门禁。
+通过 PR 合入 `dev`，必须通过 `Dev CI required`，分支必须与 `dev` 同步。当前规则已启用，无需额外审批票数；不绕过门禁。
 
-合入 dev 后，dev-cd 重新运行同一套检查，构建 Web、Go 和 Python 镜像，用 Git 提交 SHA 在 GHCR 打标签。Celery Worker 和 Beat 使用同一个 Python 镜像。构建通过后，工作流通过 SSH 更新服务器上的固定 Compose 项目。更新沿用该项目的持久化卷。服务健康检查通过后，服务器记录当前版本。如果新版本启动失败，则使用上一版本的配置和镜像恢复，工作流会报告失败。
+CI 验证 Web 类型、生产构建和浏览器流程，登录服务 PostgreSQL 隔离测试，以及统一 Go 业务后端的竞态测试、PostgreSQL/Redis 集成和生命周期测试。业务离线测试不需要真实模型或 Amazon 凭据。
 
-## 部署环境
+合并后 `dev-cd` 重跑检查，构建并发布 web、auth、backend 三个应用镜像，以提交 SHA 标记版本。登录、业务和前端各一个常驻应用进程；业务后台任务与接口共用同一个 Go 进程。迁移、数据库初始化和存储权限初始化是部署时退出的短期步骤。
 
-GitHub 的 dev-server Environment 只允许 dev 使用。变量为 DEPLOY_HOST、DEPLOY_USER，机密为 DEPLOY_SSH_KEY、DEPLOY_KNOWN_HOSTS。GHCR 的短期读取令牌由本次 Actions 任务提供。
+## 服务器发布
 
-服务器安装 .github/scripts/deploy-dev.sh 作为专用 SSH 密钥的强制命令，并配置 ~/.config/seller-ops-cd/dev.env。配置包括仓库位置、部署状态目录、Compose 项目名、私有环境文件、服务器覆盖配置、Docker 套接字文件和健康检查地址。首次启用前，将现有健康部署的 Compose 配置及本地镜像标签登记为 current。部署保留既有模型配置、Casdoor 和 Redis 数据。
+服务器安装 `.github/scripts/deploy-dev.sh` 为发布 SSH 密钥的强制命令，使用仓库外 `~/.config/seller-ops-cd/dev.env` 配置。允许配置 `BUILD_IMAGE_SCRIPT` 进行服务器本地构建；参考 `.github/scripts/build-images.sh`。仓库、状态目录、镜像、环境文件和端口覆盖由既有部署配置确定，不将凭据写进仓库。
+
+发布前校验目标 SHA 确实是当前 `dev`。数据库初始化成功后执行 `seller-backend migrate`，随后启动三个应用，清除旧独立 Worker 的孤立容器。健康检查包括登录会话、OIDC 和业务聚合健康接口。成功后切换 current 指针；失败则恢复上一版本应用镜像和配置，保留数据库和持久化文件，不降级删表。
+
+GitHub `dev-server` Environment 的变量为 `DEPLOY_HOST`、`DEPLOY_USER`，机密为 `DEPLOY_SSH_KEY`、`DEPLOY_KNOWN_HOSTS`。GHCR 临时访问令牌由 Actions 提供，发布助手不将其记入日志。历史发布和当前数据卷继续保留以支持回滚。

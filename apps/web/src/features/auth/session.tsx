@@ -9,7 +9,6 @@ export type SellerSession = {
   email: string;
   workspaceId: number;
   role: Role | '';
-  workspaces: { id: number; name: string; role: Role }[];
 };
 
 const SellerSessionContext = createContext<SellerSession | null>(null);
@@ -38,9 +37,7 @@ export function useSellerUser() {
 const accountErrors: Record<string, string> = {
   'sign in required': '请先登录。',
   'session expired': '登录已过期，请重新登录。',
-  'workspace access denied': '你没有访问此工作区的权限。',
-  'Workspace changed; reload this page': '工作区已切换，请刷新页面。',
-  'workspace not found': '未找到工作区。',
+  'workspace access denied': '账号尚未绑定工作区，请联系管理员初始化。',
   'member not found': '未找到成员。',
   'invalid role': '无效的成员角色。',
   'workspace requires an owner': '工作区必须至少有一位所有者。',
@@ -53,14 +50,11 @@ const accountErrors: Record<string, string> = {
 
 export async function request<T>(path: string, method = 'GET', body?: object): Promise<T> {
   const headers = new Headers(body ? { 'Content-Type': 'application/json' } : undefined);
-  const workspace =
-    document.querySelector<HTMLElement>('[data-seller-workspace]')?.dataset.sellerWorkspace;
-  if (workspace) headers.set('X-Seller-Workspace', workspace);
   const response = await fetch(path, {
     method,
     cache: 'no-store',
     headers,
-    body: body ? JSON.stringify(body) : undefined
+    ...(body ? { body: JSON.stringify(body) } : {})
   });
   if (!response.ok) {
     const data = await response.json().catch(() => null);
