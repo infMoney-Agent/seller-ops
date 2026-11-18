@@ -36,6 +36,9 @@ app.add_middleware(
 
 app.include_router(api_router)
 
+from app.screening.api import router as screening_router
+app.include_router(screening_router, prefix="/api/v1")
+
 
 @app.get("/health")
 async def health():

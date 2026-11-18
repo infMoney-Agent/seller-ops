@@ -60,6 +60,8 @@ services:
     image: $prefix-auth:$revision
   ecom-api:
     image: $prefix-backend:$revision
+  screening-migrate:
+    image: $prefix-backend:$revision
   ecom-worker:
     image: $prefix-backend:$revision
   ecom-beat:
@@ -103,7 +105,7 @@ wait_healthy() {
 
 previous=$(readlink "$current")
 compose "$release" config --quiet
-compose "$release" pull web api ecom-api ecom-worker ecom-beat
+compose "$release" pull web api ecom-api ecom-worker ecom-beat screening-migrate
 if compose "$release" up -d --no-build --pull never && wait_healthy "$release"; then
   rm -f "$STATE_DIR/current.next"
   ln -s "$release" "$STATE_DIR/current.next"

@@ -9,6 +9,7 @@ celery_app = Celery(
     backend=settings.CELERY_RESULT_BACKEND,
     include=[
         "app.workers.tasks.monitor_tasks",
+        "app.screening.tasks",
     ],
 )
 
@@ -22,6 +23,7 @@ celery_app.conf.update(
     task_acks_late=True,
     worker_prefetch_multiplier=1,
     beat_schedule={
+        "screening-dispatch": {"task": "screening.dispatch", "schedule": 5.0},
         "run-competitor-monitor-hourly": {
             "task": "app.workers.tasks.monitor_tasks.run_scheduled_monitors",
             "schedule": 3600.0,

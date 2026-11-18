@@ -23,6 +23,7 @@ services:
       NEXT_PUBLIC_SENTRY_DISABLED: "true"
       SELLER_APP_ORIGIN: https://${APP_DOMAIN}
       ECOM_API_URL: http://ecom-api:8000
+      SCREENING_INTERNAL_SECRET: ${SCREENING_INTERNAL_SECRET:?Set SCREENING_INTERNAL_SECRET}
   api:
     profiles: [app]
     build: ./apps/auth
@@ -68,11 +69,16 @@ services:
     build: ./apps/backend
     restart: on-failure
     depends_on:
+      screening-migrate:
+        condition: service_completed_successfully
       ecom-redis:
         condition: service_healthy
     environment: &ecom-env
       APP_ENV: production
       DATABASE_URL: sqlite+aiosqlite:////data/ecom.db
+      SCREENING_DATABASE_URL: postgresql+asyncpg://seller_screening:${SCREENING_DB_PASSWORD:?Set SCREENING_DB_PASSWORD}@db:5432/seller_screening
+      SCREENING_INTERNAL_SECRET: ${SCREENING_INTERNAL_SECRET:?Set SCREENING_INTERNAL_SECRET}
+      SCREENING_STORAGE_DIR: /screening-data
       REDIS_URL: redis://ecom-redis:6379/0
       CELERY_BROKER_URL: redis://ecom-redis:6379/0
       CELERY_RESULT_BACKEND: redis://ecom-redis:6379/1
@@ -92,24 +98,51 @@ services:
       AMAZON_ADS_PROFILE_ID: ${AMAZON_ADS_PROFILE_ID:-}
     volumes:
       - ecom-data:/data
+      - screening-data:/screening-data
   ecom-worker:
     profiles: [app]
     build: ./apps/backend
     restart: on-failure
     depends_on:
+      screening-migrate:
+        condition: service_completed_successfully
       ecom-redis:
         condition: service_healthy
     environment: *ecom-env
+    volumes:
+      - screening-data:/screening-data
     command: celery -A app.workers.celery_app worker --loglevel=info
   ecom-beat:
     profiles: [app]
     build: ./apps/backend
     restart: on-failure
     depends_on:
+      screening-migrate:
+        condition: service_completed_successfully
       ecom-redis:
         condition: service_healthy
     environment: *ecom-env
     command: celery -A app.workers.celery_app beat --loglevel=info
+  screening-db-init:
+    profiles: [app]
+    image: postgres:17.7-alpine
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+      SCREENING_DB_PASSWORD: ${SCREENING_DB_PASSWORD:?Set SCREENING_DB_PASSWORD}
+    volumes:
+      - ./apps/backend/scripts/init-screening-db.sh:/init-screening-db.sh:ro
+    entrypoint: ["sh", "/init-screening-db.sh"]
+  screening-migrate:
+    profiles: [app]
+    build: ./apps/backend
+    environment: *ecom-env
+    command: python -m alembic -c alembic-screening.ini upgrade head
+    depends_on:
+      screening-db-init:
+        condition: service_completed_successfully
   ecom-redis:
     profiles: [app]
     image: redis:7-alpine
@@ -125,6 +158,7 @@ services:
 
 volumes:
   ecom-data:
+  screening-data:
   ecom-redis-data:
   database:
   caddy-data:
