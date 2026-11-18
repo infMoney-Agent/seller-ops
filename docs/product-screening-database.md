@@ -1,105 +1,63 @@
-# 产品初筛数据库设计：商品主表 + 月度经营副表
+# 产品初筛数据库设计
 
-本设计取代初版把价格、销量、评分放入商品主表的方案。初筛模块共13张表；其中商品业务核心是下面两张表，导入、机器结果、人工操作和利润方案作为独立辅助表保留。
+目标实现：独立 Go 服务 `apps/screening`，独立 PostgreSQL 数据库 `seller_screening` 和业务账号。不得将业务表放入用户管理数据库 `seller_ops` 或 Casdoor 数据库，也不将初筛路由放进认证服务。
 
-## 1. 商品主表 ps_products
+保留九张业务表。迁移版本跟踪表属于部署元数据，不计入业务表数量。
 
-每个工作区、站点、ASIN只有一个商品档案。
-
-| 字段组 | 字段 |
-| --- | --- |
-| 身份 | tenant_id、id、marketplace、asin |
-| 基础档案 | title、title_zh、brand、category、image_url、specs |
-| 当前卖家 | seller_id、seller_name、seller_region |
-| 人工结论 | review_status、review_reason、review_note、reviewed_by、reviewed_at |
-| 当前引用 | current_row_id、current_monthly_id、current_monthly_revision、current_result_id、current_group_rep_id |
-| 并发与时间 | data_revision、review_revision、screen_generation、created_at、updated_at |
-
-主键为 `(tenant_id,id)`，业务唯一键为 `(tenant_id,marketplace,asin)`。**主表不再包含价格、月销量、评分数或评分字段**，也不为每个月复制一份标题和卖家。
-
-`current_row_id`指向最新商品档案的来源；`current_monthly_id`指向最新统计周期的经营数据。两个引用独立：补录旧月份可以增加历史数据，但不能把最新月份的价格和销量替换成旧月份。历史卖家信息仍可从不可变原始导入行追溯，主表展示当前卖家。
-
-## 2. 月度副表 ps_product_monthly
-
-同一个商品可以有多条经营记录，关联商品主表的 `(tenant_id,product_id)`。
-
-| 字段 | 类型 | 含义 |
+| 表 | 作用 | 重要约束 |
 | --- | --- | --- |
-| tenant_id、id、product_id | bigint、uuid、uuid | 工作区、记录ID、商品ID |
-| stat_month | date | 统计归属月份，以当月第一天表示 |
-| period_type | text | calendar_month自然月、rolling_30d滚动30天、custom自定义 |
-| period_start、period_end | date | 实际统计起止日期 |
-| observed_on | date | 数据观察日期，区别于上传日期 |
-| source_type | varchar(50) | sellersprite、manual、other或其他明确来源 |
-| source_row_id | uuid | 原始导入行 |
-| price_usd | numeric(18,6) | 该期观察价格，不表示月均价 |
-| monthly_sales | bigint | 来源报告中的该期销量，不做跨来源累加 |
-| monthly_revenue | numeric(18,6) | 该期销售额，缺失保持NULL，不由售价推算 |
-| review_count、rating | bigint、numeric(3,2) | 观察时的评分数和评分 |
-| bsr_rank | bigint | 观察时的排名 |
-| currency | char(3) | 一期固定USD，对应美国站 |
-| revision | bigint | 同一周期数据被更新时递增 |
-| created_at、updated_at | timestamptz | 建立与更新时间 |
+| `ps_products` | 商品主表：子 ASIN、父 ASIN、标题、图片、卖家、品牌、分类、唯一参数、当前机器结果和人工结论 | 工作区＋站点＋子 ASIN 唯一；参数与商品同表 |
+| `ps_product_monthly` | 商品副表：分月份/周期/来源保存价格、销量、销售额、评论、评分和 BSR | 工作区＋商品＋来源＋周期类型＋起止日期唯一；明确销量口径 |
+| `ps_profit_scenarios` | 利润副表：同一商品多个方案，保存输入、输出和测算快照 | 绑定商品；可绑定具体月份及版本；保留参数与模板快照 |
+| `ps_parent_monthly` | 来源明确报告的父体销量、销售额 | 父 ASIN＋来源＋周期唯一；不把父体销量复制给每个子体 |
+| `ps_imports` | 导入批次、原文件位置/哈希、字段映射、观察日期、来源周期和状态 | 防重复；原文件在持久化卷 |
+| `ps_import_rows` | 原始行、标准化结果、工作表、ZIP 子文件、行号和错误 | 确认后观察记录不可修改；保留追溯 |
+| `ps_configs` | 规则和公共利润模板的版本化配置，通过 `kind` 区分 | 不再分别维护规则表、利润模板表；所有者管理 |
+| `ps_jobs` | 异步任务、批量复核预览/执行/撤销结果、幂等回执 | 不再分别维护初筛运行表、批量操作表、请求回执表 |
+| `ps_review_events` | 人工复核、分类和参数修改的前后快照、操作人和版本 | 保留审计与条件撤销依据 |
 
-`stat_month`等于`period_end`所属月份的第一天。自然月必须完整覆盖该月；滚动30天必须恰好30天。不同滚动窗口即使属于同一个月份，也分别保存。
+## 商品主表
 
-唯一约束：
+主表是一条可独立销售的子 ASIN，不按月份重复创建。基础信息包含卖家身份、地区、品牌、来源类目和人工分类。`parent_asin` 关联同父体子体；父体不需要伪造一条可销售商品记录。
 
-```text
-(tenant_id, product_id, source_type, period_type, period_start, period_end)
-```
+产品参数直接在主表：材质、重量、包装重量、包装长宽高、每售卖包装件数、每箱包装数、整箱重量和长宽高。不同规格/包装使用不同 ASIN，各自保存参数。利润按一个可销售包装计算，不能看到 `units_per_pack` 就再次乘采购成本。
 
-查询索引：
+`data_revision` 跟踪来源及参数变动，`review_revision` 跟踪人工操作，`screen_generation` 防止旧任务覆盖新一轮结果。机器结果与人工结论分开保存；机器重筛不能覆盖人工原因和备注。
 
-```text
-(tenant_id, product_id, stat_month DESC, period_end DESC, observed_on DESC)
-(tenant_id, stat_month, monthly_sales DESC)
-(tenant_id, source_row_id)
-(tenant_id, stat_month, period_type, product_id, period_end DESC, observed_on DESC, updated_at DESC, id DESC)
-```
+## 月份和销量口径
 
-以ASIN查月份时先走主表的站点+ASIN唯一索引，再使用副表商品+月份索引，不需要在副表重复保存可变商品档案。
+月份表通过 `product_id` 关联主表。价格、销量等随时间变化的指标放在副表。唯一键包含来源、周期类型和起止日期，防止自然月与滚动30天被当成同一记录。
 
-```sql
-SELECT p.asin,p.title,p.seller_name,m.stat_month,m.price_usd,m.monthly_sales
-FROM ps_products p
-JOIN ps_product_monthly m ON m.tenant_id=p.tenant_id AND m.product_id=p.id
-WHERE p.tenant_id=:workspace AND p.marketplace='US'
-  AND p.asin=:asin AND m.stat_month=:month;
-```
+`sales_scope` 为 `child`、`parent` 或 `unknown`。只有明确的 `child` 可当作该子体销量；未知口径保留原始报告值，不能静默加入销量合计。父体明确汇总保存到 `ps_parent_monthly`，不能重复分摊至子体。
 
-## 3. 写入与更新规则
+同父体子体仅在来源、周期、父体关系和销量口径均可比较时汇总。月表保留 `parent_asin_snapshot`，避免商品之后改父体导致历史销量归属被重写。
 
-1. 上传文件后，原始行进入`ps_import_rows`，保留ZIP成员、工作表、行号、raw_data与normalized_data。无效行也保留。
-2. 确认导入时按工作区+站点+ASIN查找或建立商品档案。
-3. 按商品、来源、口径、起止日期查找月度记录。不同月份或不同来源新增记录，不覆盖已有其他周期。
-4. 同一周期重复导入，按观察日期、导入时间、成员路径、工作表、原行号和ID排序，较新的观察更新月度记录并增加revision。
-5. 原始导入行保持不变，因此月度有效值更新后，旧值仍可追溯。
-6. 默认经营数据按月份、周期结束日期、观察日期、更新时间、ID降序选择。补录旧月份不会抢占最新统计周期。
-7. 商品基础资料更新按来源观察日期排序；人工结论、人工原因和备注不参与导入更新。
+补录旧月份不覆盖新月份的当前展示记录，重复导入不覆盖人工结论。一个月同来源重复采集时，当前月记录按观察日期及来源顺序确定；所有原始观察仍在导入行表保留。
 
-最新月份数据变化时增加商品data_revision；仅修改历史月度记录时使用月度revision检测变化。人工结论继续由review_revision保护。
+## 利润副表
 
-## 4. 查询、复核与利润
+利润方案独立绑定子商品，可指定月份记录和期望版本。保存采购/包装/头程等人民币成本、美元收入与费用、汇率、退货假设、预计销量、公式版本、输出以及商品参数快照。
 
-列表及统计支持`stat_month=2026-10`、`period_type=calendar_month`、`source_type=sellersprite`，不传时采用各商品最新一期。查询某月份未指定来源时选择该周期观察日期较新的记录；商品历史页完整展示各来源记录，不把多来源销量相加。
+使用 Go 精确有理数运算，最终结果才舍入。必要输入缺失返回待补充，不将缺失费用当成零。商品参数、月数据或模板更新后，旧方案应显示过期，不覆盖历史方案。
 
-- `GET /months`：工作区可选择的月份、口径和来源。
-- `GET /products/{id}/monthly`：分页获取该商品所有周期及原始来源位置。
-- 商品列表和详情继续返回price_usd、monthly_sales等兼容字段，但值来自副表联查。
-- 人工复核仍为商品级；机器结果按当前最新资料计算，切换历史月份不伪造历史机器结论。
-- 利润请求新增`monthly_id`和`expected_monthly_revision`。保存时记录月度ID、版本及monthly_snapshot。历史月份变化可以令该方案过期，同时输入与原结果保持不变。
-- 批量利润按当前列表选择的月份/来源冻结月度记录及版本。
-- Excel增加“月度数据”工作表，导出各期记录；商品页导出字段采用所选期数据。
+## 父子关联与批量操作
 
-金额在PostgreSQL中使用numeric，后端计算使用Decimal，API金额返回十进制字符串。
+单条复核默认仅对子体生效。父体批量排除和归类必须显式选择作用范围、预览并冻结目标及版本；父体关系或参考样本变化需要重新预览。销量、价格和利润仍分别绑定各子体。
 
-## 5. 兼容迁移
+## 简化后的历史保留
 
-新增Alembic版本`screening_0003`，完整DDL位于`apps/backend/app/screening/monthly-schema.sql`。必须依次执行0001、0002、0003，不能仅拿初版schema.sql作为最终结构。
+当前机器判断直接放在主表，不再新增每轮每商品结果表。规则配置不可变版本保留；运行摘要放入任务表。旧版已有的完整初筛结果，在删除旧表前归档进对应任务 `result.legacy_screen_results`，避免迁移丢失历史。
 
-迁移先建立副表并从所有已确认导入行回填历史，再建立当前引用、利润与机器结果的月度引用，最后删除主表经营字段。如果新选定的最新统计周期与旧主表的来源或经营值不同，增加商品数据版本并清空过期的当前机器结果，人工结论不变。原始文件、导入行、人工事件和利润输入输出不会删除。对无法可靠定位的旧利润方案不猜测月份，保持引用NULL及原快照。
+旧版 `ps_policies` 与 `ps_profit_templates` 合并为 `ps_configs`；`ps_review_batches`、`ps_requests` 和 `ps_screen_runs` 合并入 `ps_jobs`。人工事件始终独立保留。
 
-旧导入来源统一标记`legacy_import`，避免未经证据把历史来源认定为卖家精灵。有效YYYY-MM来源期回填自然月；明确Last-30-days/滚动30天回填对应窗口；其他旧来源按观察日保存为custom，保留原来源期文字。
+## 与用户管理隔离
 
-初筛、人工复核、利润和任务辅助表继续保留。数据库仍独立于现有认证库和电商SQLite，跨工作区外键包含tenant_id。上线前备份、执行一次性迁移，回滚应用时保留新表及历史数据，不执行破坏性降级。
+每张业务表有 `tenant_id`；业务表之间使用包含它的复合外键。用户、工作区、会话和角色仍由原 Go 认证服务管理，不复制到业务库，也不建立跨库外键。业务库只记录逻辑工作区/操作人 ID。
+
+Next.js 校验登录与工作区，再向初筛 Go 服务签名传递身份。业务服务校验签名、时效和角色。独立数据库账号仅授权本业务库；连接配置校验是额外保护，不能替代 PostgreSQL 最小权限授权。
+
+## 迁移位置和当前状态
+
+Go 迁移源位于 `apps/screening/migrations`，通过 `screening migrate` 执行，无需 Python/Alembic 运行时。支持新库顺序迁移，也能接管已有的 `screening_0001` 至 `screening_0004` 版本。
+
+Go 核心迁移、隔离、单条复核、参数快照、利润及重筛任务已通过测试；导入、批量复核、导出、完整规则和部署切换尚未完成。不要仅根据数据库迁移通过就切换前端或合入触发自动部署的 `dev`。

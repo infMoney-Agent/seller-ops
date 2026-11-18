@@ -1,3 +1,5 @@
+> 技术栈调整：产品初筛目标后端改为独立 Go 服务 `apps/screening`，业务库独立于用户管理库，模型简化为九表。当前 Go 迁移进度和未完成项以 `apps/screening/README.md` 为准；数据库设计以 `docs/product-screening-database.md` 为准。本文原有 FastAPI/Celery 部分属于旧实现记录，不能作为新模块最终架构或已完成迁移的依据。
+
 # 产品初筛
 
 新增入口：`/dashboard/ecom/screening`。功能为商品导入、规则筛选、同类归并、人工复核、FBA 假设利润测算与 XLSX 导出。原选品研究和 SQLite 功能保持独立。
