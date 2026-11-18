@@ -22,9 +22,9 @@ import (
 var schema string
 
 type server struct {
-	db     *pgxpool.Pool
-	origin string
-	auth   *auth.Service
+	db      *pgxpool.Pool
+	origins []string
+	auth    *auth.Service
 }
 
 func main() {
@@ -55,10 +55,7 @@ func main() {
 		log.Printf("workspace ID %d", id)
 		return
 	}
-	origin := strings.TrimRight(required("APP_ORIGIN"), "/")
-	if !strings.HasPrefix(origin, "https://") && origin != "http://localhost:18443" {
-		log.Fatal("APP_ORIGIN must use HTTPS")
-	}
+	origins := allowedOrigins(required("APP_ORIGIN"))
 	clientID := required("OIDC_CLIENT_ID")
 	provider, err := oidc.NewProvider(ctx, required("OIDC_ISSUER"))
 	if err != nil {
@@ -66,14 +63,13 @@ func main() {
 	}
 	oauth := oauth2.Config{
 		ClientID: clientID, ClientSecret: required("OIDC_CLIENT_SECRET"),
-		RedirectURL: origin + "/api/auth/callback", Endpoint: provider.Endpoint(),
+		RedirectURL: origins[0] + "/api/auth/callback", Endpoint: provider.Endpoint(),
 		Scopes: []string{oidc.ScopeOpenID, "profile", "email"},
 	}
-	s := &server{db: db, origin: origin, auth: auth.New(db, oauth, provider.Verifier(&oidc.Config{ClientID: clientID}))}
+	s := &server{db: db, origins: origins, auth: auth.New(db, oauth, provider.Verifier(&oidc.Config{ClientID: clientID}))}
 	mux := http.NewServeMux()
 	s.auth.Register(mux)
 	mux.HandleFunc("GET /api/auth/session", s.session)
-	mux.HandleFunc("POST /api/auth/workspace", s.switchWorkspace)
 	s.registerBusiness(mux)
 	listenAddr := os.Getenv("SELLER_LISTEN_ADDR")
 	if listenAddr == "" {
@@ -81,13 +77,40 @@ func main() {
 	}
 	httpServer := &http.Server{Addr: listenAddr, Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
-		if r.Method != http.MethodGet && r.Method != http.MethodHead && r.Header.Get("Origin") != s.origin {
+		if r.Method != http.MethodGet && r.Method != http.MethodHead && !s.allowedOrigin(r.Header.Get("Origin")) {
 			httpresponse.Fail(w, 403, "invalid request origin")
 			return
 		}
 		mux.ServeHTTP(w, r)
 	}), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 30 * time.Second}
 	log.Fatal(httpServer.ListenAndServe())
+}
+
+func allowedOrigins(value string) []string {
+	var origins []string
+	for _, raw := range strings.Split(value, ",") {
+		origin := strings.TrimRight(strings.TrimSpace(raw), "/")
+		if origin == "" {
+			continue
+		}
+		if !strings.HasPrefix(origin, "https://") && !strings.HasPrefix(origin, "http://localhost:") {
+			log.Fatal("APP_ORIGIN entries must use HTTPS or http://localhost:<port>")
+		}
+		origins = append(origins, origin)
+	}
+	if len(origins) == 0 {
+		log.Fatal("APP_ORIGIN must list at least one origin")
+	}
+	return origins
+}
+
+func (s *server) allowedOrigin(origin string) bool {
+	for _, o := range s.origins {
+		if origin == o {
+			return true
+		}
+	}
+	return false
 }
 
 func required(name string) string {

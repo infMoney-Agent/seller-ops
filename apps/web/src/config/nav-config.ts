@@ -16,10 +16,9 @@ export const navGroups: NavGroup[] = [
   {
     label: '账号管理',
     items: [
-      { title: '工作区', url: '/dashboard/workspaces', icon: 'workspace' },
       {
         title: '团队管理',
-        url: '/dashboard/workspaces/team',
+        url: '/dashboard/users',
         icon: 'teams',
         access: { requireOrg: true }
       },

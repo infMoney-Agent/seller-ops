@@ -23,7 +23,7 @@ export default function InvitePage() {
             await request('/api/invitations/accept', 'POST', {
               token: window.location.hash.slice(1)
             });
-            window.location.replace('/dashboard/workspaces');
+            window.location.replace('/dashboard');
           } catch (error) {
             setMessage(String(error));
             setBusy(false);

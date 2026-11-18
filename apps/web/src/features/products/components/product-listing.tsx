@@ -8,8 +8,7 @@ import { backendFetch, requireSession } from '@/lib/backend';
 import { ProductTable } from './product-tables';
 
 export default async function ProductListingPage() {
-  const session = await requireSession();
-  if (!session.workspaceId) return <p>Select a workspace to view products.</p>;
+  await requireSession();
   const page = searchParamsCache.get('page');
   const search = searchParamsCache.get('name');
   const pageLimit = searchParamsCache.get('perPage');
@@ -28,7 +27,7 @@ export default async function ProductListingPage() {
 
   queryClient.setQueryData(
     productKeys.list(filters),
-    await backendFetch<ProductsResponse>(productsPath(filters), session.workspaceId)
+    await backendFetch<ProductsResponse>(productsPath(filters))
   );
 
   return (

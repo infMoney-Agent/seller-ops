@@ -26,26 +26,30 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const defaultOpen = cookieStore.get('sidebar_state')?.value !== 'false';
   return (
     <SellerSessionProvider session={session}>
-      <div className='contents' data-seller-workspace={session.workspaceId}>
-        <KBar>
-          <SidebarProvider defaultOpen={defaultOpen}>
-            <a
-              href='#main-content'
-              className='bg-background ring-ring sr-only rounded-md px-3 py-2 text-sm font-medium shadow focus:not-sr-only focus:absolute focus:top-2 focus:start-2 focus:z-50 focus:ring-2'
-            >
-              跳到主要内容
-            </a>
-            <AppSidebar />
-            <SidebarInset id='main-content' tabIndex={-1} className='scroll-mt-16'>
-              <Header />
-              <InfobarProvider defaultOpen={false}>
-                {children}
-                <InfoSidebar side='right' />
-              </InfobarProvider>
-            </SidebarInset>
-          </SidebarProvider>
-        </KBar>
-      </div>
+      <KBar>
+        <SidebarProvider defaultOpen={defaultOpen}>
+          <a
+            href='#main-content'
+            className='bg-background ring-ring sr-only rounded-md px-3 py-2 text-sm font-medium shadow focus:not-sr-only focus:absolute focus:top-2 focus:start-2 focus:z-50 focus:ring-2'
+          >
+            跳到主要内容
+          </a>
+          <AppSidebar />
+          <SidebarInset id='main-content' tabIndex={-1} className='scroll-mt-16'>
+            <Header />
+            <InfobarProvider defaultOpen={false}>
+              {session.workspaceId ? (
+                children
+              ) : (
+                <div className='text-muted-foreground flex flex-1 items-center justify-center p-8'>
+                  账号尚未绑定工作区，请联系管理员初始化。
+                </div>
+              )}
+              <InfoSidebar side='right' />
+            </InfobarProvider>
+          </SidebarInset>
+        </SidebarProvider>
+      </KBar>
     </SellerSessionProvider>
   );
 }

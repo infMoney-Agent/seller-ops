@@ -14,7 +14,6 @@ type PageProps = { params: Promise<{ productId: string }> };
 
 export default async function Page(props: PageProps) {
   const session = await requireSession();
-  if (!session.workspaceId) return <p>Select a workspace to view products.</p>;
   if (session.role !== 'owner' && (await props.params).productId === 'new') {
     return <p>Only workspace owners can create products.</p>;
   }
@@ -25,7 +24,7 @@ export default async function Page(props: PageProps) {
     const id = Number(params.productId);
     queryClient.setQueryData(
       productKeys.detail(id),
-      await backendFetch<ProductByIdResponse>(`/api/products/${id}`, session.workspaceId)
+      await backendFetch<ProductByIdResponse>(`/api/products/${id}`)
     );
   }
 

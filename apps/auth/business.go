@@ -38,10 +38,6 @@ func (s *server) workspace(w http.ResponseWriter, r *http.Request, owner bool) (
 		httpresponse.Fail(w, 403, "workspace access denied")
 		return a, false
 	}
-	if expected := r.Header.Get("X-Seller-Workspace"); expected != "" && expected != strconv.FormatInt(a.TenantID, 10) {
-		httpresponse.Fail(w, 409, "Workspace changed; reload this page")
-		return a, false
-	}
 	return a, true
 }
 
@@ -371,7 +367,7 @@ func (s *server) invitations(w http.ResponseWriter, r *http.Request) {
 			httpresponse.Internal(w, err)
 			return
 		}
-		httpresponse.JSON(w, 201, map[string]string{"url": fmt.Sprintf("%s/invite#%s", s.origin, token)})
+		httpresponse.JSON(w, 201, map[string]string{"url": fmt.Sprintf("%s/invite#%s", s.origins[0], token)})
 	case http.MethodDelete:
 		tag, err := s.db.Exec(ctx, `UPDATE invitations SET revoked_at=now() WHERE tenant_id=$1 AND encode(token_hash,'hex')=$2
   AND accepted_at IS NULL AND revoked_at IS NULL`, a.TenantID, r.PathValue("id"))
