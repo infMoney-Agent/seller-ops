@@ -119,6 +119,9 @@ previous=$(readlink "$current")
 compose "$release" config --quiet
 if [[ -z ${BUILD_IMAGE_SCRIPT:-} ]]; then
   compose "$release" pull web api backend backend-migrate screening-db-init screening-storage-init
+else
+  # App images are built locally; newly introduced one-off base images still need provisioning.
+  compose "$release" pull --policy missing screening-db-init screening-storage-init
 fi
 if compose "$release" up -d --no-build --pull never --remove-orphans && wait_healthy "$release"; then
   rm -f "$STATE_DIR/current.next"
