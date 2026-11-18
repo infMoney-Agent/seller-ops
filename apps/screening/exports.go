@@ -373,7 +373,7 @@ func (s *service) retryJob(ctx context.Context, a identity, id string) (any, err
 	if e := s.db.QueryRow(ctx, "SELECT kind FROM ps_jobs WHERE tenant_id=$1 AND id=$2::uuid AND payload->>'engine'=$3 AND state='failed'", a.Tenant, id, goEngine).Scan(&kind); e != nil {
 		return nil, e
 	}
-	if _, e := s.db.Exec(ctx, "UPDATE ps_jobs SET state='queued',attempts=0,error=NULL,lease_until=NULL,lease_token=NULL,updated_at=now() WHERE tenant_id=$1 AND id=$2::uuid AND state='failed'", a.Tenant, id); e != nil {
+	if _, e := s.db.Exec(ctx, "WITH retried AS (UPDATE ps_jobs SET state='queued',attempts=0,error=NULL,lease_until=NULL,lease_token=NULL,updated_at=now() WHERE tenant_id=$1 AND id=$2::uuid AND state='failed' RETURNING tenant_id,kind,payload) UPDATE ps_imports i SET state=CASE j.kind WHEN 'parse' THEN 'parsing' ELSE 'importing' END FROM retried j WHERE j.kind IN ('parse','import') AND i.tenant_id=j.tenant_id AND i.id::text=j.payload->>'import_id'", a.Tenant, id); e != nil {
 		return nil, e
 	}
 	return Object{"job_id": id, "state": "queued"}, nil

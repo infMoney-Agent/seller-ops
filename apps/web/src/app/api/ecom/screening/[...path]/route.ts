@@ -61,9 +61,9 @@ async function proxy(request: Request, { params }: { params: Promise<{ path: str
       session.workspaceId <= 0 ||
       !['owner', 'member'].includes(session.role)
     ) {
-      return Response.json({ message: '请先选择有效工作区。' }, { status: 403 });
+      return Response.json({ message: '账号尚未绑定租户，请联系管理员。' }, { status: 403 });
     }
-    if (request.headers.get('x-seller-workspace') !== String(session.workspaceId)) {
+    if (request.headers.has('x-seller-workspace') && request.headers.get('x-seller-workspace') !== String(session.workspaceId)) {
       return Response.json({ message: '工作区已切换，请刷新页面。' }, { status: 409 });
     }
     const stamp = String(Math.floor(Date.now() / 1000));

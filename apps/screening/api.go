@@ -108,7 +108,7 @@ func (s *service) route(w http.ResponseWriter, r *http.Request) (any, error) {
 				}
 			case "imports":
 				if len(parts) == 2 {
-					return s.one(ctx, "SELECT to_jsonb(i) FROM ps_imports i WHERE tenant_id=$1 AND id=$2::uuid", a.Tenant, id)
+					return s.one(ctx, "SELECT to_jsonb(i)||jsonb_build_object('latest_job_id',(SELECT j.id FROM ps_jobs j WHERE j.tenant_id=i.tenant_id AND j.kind IN ('parse','import') AND j.payload->>'import_id'=i.id::text ORDER BY j.updated_at DESC,j.id DESC LIMIT 1)) FROM ps_imports i WHERE tenant_id=$1 AND id=$2::uuid", a.Tenant, id)
 				}
 				if _, e := s.one(ctx, "SELECT to_jsonb(i) FROM ps_imports i WHERE tenant_id=$1 AND id=$2::uuid", a.Tenant, id); e != nil {
 					return nil, e

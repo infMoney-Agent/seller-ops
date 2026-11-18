@@ -298,3 +298,34 @@ func TestImportHTTPWorkflow(t *testing.T) {
 	}
 
 }
+
+func TestExplanatorySheets(t *testing.T) {
+	book := excelize.NewFile()
+	defer book.Close()
+	book.SetSheetRow("Sheet1", "A1", &[]any{"ASIN", "商品标题", "父ASIN"})
+	book.SetSheetRow("Sheet1", "A2", &[]any{"B000000001", "manual tool", "B000000001"})
+	book.NewSheet("Notes")
+	book.SetSheetRow("Notes", "A1", &[]any{"说明"})
+	book.SetSheetRow("Notes", "A2", &[]any{"字段解释"})
+	book.NewSheet("Bad products")
+	book.SetSheetRow("Bad products", "A1", &[]any{"ASIN", "商品标题"})
+	book.SetSheetRow("Bad products", "A2", &[]any{"bad", "tool"})
+	buf, e := book.WriteToBuffer()
+	if e != nil {
+		t.Fatal(e)
+	}
+	rows, invalid, skips := 0, 0, 0
+	e = parseSourceReport(buf.Bytes(), "products.xlsx", Object{}, func(r sourceRow) error {
+		rows++
+		if len(r.Errors) > 0 {
+			invalid++
+		}
+		return nil
+	}, func(Object) { skips++ })
+	if e != nil || rows != 2 || invalid != 1 || skips != 1 {
+		t.Fatalf("rows=%d invalid=%d skipped=%d err=%v", rows, invalid, skips, e)
+	}
+	if explanatorySheet("Notes", []string{"ASIN", "商品标题"}, Object{}) {
+		t.Fatal("product sheet named Notes skipped")
+	}
+}

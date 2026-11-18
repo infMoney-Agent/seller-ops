@@ -139,9 +139,8 @@ func normalizeRow(raw Object, mapping Object) (Object, []string) {
 		}
 		out["sales_scope"] = "parent"
 		out["sales_scope_explicit"] = true
-	} else if parent == str(out["asin"]) {
-		errs = append(errs, "父ASIN不能等于子ASIN")
 	}
+	// 独立商品（没有子体）允许父ASIN等于自身，形成单成员家族。
 	if parent != "" && !asinPattern.MatchString(parent) {
 		errs = append(errs, "父ASIN无效")
 	}
@@ -170,6 +169,9 @@ func normalizeRow(raw Object, mapping Object) (Object, []string) {
 	return out, errs
 }
 func parseSource(data []byte, name string, mapping Object, emit func(sourceRow) error) error {
+	return parseSourceReport(data, name, mapping, emit, nil)
+}
+func parseSourceReport(data []byte, name string, mapping Object, emit func(sourceRow) error, skipped func(Object)) error {
 	if len(data) > maxUpload {
 		return fmt.Errorf("文件超过30MB")
 	}
@@ -265,6 +267,13 @@ func parseSource(data []byte, name string, mapping Object, emit func(sourceRow) 
 					}
 					if headers == nil {
 						headers = values
+						if explanatorySheet(sheet, headers, mapping) {
+							if skipped != nil {
+								skipped(Object{"member_path": member, "sheet_name": sheet, "reason": "说明页，无 ASIN 字段，不作为商品导入"})
+							}
+							rows.Close()
+							break
+						}
 						continue
 					}
 					if e = send(sheet, headers, values, row); e != nil {
@@ -373,14 +382,11 @@ func period(b Object, required bool) (Object, error) {
 	switch kind {
 	case "calendar_month":
 		month := sourcePeriod
-		if !regexp.MustCompile(`^[12][0-9]{3}-(0[1-9]|1[0-2])$`).MatchString(month) {
-			if date.IsZero() {
-				if required {
-					return nil, fail(422, "自然月必须提供YYYY-MM来源期")
-				}
-				return Object{"period_type": kind}, nil
+		if !sourceMonthPattern.MatchString(month) {
+			if sourcePeriod != "" || required {
+				return nil, fail(422, "无法识别来源期，请填写YYYY-MM")
 			}
-			month = date.Format("2006-01")
+			return pendingImportPeriod(b, kind, observed)
 		}
 		d, _ := time.Parse("2006-01", month)
 		start = d.Format("2006-01-02")
@@ -459,6 +465,7 @@ func (s *service) upload(w http.ResponseWriter, r *http.Request) (any, error) {
 	for _, key := range []string{"source_period", "observed_on", "period_type", "period_start", "period_end", "source_type", "default_sales_scope"} {
 		b[key] = r.FormValue(key)
 	}
+	applyImportDefaults(b, name, time.Now())
 	meta, e := period(b, false)
 	if e != nil {
 		return nil, e
@@ -526,4 +533,24 @@ func insertJob(ctx context.Context, tx pgx.Tx, a identity, kind string, payload 
 	payload["engine"] = goEngine
 	_, e := tx.Exec(ctx, "INSERT INTO ps_jobs(tenant_id,id,kind,idempotency_key,payload,created_by) VALUES($1,$2::uuid,$3,$2::text,$4,$5)", a.Tenant, id, kind, encoded(payload), a.User)
 	return Object{"job_id": id, "state": "queued"}, e
+}
+
+func explanatorySheet(name string, headers []string, mapping Object) bool {
+	switch strings.ToLower(strings.TrimSpace(name)) {
+	case "notes", "说明", "说明页", "使用说明":
+	default:
+		return false
+	}
+	for _, header := range headers {
+		header = strings.TrimSpace(strings.TrimPrefix(header, "\ufeff"))
+		if strings.EqualFold(header, "asin") || header == str(mapping["asin"]) {
+			return false
+		}
+		for _, alias := range normalConfig.Aliases["asin"] {
+			if strings.EqualFold(header, alias) {
+				return false
+			}
+		}
+	}
+	return true
 }

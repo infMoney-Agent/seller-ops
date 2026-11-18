@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"io"
 	"log"
@@ -94,9 +95,13 @@ func respond(w http.ResponseWriter, v any, e error) {
 		status := 500
 		message := "初筛服务处理失败"
 		var a apiError
+		var pg *pgconn.PgError
 		if errors.As(e, &a) {
 			status = a.status
 			message = a.message
+		} else if errors.As(e, &pg) && (pg.Code == "23505" || pg.Code == "23514" || pg.Code == "23503") {
+			status = 409
+			message = str(workError(e)["message"])
 		} else if errors.Is(e, pgx.ErrNoRows) {
 			status = 404
 			message = "资源不存在"

@@ -61,6 +61,7 @@ export interface PageResult<T> {
   page_size: number;
 }
 export interface ImportRecord {
+  latest_job_id?: string | null;
   id: string;
   file_name: string;
   state: string;
@@ -72,7 +73,7 @@ export interface ImportRecord {
   period_end: string | null;
   default_sales_scope: string;
   mapping: Record<string, string>;
-  counts: { total?: number; valid?: number; invalid?: number };
+  counts: { total?: number; valid?: number; invalid?: number; skipped_sheets?: {member_path: string; sheet_name: string; reason: string}[] };
 }
 export interface ImportRow {
   id: string;

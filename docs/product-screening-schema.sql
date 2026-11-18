@@ -272,7 +272,7 @@ CREATE TABLE public.ps_products (
     CONSTRAINT ps_products_carton_weight_g_check CHECK ((carton_weight_g >= (0)::numeric)),
     CONSTRAINT ps_products_carton_width_cm_check CHECK ((carton_width_cm >= (0)::numeric)),
     CONSTRAINT ps_products_check CHECK (((review_status <> ALL (ARRAY['excluded'::text, 'unsure'::text])) OR (length(TRIM(BOTH FROM review_reason)) > 0))),
-    CONSTRAINT ps_products_check1 CHECK (((parent_asin IS NULL) OR (((parent_asin)::text ~ '^[A-Z0-9]{10}$'::text) AND ((parent_asin)::text <> (asin)::text)))),
+    CONSTRAINT ps_products_parent_asin_format CHECK (((parent_asin IS NULL) OR ((parent_asin)::text ~ '^[A-Z0-9]{10}$'::text))),
     CONSTRAINT ps_products_machine_decision_check CHECK ((machine_decision = ANY (ARRAY['passed'::text, 'excluded'::text, 'insufficient'::text]))),
     CONSTRAINT ps_products_machine_recommendation_check CHECK ((machine_recommendation = ANY (ARRAY['regular'::text, 'exploration'::text]))),
     CONSTRAINT ps_products_marketplace_check CHECK ((marketplace = 'US'::text)),

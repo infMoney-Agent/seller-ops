@@ -56,7 +56,10 @@ export default function ScreeningPage() {
   const job = useJob(activeJob);
   const selectedIds = Object.keys(selected).filter((id) => selected[id]);
   const refresh = async () => {
-    await client.invalidateQueries({ queryKey: ['screening', session.workspaceId] });
+    await Promise.all([
+      client.invalidateQueries({ queryKey: ['screening', session.workspaceId] }),
+      client.invalidateQueries({ queryKey: ['screening-job', session.workspaceId] })
+    ]);
   };
   const act: Action = async (work, success) => {
     setBusy(true);
@@ -318,7 +321,7 @@ export default function ScreeningPage() {
                     下载 Excel
                   </Button>
                 )}
-                {['failed', 'partial'].includes(job.data?.state || '') && (
+                {job.data?.state === 'failed' && (
                   <Button
                     variant='outline'
                     size='sm'

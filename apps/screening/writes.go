@@ -79,7 +79,8 @@ func (s *service) mutateProduct(ctx context.Context, a identity, id, action stri
 				text := str(v)
 				switch column {
 				case "parent_asin":
-					if !asinPattern.MatchString(text) || text == str(before["asin"]) {
+					// 独立商品允许父ASIN等于自身。
+					if !asinPattern.MatchString(text) {
 						return nil, fail(422, "父ASIN无效")
 					}
 				case "material":

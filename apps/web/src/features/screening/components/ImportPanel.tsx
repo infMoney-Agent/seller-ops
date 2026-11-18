@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { useScreeningQuery } from '../queries';
 import { download, request } from '../service';
+import { defaultObservationDate, sourcePeriodFromFilename } from '../import-dates';
 import type { ImportRecord, ImportRow, JobCreated, PageResult } from '../types';
 import { Badge, Button, DataBlock, Field, Input, type Action } from './shared';
 
@@ -15,7 +16,7 @@ export default function ImportPanel({
   busy: boolean;
 }) {
   const [file, setFile] = useState<File | null>(null);
-  const [date, setDate] = useState('');
+  const [date, setDate] = useState(defaultObservationDate);
   const [period, setPeriod] = useState('');
   const [salesScope,setSalesScope]=useState('unknown');
   const [sourceType, setSourceType] = useState('sellersprite');
@@ -39,7 +40,11 @@ export default function ImportPanel({
             aria-label='选择商品文件'
             type='file'
             accept='.xlsx,.csv,.zip'
-            onChange={(e) => setFile(e.target.files?.[0] || null)}
+            onChange={(e) => {
+              const selectedFile = e.target.files?.[0] || null;
+              setFile(selectedFile);
+              setPeriod(selectedFile ? sourcePeriodFromFilename(selectedFile.name) : '');
+            }}
           />
         </Field>
         <Field label='缺省销量口径'><select className='rounded border bg-transparent p-2' value={salesScope} onChange={e=>setSalesScope(e.target.value)}><option value='unknown'>未知（不当作子体销量）</option><option value='child'>已确认子体销量</option><option value='parent'>已确认父体汇总（必须有父ASIN）</option></select></Field>
@@ -83,14 +88,14 @@ export default function ImportPanel({
             </Field>
           </>
         )}
-        <Field label='来源期'>
+        <Field label='来源期（从文件名识别，可修改）'>
           <Input
             value={period}
             placeholder='例如 2026-10'
             onChange={(e) => setPeriod(e.target.value)}
           />
         </Field>
-        <Field label='观察日期（确认导入前必填）'>
+        <Field label='观察日期（默认今天，可修改）'>
           <Input type='date' value={date} onChange={(e) => setDate(e.target.value)} />
         </Field>
         <Button
@@ -157,14 +162,18 @@ export default function ImportPanel({
                     onClick={() => {
                       setSelected(item.id);
                       setMapping(JSON.stringify(item.mapping, null, 2));
-                      setDate(item.observed_on || '');
-                      setPeriod(item.source_period);
+                      setDate(item.observed_on || defaultObservationDate());
+                      setPeriod(item.source_period || sourcePeriodFromFilename(item.file_name));
                       setSalesScope(item.default_sales_scope);
                       setSourceType(item.source_type);
                       setPeriodType(item.period_type);
                       setPeriodStart(item.period_start || '');
                       setPeriodEnd(item.period_end || '');
                       setPage(1);
+                      void act(async () => {
+                        const detail = await request<ImportRecord>(`/imports/${item.id}`);
+                        if (detail.latest_job_id) watch(detail.latest_job_id);
+                      });
                     }}
                   >
                     查看
@@ -187,6 +196,7 @@ export default function ImportPanel({
       {active && (
         <section className='space-y-3 rounded border p-4'>
           <h2 className='font-semibold'>导入预览 · {active.file_name}</h2>
+          {active.counts.skipped_sheets?.map((sheet, index) => <p key={index} className='text-muted-foreground text-sm'>已跳过 {sheet.member_path} · {sheet.sheet_name}：{sheet.reason}</p>)}
           <Field label='字段映射 JSON（标准字段 → 原始表头，例如 {"title":"商品标题"}）'>
             <textarea
               aria-label='字段映射'
@@ -219,7 +229,8 @@ export default function ImportPanel({
             </Button>
             <Button
               disabled={
-                busy || !['preview', 'partial'].includes(active.state) || !active.observed_on
+                busy || active.state !== 'preview' || !active.observed_on ||
+                (active.period_type === 'calendar_month' && !/^\d{4}-(0[1-9]|1[0-2])$/.test(active.source_period)) || !active.counts.valid
               }
               onClick={() =>
                 void act(async () => {
@@ -239,6 +250,9 @@ export default function ImportPanel({
               下载错误报告
             </Button>
           </div>
+          {(!active.observed_on || (active.period_type === 'calendar_month' && !active.source_period)) && (
+            <p className='text-muted-foreground text-sm'>请先保存观察日期和来源期，再确认导入。无法从文件名识别月份时，请手动填写来源期。</p>
+          )}
           {preview.isError && <p role='alert'>{preview.error.message}</p>}
           {preview.data?.items.map((row) => (
             <DataBlock

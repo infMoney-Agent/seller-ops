@@ -7,6 +7,7 @@ import (
 	"math/big"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 func newRat(s string) (*big.Rat, bool) { return new(big.Rat).SetString(s) }
@@ -38,7 +39,8 @@ func (s *service) runParse(ctx context.Context, job Object, token string) error 
 		return e
 	}
 	total, valid, invalid := 0, 0, 0
-	e = parseSource(data, str(batch["file_name"]), mapping, func(row sourceRow) error {
+	skipped := []Object{}
+	e = parseSourceReport(data, str(batch["file_name"]), mapping, func(row sourceRow) error {
 		total++
 		state := "valid"
 		if len(row.Errors) > 0 {
@@ -49,7 +51,7 @@ func (s *service) runParse(ctx context.Context, job Object, token string) error 
 		}
 		_, e := tx.Exec(ctx, "INSERT INTO ps_import_rows(tenant_id,id,import_id,member_path,sheet_name,row_no,state,raw_data,normalized_data,errors) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)", a.Tenant, uuid(), batch["id"], row.Member, row.Sheet, row.Number, state, encoded(row.Raw), nullableJSON(row.Normalized), encoded(row.Errors))
 		return e
-	})
+	}, func(sheet Object) { skipped = append(skipped, sheet) })
 	if e != nil {
 		return e
 	}
@@ -57,7 +59,7 @@ func (s *service) runParse(ctx context.Context, job Object, token string) error 
 	if e = tx.QueryRow(ctx, "SELECT true FROM ps_jobs WHERE tenant_id=$1 AND id=$2::uuid AND lease_token=$3::uuid AND state='running' FOR UPDATE", a.Tenant, job["id"], token).Scan(&owner); e != nil {
 		return e
 	}
-	_, e = tx.Exec(ctx, "UPDATE ps_imports SET state='preview',counts=$3 WHERE tenant_id=$1 AND id=$2::uuid", a.Tenant, batch["id"], encoded(Object{"total": total, "valid": valid, "invalid": invalid}))
+	_, e = tx.Exec(ctx, "UPDATE ps_imports SET state='preview',counts=$3 WHERE tenant_id=$1 AND id=$2::uuid", a.Tenant, batch["id"], encoded(Object{"total": total, "valid": valid, "invalid": invalid, "skipped_sheets": skipped}))
 	if e != nil {
 		return e
 	}
@@ -67,7 +69,7 @@ func (s *service) runParse(ctx context.Context, job Object, token string) error 
 	return s.finishJob(ctx, job, token, Object{"total": total, "valid": valid, "invalid": invalid}, "succeeded")
 }
 func (s *service) finishJob(ctx context.Context, job Object, token string, result Object, state string) error {
-	_, e := s.db.Exec(ctx, "UPDATE ps_jobs SET state=$4,result=$5,progress=100,lease_until=NULL,lease_token=NULL,updated_at=now() WHERE tenant_id=$1 AND id=$2::uuid AND lease_token=$3::uuid", integer(job["tenant_id"]), job["id"], token, state, encoded(result))
+	_, e := s.db.Exec(ctx, "UPDATE ps_jobs SET state=$4,result=$5,error=NULL,progress=100,lease_until=NULL,lease_token=NULL,updated_at=now() WHERE tenant_id=$1 AND id=$2::uuid AND lease_token=$3::uuid", integer(job["tenant_id"]), job["id"], token, state, encoded(result))
 	return e
 }
 func (s *service) editImport(ctx context.Context, a identity, id string, b Object, commit bool) (any, error) {
@@ -118,9 +120,17 @@ func (s *service) editImport(ctx context.Context, a identity, id string, b Objec
 	if str(batch["state"]) != "preview" && str(batch["state"]) != "failed" {
 		return nil, fail(409, "当前状态不能调整映射")
 	}
+	var committed bool
+	if e = tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM ps_import_rows WHERE tenant_id=$1 AND import_id=$2::uuid AND state='committed')", a.Tenant, id).Scan(&committed); e != nil {
+		return nil, e
+	}
+	if committed {
+		return nil, fail(409, "该批次已有入库数据，请重试原导入任务；调整映射请新建导入")
+	}
 	for key, value := range b {
 		batch[key] = value
 	}
+	applyImportDefaults(batch, str(batch["file_name"]), time.Now())
 	meta, e := period(batch, false)
 	if e != nil {
 		return nil, e
@@ -223,7 +233,7 @@ func (s *service) runImport(ctx context.Context, job Object, token string) error
 				return e
 			}
 		}
-		_, e = tx.Exec(ctx, "UPDATE ps_jobs SET result=jsonb_build_object('committed',(SELECT count(*) FROM ps_import_rows WHERE tenant_id=$1 AND import_id=$4::uuid AND state='committed')),updated_at=now() WHERE tenant_id=$1 AND id=$2::uuid AND lease_token=$3::uuid", a.Tenant, job["id"], token, batch["id"])
+		_, e = tx.Exec(ctx, "UPDATE ps_jobs SET result=jsonb_build_object('committed',(SELECT count(*) FROM ps_import_rows WHERE tenant_id=$1 AND import_id=$4::uuid AND state='committed')),progress=LEAST(99,(SELECT (100*count(*) FILTER (WHERE state='committed')/GREATEST(1,count(*) FILTER (WHERE state IN ('committed','valid'))))::integer FROM ps_import_rows WHERE tenant_id=$1 AND import_id=$4::uuid)),updated_at=now() WHERE tenant_id=$1 AND id=$2::uuid AND lease_token=$3::uuid", a.Tenant, job["id"], token, batch["id"])
 		if e != nil {
 			tx.Rollback(ctx)
 			return e

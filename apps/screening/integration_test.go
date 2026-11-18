@@ -40,7 +40,34 @@ func TestPostgresWorkflow(t *testing.T) {
 	if e = pool.QueryRow(ctx, "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name LIKE 'ps_%'").Scan(&count); e != nil || count != 9 {
 		t.Fatalf("business tables=%d error=%v", count, e)
 	}
+	if _, e = pool.Exec(ctx, "INSERT INTO ps_products(tenant_id,id,asin,parent_asin,title) VALUES(999,$1,'SELF000001','SELF000001','independent product')", uuid()); e != nil {
+		t.Fatalf("self parent rejected: %v", e)
+	}
 	s := &service{db: pool}
+	// A terminal task failure must update its import atomically; retry resumes it.
+	batchID, jobID, token := uuid(), uuid(), uuid()
+	_, e = pool.Exec(ctx, "INSERT INTO ps_imports(tenant_id,id,file_name,file_sha256,storage_key,file_size,mapping,mapping_hash,state,created_by,source_period) VALUES(888,$1,'retry.csv',repeat('0',64),'test/retry.csv',0,'{}',repeat('0',64),'importing',1,'2026-08')", batchID)
+	if e != nil {
+		t.Fatal(e)
+	}
+	_, e = pool.Exec(ctx, "INSERT INTO ps_jobs(tenant_id,id,kind,idempotency_key,payload,created_by,state,attempts,lease_token) VALUES(888,$1::uuid,'import',$1::uuid::text,$2,1,'running',5,$3)", jobID, encoded(Object{"engine": goEngine, "import_id": batchID}), token)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if e = s.recordWorkFailure(ctx, 888, jobID, token, Object{"message": "constraint failed"}); e != nil {
+		t.Fatal(e)
+	}
+	var batchState, jobState string
+	if e = pool.QueryRow(ctx, "SELECT i.state,j.state FROM ps_imports i JOIN ps_jobs j ON j.tenant_id=i.tenant_id WHERE i.id=$1 AND j.id=$2", batchID, jobID).Scan(&batchState, &jobState); e != nil || batchState != "failed" || jobState != "failed" {
+		t.Fatal(batchState, jobState, e)
+	}
+	if _, e = s.retryJob(ctx, identity{Tenant: 888, User: 1, Role: "owner"}, jobID); e != nil {
+		t.Fatal(e)
+	}
+	if e = pool.QueryRow(ctx, "SELECT i.state,j.state FROM ps_imports i JOIN ps_jobs j ON j.tenant_id=i.tenant_id WHERE i.id=$1 AND j.id=$2", batchID, jobID).Scan(&batchState, &jobState); e != nil || batchState != "importing" || jobState != "queued" {
+		t.Fatal(batchState, jobState, e)
+	}
+
 	a := identity{Tenant: 1001, User: 1, Role: "owner"}
 	id := uuid()
 	other := uuid()

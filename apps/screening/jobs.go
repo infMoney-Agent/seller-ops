@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"log"
 	"time"
 )
@@ -118,7 +120,7 @@ func (s *service) worker(ctx context.Context) error {
 			return nil
 		case <-ticker.C:
 		}
-		if _, e := s.db.Exec(ctx, "UPDATE ps_jobs SET state='failed',error=jsonb_build_object('message','任务超过最大重试次数'),lease_until=NULL,lease_token=NULL,updated_at=now() WHERE payload->>'engine'=$1 AND kind IN ('screen','parse','import','export','profit_batch') AND attempts>=5 AND state='running' AND lease_until<now()", goEngine); e != nil {
+		if _, e := s.db.Exec(ctx, "WITH failed AS (UPDATE ps_jobs SET state='failed',error=jsonb_build_object('message','任务超过最大重试次数，请重试'),lease_until=NULL,lease_token=NULL,updated_at=now() WHERE payload->>'engine'=$1 AND kind IN ('screen','parse','import','export','profit_batch') AND attempts>=5 AND state='running' AND lease_until<now() RETURNING tenant_id,kind,payload) UPDATE ps_imports i SET state='failed' FROM failed j WHERE j.kind IN ('parse','import') AND i.tenant_id=j.tenant_id AND i.id::text=j.payload->>'import_id'", goEngine); e != nil {
 			log.Printf("screening lease recovery failed: %T", e)
 			continue
 		}
@@ -162,8 +164,11 @@ func (s *service) worker(ctx context.Context) error {
 		cancel()
 		<-heartbeatDone
 		if e != nil && ctx.Err() == nil {
-			log.Printf("screening job %s failed: %T", id, e)
-			s.db.Exec(ctx, "UPDATE ps_jobs SET state=CASE WHEN attempts<5 THEN 'queued' ELSE 'failed' END,error=$4,lease_until=NULL,lease_token=NULL,updated_at=now() WHERE tenant_id=$1 AND id=$2::uuid AND lease_token=$3::uuid", tenant, id, token, encoded(Object{"message": "初筛任务失败，可查看任务日志后重试"}))
+			detail := workError(e)
+			log.Printf("screening job %s tenant=%d kind=%s failed: code=%s constraint=%s", id, tenant, str(job["kind"]), str(detail["code"]), str(detail["constraint"]))
+			if err := s.recordWorkFailure(ctx, tenant, id, token, detail); err != nil {
+				log.Printf("screening failure persistence failed: %T", err)
+			}
 		}
 	}
 }
@@ -255,4 +260,37 @@ func (s *service) runWork(ctx context.Context, job Object, token string) (err er
 	default:
 		return fmt.Errorf("unsupported job kind")
 	}
+}
+
+// Persist job and import failure together; never expose SQL detail or raw rows.
+func workError(err error) Object {
+	out := Object{"code": "job_failed", "message": "任务执行失败，请重试；若持续失败，请联系管理员并提供任务编号"}
+	var pg *pgconn.PgError
+	if errors.As(err, &pg) {
+		out["code"] = pg.Code
+		out["constraint"] = pg.ConstraintName
+		switch pg.Code {
+		case "23514":
+			out["message"] = "数据未通过数据库约束校验，请检查字段或更新数据库迁移后重试"
+		case "23505":
+			out["message"] = "存在重复数据，请检查来源期、字段映射及重复导入记录"
+		case "23503":
+			out["message"] = "关联数据不存在，请刷新后重试"
+		case "53100":
+			out["message"] = "服务器磁盘空间不足，请清理空间后重试"
+		}
+	}
+	var api apiError
+	if errors.As(err, &api) {
+		out["code"] = "validation_failed"
+		out["message"] = api.message
+	}
+	return out
+}
+func (s *service) recordWorkFailure(ctx context.Context, tenant int64, id, token string, detail Object) error {
+	_, err := s.db.Exec(ctx, `WITH failed AS (
+ UPDATE ps_jobs SET state=CASE WHEN attempts<5 THEN 'queued' ELSE 'failed' END,error=$4,lease_until=NULL,lease_token=NULL,updated_at=now()
+ WHERE tenant_id=$1 AND id=$2::uuid AND lease_token=$3::uuid RETURNING tenant_id,kind,state,payload)
+ UPDATE ps_imports i SET state='failed' FROM failed j WHERE j.state='failed' AND j.kind IN ('parse','import') AND i.tenant_id=j.tenant_id AND i.id::text=j.payload->>'import_id'`, tenant, id, token, encoded(detail))
+	return err
 }
