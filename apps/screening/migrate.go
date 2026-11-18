@@ -49,7 +49,10 @@ func migrate(ctx context.Context, pool *pgxpool.Pool) error {
 			}
 		}
 	}
-	files := []string{"001_initial.sql", "002_groups.sql", "003_monthly.sql", "004_compact.sql"}
+	files := []string{"001_initial.sql", "002_groups.sql", "003_monthly.sql", "004_compact.sql", "005_go_jobs.sql"}
+	if current > len(files) {
+		return fmt.Errorf("database schema is newer than this application")
+	}
 	for i, name := range files {
 		version := i + 1
 		if version <= current {

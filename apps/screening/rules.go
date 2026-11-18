@@ -6,8 +6,11 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/dlclark/regexp2"
 	"regexp"
 	"strings"
+	"sync"
+	"time"
 )
 
 func decodeObject(raw []byte) Object {
@@ -102,14 +105,45 @@ func validatePolicy(config Object) error {
 			return fmt.Errorf("表达式过长")
 		}
 		if _, e = regexp.Compile("(?i)" + r.pattern); e != nil {
-			return fmt.Errorf("规则 %s 不符合 Go RE2 语法: %w", r.label, e)
+			if _, e = regexp2.Compile(r.pattern, regexp2.IgnoreCase); e != nil {
+				return fmt.Errorf("规则 %s 表达式无效: %w", r.label, e)
+			}
 		}
 	}
 	return nil
 }
+
+type compiledPattern struct {
+	fast *regexp.Regexp
+	full *regexp2.Regexp
+}
+
+var patterns sync.Map
+
 func matches(pattern, text string) bool {
-	rx, e := regexp.Compile("(?i)" + pattern)
-	return e == nil && rx.MatchString(text)
+	cached, ok := patterns.Load(pattern)
+	if !ok {
+		fast, e := regexp.Compile("(?i)" + pattern)
+		item := compiledPattern{fast: fast}
+		if e != nil {
+			full, e := regexp2.Compile(pattern, regexp2.IgnoreCase)
+			if e != nil {
+				return false
+			}
+			full.MatchTimeout = 50 * time.Millisecond
+			item.full = full
+		}
+		cached, _ = patterns.LoadOrStore(pattern, item)
+	}
+	item := cached.(compiledPattern)
+	if item.fast != nil {
+		return item.fast.MatchString(text)
+	}
+	matched, e := item.full.MatchString(text)
+	if e != nil {
+		panic(apiError{422, "规则匹配超过执行时限"})
+	}
+	return matched
 }
 func classify(p, config Object) Object {
 	title := str(p["title"])
@@ -155,7 +189,39 @@ func classify(p, config Object) Object {
 			mandatory = mandatory || r.mandatory
 		}
 	}
-	if len(reasons) > 0 {
+	direction, basis := groupDirection(p, config)
+	evidence = append(evidence, Object{"rule": "用途材质结构归并", "basis": basis})
+	if only, ok := config["consumable_only"].(bool); ok && only && !bag {
+		if !matches(str(config["consumable_pattern"]), text) {
+			reasons = append(reasons, "消耗属性不明确")
+		}
+		if matches(str(config["durable_title_pattern"]), title) {
+			reasons = append(reasons, "耐用品或耗材收纳器")
+		}
+	}
+	minimum := integer(config["minimum_occurrences"])
+	occurrences := integer(p["occurrences"])
+	if occurrences == 0 {
+		occurrences = 1
+	}
+	if minimum > occurrences {
+		reasons = append(reasons, "来源期数低于配置")
+	}
+	if prices, ok := config["price"].(map[string]any); ok && prices["use_source_filter"] == false {
+		value := str(p["price_usd"])
+		if value == "" {
+			decision = "insufficient"
+			reasons = append(reasons, "价格缺失")
+		} else {
+			if limit := str(prices["min"]); limit != "" && ratCompare(value, limit) < 0 {
+				reasons = append(reasons, "价格低于配置")
+			}
+			if limit := str(prices["max"]); limit != "" && ratCompare(value, limit) > 0 {
+				reasons = append(reasons, "价格高于配置")
+			}
+		}
+	}
+	if len(reasons) > 0 && decision != "insufficient" {
 		decision = "excluded"
 	}
 	if pumpUnknown && !mandatory {

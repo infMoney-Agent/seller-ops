@@ -1,8 +1,9 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "FastAPI",
-    "version": "0.1.0"
+    "title": "Seller Ops Go Screening API",
+    "version": "2.0.0",
+    "description": "Go 服务。浏览器使用 /api/ecom/screening 同源代理；内部路径须通过带工作区及角色的 HMAC 身份校验。商品参数在主表，价格销量在月份副表。"
   },
   "paths": {
     "/api/v1/screening/products": {
@@ -67,23 +68,137 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "x-seller-user",
+            "in": "header",
+            "required": true,
+            "description": "真实操作人ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-workspace",
+            "in": "header",
+            "required": true,
+            "description": "真实工作区ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-role",
+            "in": "header",
+            "required": true,
+            "description": "owner或member",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-time",
+            "in": "header",
+            "required": true,
+            "description": "Unix秒，允许60秒偏差",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-signature",
+            "in": "header",
+            "required": true,
+            "description": "SHA256 HMAC，签名由Next.js代理生成",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "成功",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Product"
+                      }
+                    },
+                    "page": {
+                      "type": "integer"
+                    },
+                    "page_size": {
+                      "type": "integer"
+                    },
+                    "total": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录或签名无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "权限不足",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或不属于当前工作区",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "并发冲突或需重新预览",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "内容过大",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
               }
             }
           },
           "422": {
-            "description": "Validation Error",
+            "description": "字段无效",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -104,6 +219,66 @@
             "content": {
               "application/json": {
                 "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "未登录或签名无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "权限不足",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或不属于当前工作区",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "并发冲突或需重新预览",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "内容过大",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
               }
             }
           }
@@ -137,6 +312,51 @@
             "in": "query",
             "required": false,
             "description": "sellersprite、manual、other、legacy_import或明确来源代码",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-user",
+            "in": "header",
+            "required": true,
+            "description": "真实操作人ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-workspace",
+            "in": "header",
+            "required": true,
+            "description": "真实工作区ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-role",
+            "in": "header",
+            "required": true,
+            "description": "owner或member",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-time",
+            "in": "header",
+            "required": true,
+            "description": "Unix秒，允许60秒偏差",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-signature",
+            "in": "header",
+            "required": true,
+            "description": "SHA256 HMAC，签名由Next.js代理生成",
             "schema": {
               "type": "string"
             }
@@ -193,23 +413,120 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "x-seller-user",
+            "in": "header",
+            "required": true,
+            "description": "真实操作人ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-workspace",
+            "in": "header",
+            "required": true,
+            "description": "真实工作区ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-role",
+            "in": "header",
+            "required": true,
+            "description": "owner或member",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-time",
+            "in": "header",
+            "required": true,
+            "description": "Unix秒，允许60秒偏差",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-signature",
+            "in": "header",
+            "required": true,
+            "description": "SHA256 HMAC，签名由Next.js代理生成",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "成功",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/Product"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录或签名无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "权限不足",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或不属于当前工作区",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "并发冲突或需重新预览",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "内容过大",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
               }
             }
           },
           "422": {
-            "description": "Validation Error",
+            "description": "字段无效",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -232,8 +549,115 @@
                 "schema": {}
               }
             }
+          },
+          "401": {
+            "description": "未登录或签名无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "权限不足",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或不属于当前工作区",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "并发冲突或需重新预览",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "内容过大",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
-        }
+        },
+        "parameters": [
+          {
+            "name": "x-seller-user",
+            "in": "header",
+            "required": true,
+            "description": "真实操作人ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-workspace",
+            "in": "header",
+            "required": true,
+            "description": "真实工作区ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-role",
+            "in": "header",
+            "required": true,
+            "description": "owner或member",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-time",
+            "in": "header",
+            "required": true,
+            "description": "Unix秒，允许60秒偏差",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-signature",
+            "in": "header",
+            "required": true,
+            "description": "SHA256 HMAC，签名由Next.js代理生成",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
       }
     },
     "/api/v1/screening/products/{id}/monthly": {
@@ -276,6 +700,51 @@
               "default": 50,
               "title": "Page Size"
             }
+          },
+          {
+            "name": "x-seller-user",
+            "in": "header",
+            "required": true,
+            "description": "真实操作人ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-workspace",
+            "in": "header",
+            "required": true,
+            "description": "真实工作区ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-role",
+            "in": "header",
+            "required": true,
+            "description": "owner或member",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-time",
+            "in": "header",
+            "required": true,
+            "description": "Unix秒，允许60秒偏差",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-signature",
+            "in": "header",
+            "required": true,
+            "description": "SHA256 HMAC，签名由Next.js代理生成",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -287,12 +756,62 @@
               }
             }
           },
-          "422": {
-            "description": "Validation Error",
+          "401": {
+            "description": "未登录或签名无效",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "权限不足",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或不属于当前工作区",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "并发冲突或需重新预览",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "内容过大",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -340,6 +859,51 @@
               "default": 50,
               "title": "Page Size"
             }
+          },
+          {
+            "name": "x-seller-user",
+            "in": "header",
+            "required": true,
+            "description": "真实操作人ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-workspace",
+            "in": "header",
+            "required": true,
+            "description": "真实工作区ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-role",
+            "in": "header",
+            "required": true,
+            "description": "owner或member",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-time",
+            "in": "header",
+            "required": true,
+            "description": "Unix秒，允许60秒偏差",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-signature",
+            "in": "header",
+            "required": true,
+            "description": "SHA256 HMAC，签名由Next.js代理生成",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -351,12 +915,62 @@
               }
             }
           },
-          "422": {
-            "description": "Validation Error",
+          "401": {
+            "description": "未登录或签名无效",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "权限不足",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或不属于当前工作区",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "并发冲突或需重新预览",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "内容过大",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -404,6 +1018,51 @@
               "default": 50,
               "title": "Page Size"
             }
+          },
+          {
+            "name": "x-seller-user",
+            "in": "header",
+            "required": true,
+            "description": "真实操作人ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-workspace",
+            "in": "header",
+            "required": true,
+            "description": "真实工作区ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-role",
+            "in": "header",
+            "required": true,
+            "description": "owner或member",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-time",
+            "in": "header",
+            "required": true,
+            "description": "Unix秒，允许60秒偏差",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-signature",
+            "in": "header",
+            "required": true,
+            "description": "SHA256 HMAC，签名由Next.js代理生成",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -415,12 +1074,62 @@
               }
             }
           },
-          "422": {
-            "description": "Validation Error",
+          "401": {
+            "description": "未登录或签名无效",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "权限不足",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或不属于当前工作区",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "并发冲突或需重新预览",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "内容过大",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -445,6 +1154,51 @@
               "format": "uuid",
               "title": "Id"
             }
+          },
+          {
+            "name": "x-seller-user",
+            "in": "header",
+            "required": true,
+            "description": "真实操作人ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-workspace",
+            "in": "header",
+            "required": true,
+            "description": "真实工作区ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-role",
+            "in": "header",
+            "required": true,
+            "description": "owner或member",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-time",
+            "in": "header",
+            "required": true,
+            "description": "Unix秒，允许60秒偏差",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-signature",
+            "in": "header",
+            "required": true,
+            "description": "SHA256 HMAC，签名由Next.js代理生成",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -456,12 +1210,62 @@
               }
             }
           },
-          "422": {
-            "description": "Validation Error",
+          "401": {
+            "description": "未登录或签名无效",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "权限不足",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或不属于当前工作区",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "并发冲突或需重新预览",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "内容过大",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -540,6 +1344,51 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "x-seller-user",
+            "in": "header",
+            "required": true,
+            "description": "真实操作人ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-workspace",
+            "in": "header",
+            "required": true,
+            "description": "真实工作区ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-role",
+            "in": "header",
+            "required": true,
+            "description": "owner或member",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-time",
+            "in": "header",
+            "required": true,
+            "description": "Unix秒，允许60秒偏差",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-signature",
+            "in": "header",
+            "required": true,
+            "description": "SHA256 HMAC，签名由Next.js代理生成",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -551,12 +1400,62 @@
               }
             }
           },
-          "422": {
-            "description": "Validation Error",
+          "401": {
+            "description": "未登录或签名无效",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "权限不足",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或不属于当前工作区",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "并发冲突或需重新预览",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "内容过大",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -581,6 +1480,60 @@
               "format": "uuid",
               "title": "Id"
             }
+          },
+          {
+            "name": "x-seller-user",
+            "in": "header",
+            "required": true,
+            "description": "真实操作人ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-workspace",
+            "in": "header",
+            "required": true,
+            "description": "真实工作区ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-role",
+            "in": "header",
+            "required": true,
+            "description": "owner或member",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-time",
+            "in": "header",
+            "required": true,
+            "description": "Unix秒，允许60秒偏差",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-signature",
+            "in": "header",
+            "required": true,
+            "description": "SHA256 HMAC，签名由Next.js代理生成",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
           }
         ],
         "requestBody": {
@@ -602,12 +1555,62 @@
               }
             }
           },
-          "422": {
-            "description": "Validation Error",
+          "401": {
+            "description": "未登录或签名无效",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "权限不足",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或不属于当前工作区",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "并发冲突或需重新预览",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "内容过大",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -641,17 +1644,123 @@
               }
             }
           },
-          "422": {
-            "description": "Validation Error",
+          "401": {
+            "description": "未登录或签名无效",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "权限不足",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或不属于当前工作区",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "并发冲突或需重新预览",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "内容过大",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
           }
-        }
+        },
+        "parameters": [
+          {
+            "name": "x-seller-user",
+            "in": "header",
+            "required": true,
+            "description": "真实操作人ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-workspace",
+            "in": "header",
+            "required": true,
+            "description": "真实工作区ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-role",
+            "in": "header",
+            "required": true,
+            "description": "owner或member",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-time",
+            "in": "header",
+            "required": true,
+            "description": "Unix秒，允许60秒偏差",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-signature",
+            "in": "header",
+            "required": true,
+            "description": "SHA256 HMAC，签名由Next.js代理生成",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          }
+        ]
       },
       "get": {
         "tags": [
@@ -682,6 +1791,51 @@
               "default": 50,
               "title": "Page Size"
             }
+          },
+          {
+            "name": "x-seller-user",
+            "in": "header",
+            "required": true,
+            "description": "真实操作人ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-workspace",
+            "in": "header",
+            "required": true,
+            "description": "真实工作区ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-role",
+            "in": "header",
+            "required": true,
+            "description": "owner或member",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-time",
+            "in": "header",
+            "required": true,
+            "description": "Unix秒，允许60秒偏差",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-signature",
+            "in": "header",
+            "required": true,
+            "description": "SHA256 HMAC，签名由Next.js代理生成",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -693,12 +1847,62 @@
               }
             }
           },
-          "422": {
-            "description": "Validation Error",
+          "401": {
+            "description": "未登录或签名无效",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "权限不足",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或不属于当前工作区",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "并发冲突或需重新预览",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "内容过大",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -723,6 +1927,51 @@
               "format": "uuid",
               "title": "Id"
             }
+          },
+          {
+            "name": "x-seller-user",
+            "in": "header",
+            "required": true,
+            "description": "真实操作人ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-workspace",
+            "in": "header",
+            "required": true,
+            "description": "真实工作区ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-role",
+            "in": "header",
+            "required": true,
+            "description": "owner或member",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-time",
+            "in": "header",
+            "required": true,
+            "description": "Unix秒，允许60秒偏差",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-signature",
+            "in": "header",
+            "required": true,
+            "description": "SHA256 HMAC，签名由Next.js代理生成",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -734,12 +1983,62 @@
               }
             }
           },
-          "422": {
-            "description": "Validation Error",
+          "401": {
+            "description": "未登录或签名无效",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "权限不足",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或不属于当前工作区",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "并发冲突或需重新预览",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "内容过大",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -764,6 +2063,60 @@
               "format": "uuid",
               "title": "Id"
             }
+          },
+          {
+            "name": "x-seller-user",
+            "in": "header",
+            "required": true,
+            "description": "真实操作人ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-workspace",
+            "in": "header",
+            "required": true,
+            "description": "真实工作区ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-role",
+            "in": "header",
+            "required": true,
+            "description": "owner或member",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-time",
+            "in": "header",
+            "required": true,
+            "description": "Unix秒，允许60秒偏差",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-signature",
+            "in": "header",
+            "required": true,
+            "description": "SHA256 HMAC，签名由Next.js代理生成",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
           }
         ],
         "requestBody": {
@@ -785,12 +2138,62 @@
               }
             }
           },
-          "422": {
-            "description": "Validation Error",
+          "401": {
+            "description": "未登录或签名无效",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "权限不足",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或不属于当前工作区",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "并发冲突或需重新预览",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "内容过大",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -838,6 +2241,51 @@
               "default": 50,
               "title": "Page Size"
             }
+          },
+          {
+            "name": "x-seller-user",
+            "in": "header",
+            "required": true,
+            "description": "真实操作人ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-workspace",
+            "in": "header",
+            "required": true,
+            "description": "真实工作区ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-role",
+            "in": "header",
+            "required": true,
+            "description": "owner或member",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-time",
+            "in": "header",
+            "required": true,
+            "description": "Unix秒，允许60秒偏差",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-signature",
+            "in": "header",
+            "required": true,
+            "description": "SHA256 HMAC，签名由Next.js代理生成",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -849,12 +2297,62 @@
               }
             }
           },
-          "422": {
-            "description": "Validation Error",
+          "401": {
+            "description": "未登录或签名无效",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "权限不足",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或不属于当前工作区",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "并发冲突或需重新预览",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "内容过大",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -879,6 +2377,60 @@
               "format": "uuid",
               "title": "Id"
             }
+          },
+          {
+            "name": "x-seller-user",
+            "in": "header",
+            "required": true,
+            "description": "真实操作人ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-workspace",
+            "in": "header",
+            "required": true,
+            "description": "真实工作区ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-role",
+            "in": "header",
+            "required": true,
+            "description": "owner或member",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-time",
+            "in": "header",
+            "required": true,
+            "description": "Unix秒，允许60秒偏差",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-signature",
+            "in": "header",
+            "required": true,
+            "description": "SHA256 HMAC，签名由Next.js代理生成",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
           }
         ],
         "responses": {
@@ -890,12 +2442,62 @@
               }
             }
           },
-          "422": {
-            "description": "Validation Error",
+          "401": {
+            "description": "未登录或签名无效",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "权限不足",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或不属于当前工作区",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "并发冲突或需重新预览",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "内容过大",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -920,6 +2522,51 @@
               "format": "uuid",
               "title": "Id"
             }
+          },
+          {
+            "name": "x-seller-user",
+            "in": "header",
+            "required": true,
+            "description": "真实操作人ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-workspace",
+            "in": "header",
+            "required": true,
+            "description": "真实工作区ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-role",
+            "in": "header",
+            "required": true,
+            "description": "owner或member",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-time",
+            "in": "header",
+            "required": true,
+            "description": "Unix秒，允许60秒偏差",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-signature",
+            "in": "header",
+            "required": true,
+            "description": "SHA256 HMAC，签名由Next.js代理生成",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -931,12 +2578,62 @@
               }
             }
           },
-          "422": {
-            "description": "Validation Error",
+          "401": {
+            "description": "未登录或签名无效",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "权限不足",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或不属于当前工作区",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "并发冲突或需重新预览",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "内容过大",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -961,6 +2658,51 @@
               "format": "uuid",
               "title": "Id"
             }
+          },
+          {
+            "name": "x-seller-user",
+            "in": "header",
+            "required": true,
+            "description": "真实操作人ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-workspace",
+            "in": "header",
+            "required": true,
+            "description": "真实工作区ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-role",
+            "in": "header",
+            "required": true,
+            "description": "owner或member",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-time",
+            "in": "header",
+            "required": true,
+            "description": "Unix秒，允许60秒偏差",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-signature",
+            "in": "header",
+            "required": true,
+            "description": "SHA256 HMAC，签名由Next.js代理生成",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -972,12 +2714,62 @@
               }
             }
           },
-          "422": {
-            "description": "Validation Error",
+          "401": {
+            "description": "未登录或签名无效",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "权限不足",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或不属于当前工作区",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "并发冲突或需重新预览",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "内容过大",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -1000,8 +2792,115 @@
                 "schema": {}
               }
             }
+          },
+          "401": {
+            "description": "未登录或签名无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "权限不足",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或不属于当前工作区",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "并发冲突或需重新预览",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "内容过大",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
-        }
+        },
+        "parameters": [
+          {
+            "name": "x-seller-user",
+            "in": "header",
+            "required": true,
+            "description": "真实操作人ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-workspace",
+            "in": "header",
+            "required": true,
+            "description": "真实工作区ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-role",
+            "in": "header",
+            "required": true,
+            "description": "owner或member",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-time",
+            "in": "header",
+            "required": true,
+            "description": "Unix秒，允许60秒偏差",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-signature",
+            "in": "header",
+            "required": true,
+            "description": "SHA256 HMAC，签名由Next.js代理生成",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
       },
       "post": {
         "tags": [
@@ -1028,17 +2927,123 @@
               }
             }
           },
-          "422": {
-            "description": "Validation Error",
+          "401": {
+            "description": "未登录或签名无效",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "权限不足",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或不属于当前工作区",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "并发冲突或需重新预览",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "内容过大",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
           }
-        }
+        },
+        "parameters": [
+          {
+            "name": "x-seller-user",
+            "in": "header",
+            "required": true,
+            "description": "真实操作人ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-workspace",
+            "in": "header",
+            "required": true,
+            "description": "真实工作区ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-role",
+            "in": "header",
+            "required": true,
+            "description": "owner或member",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-time",
+            "in": "header",
+            "required": true,
+            "description": "Unix秒，允许60秒偏差",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-signature",
+            "in": "header",
+            "required": true,
+            "description": "SHA256 HMAC，签名由Next.js代理生成",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          }
+        ]
       }
     },
     "/api/v1/screening/policies/{id}/test": {
@@ -1057,6 +3062,60 @@
               "type": "string",
               "format": "uuid",
               "title": "Id"
+            }
+          },
+          {
+            "name": "x-seller-user",
+            "in": "header",
+            "required": true,
+            "description": "真实操作人ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-workspace",
+            "in": "header",
+            "required": true,
+            "description": "真实工作区ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-role",
+            "in": "header",
+            "required": true,
+            "description": "owner或member",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-time",
+            "in": "header",
+            "required": true,
+            "description": "Unix秒，允许60秒偏差",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-signature",
+            "in": "header",
+            "required": true,
+            "description": "SHA256 HMAC，签名由Next.js代理生成",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
             }
           }
         ],
@@ -1079,12 +3138,62 @@
               }
             }
           },
-          "422": {
-            "description": "Validation Error",
+          "401": {
+            "description": "未登录或签名无效",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "权限不足",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或不属于当前工作区",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "并发冲突或需重新预览",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "内容过大",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -1109,6 +3218,60 @@
               "format": "uuid",
               "title": "Id"
             }
+          },
+          {
+            "name": "x-seller-user",
+            "in": "header",
+            "required": true,
+            "description": "真实操作人ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-workspace",
+            "in": "header",
+            "required": true,
+            "description": "真实工作区ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-role",
+            "in": "header",
+            "required": true,
+            "description": "owner或member",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-time",
+            "in": "header",
+            "required": true,
+            "description": "Unix秒，允许60秒偏差",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-signature",
+            "in": "header",
+            "required": true,
+            "description": "SHA256 HMAC，签名由Next.js代理生成",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
           }
         ],
         "responses": {
@@ -1120,12 +3283,62 @@
               }
             }
           },
-          "422": {
-            "description": "Validation Error",
+          "401": {
+            "description": "未登录或签名无效",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "权限不足",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或不属于当前工作区",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "并发冲突或需重新预览",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "内容过大",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -1159,17 +3372,123 @@
               }
             }
           },
-          "422": {
-            "description": "Validation Error",
+          "401": {
+            "description": "未登录或签名无效",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "权限不足",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或不属于当前工作区",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "并发冲突或需重新预览",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "内容过大",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
           }
-        }
+        },
+        "parameters": [
+          {
+            "name": "x-seller-user",
+            "in": "header",
+            "required": true,
+            "description": "真实操作人ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-workspace",
+            "in": "header",
+            "required": true,
+            "description": "真实工作区ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-role",
+            "in": "header",
+            "required": true,
+            "description": "owner或member",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-time",
+            "in": "header",
+            "required": true,
+            "description": "Unix秒，允许60秒偏差",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-signature",
+            "in": "header",
+            "required": true,
+            "description": "SHA256 HMAC，签名由Next.js代理生成",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          }
+        ]
       }
     },
     "/api/v1/screening/screen-runs/{id}": {
@@ -1189,6 +3508,51 @@
               "format": "uuid",
               "title": "Id"
             }
+          },
+          {
+            "name": "x-seller-user",
+            "in": "header",
+            "required": true,
+            "description": "真实操作人ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-workspace",
+            "in": "header",
+            "required": true,
+            "description": "真实工作区ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-role",
+            "in": "header",
+            "required": true,
+            "description": "owner或member",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-time",
+            "in": "header",
+            "required": true,
+            "description": "Unix秒，允许60秒偏差",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-signature",
+            "in": "header",
+            "required": true,
+            "description": "SHA256 HMAC，签名由Next.js代理生成",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -1200,12 +3564,62 @@
               }
             }
           },
-          "422": {
-            "description": "Validation Error",
+          "401": {
+            "description": "未登录或签名无效",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "权限不足",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或不属于当前工作区",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "并发冲突或需重新预览",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "内容过大",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -1239,17 +3653,123 @@
               }
             }
           },
-          "422": {
-            "description": "Validation Error",
+          "401": {
+            "description": "未登录或签名无效",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "权限不足",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或不属于当前工作区",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "并发冲突或需重新预览",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "内容过大",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
           }
-        }
+        },
+        "parameters": [
+          {
+            "name": "x-seller-user",
+            "in": "header",
+            "required": true,
+            "description": "真实操作人ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-workspace",
+            "in": "header",
+            "required": true,
+            "description": "真实工作区ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-role",
+            "in": "header",
+            "required": true,
+            "description": "owner或member",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-time",
+            "in": "header",
+            "required": true,
+            "description": "Unix秒，允许60秒偏差",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-signature",
+            "in": "header",
+            "required": true,
+            "description": "SHA256 HMAC，签名由Next.js代理生成",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          }
+        ]
       }
     },
     "/api/v1/screening/review-batches": {
@@ -1282,6 +3802,51 @@
               "default": 50,
               "title": "Page Size"
             }
+          },
+          {
+            "name": "x-seller-user",
+            "in": "header",
+            "required": true,
+            "description": "真实操作人ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-workspace",
+            "in": "header",
+            "required": true,
+            "description": "真实工作区ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-role",
+            "in": "header",
+            "required": true,
+            "description": "owner或member",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-time",
+            "in": "header",
+            "required": true,
+            "description": "Unix秒，允许60秒偏差",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-signature",
+            "in": "header",
+            "required": true,
+            "description": "SHA256 HMAC，签名由Next.js代理生成",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -1293,12 +3858,62 @@
               }
             }
           },
-          "422": {
-            "description": "Validation Error",
+          "401": {
+            "description": "未登录或签名无效",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "权限不足",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或不属于当前工作区",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "并发冲突或需重新预览",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "内容过大",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -1323,6 +3938,51 @@
               "format": "uuid",
               "title": "Id"
             }
+          },
+          {
+            "name": "x-seller-user",
+            "in": "header",
+            "required": true,
+            "description": "真实操作人ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-workspace",
+            "in": "header",
+            "required": true,
+            "description": "真实工作区ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-role",
+            "in": "header",
+            "required": true,
+            "description": "owner或member",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-time",
+            "in": "header",
+            "required": true,
+            "description": "Unix秒，允许60秒偏差",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-signature",
+            "in": "header",
+            "required": true,
+            "description": "SHA256 HMAC，签名由Next.js代理生成",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -1334,12 +3994,62 @@
               }
             }
           },
-          "422": {
-            "description": "Validation Error",
+          "401": {
+            "description": "未登录或签名无效",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "权限不足",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或不属于当前工作区",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "并发冲突或需重新预览",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "内容过大",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -1364,6 +4074,60 @@
               "format": "uuid",
               "title": "Id"
             }
+          },
+          {
+            "name": "x-seller-user",
+            "in": "header",
+            "required": true,
+            "description": "真实操作人ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-workspace",
+            "in": "header",
+            "required": true,
+            "description": "真实工作区ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-role",
+            "in": "header",
+            "required": true,
+            "description": "owner或member",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-time",
+            "in": "header",
+            "required": true,
+            "description": "Unix秒，允许60秒偏差",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-signature",
+            "in": "header",
+            "required": true,
+            "description": "SHA256 HMAC，签名由Next.js代理生成",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
           }
         ],
         "responses": {
@@ -1375,12 +4139,62 @@
               }
             }
           },
-          "422": {
-            "description": "Validation Error",
+          "401": {
+            "description": "未登录或签名无效",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "权限不足",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或不属于当前工作区",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "并发冲突或需重新预览",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "内容过大",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -1405,6 +4219,60 @@
               "format": "uuid",
               "title": "Id"
             }
+          },
+          {
+            "name": "x-seller-user",
+            "in": "header",
+            "required": true,
+            "description": "真实操作人ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-workspace",
+            "in": "header",
+            "required": true,
+            "description": "真实工作区ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-role",
+            "in": "header",
+            "required": true,
+            "description": "owner或member",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-time",
+            "in": "header",
+            "required": true,
+            "description": "Unix秒，允许60秒偏差",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-signature",
+            "in": "header",
+            "required": true,
+            "description": "SHA256 HMAC，签名由Next.js代理生成",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
           }
         ],
         "responses": {
@@ -1416,12 +4284,62 @@
               }
             }
           },
-          "422": {
-            "description": "Validation Error",
+          "401": {
+            "description": "未登录或签名无效",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "权限不足",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或不属于当前工作区",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "并发冲突或需重新预览",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "内容过大",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -1455,17 +4373,114 @@
               }
             }
           },
-          "422": {
-            "description": "Validation Error",
+          "401": {
+            "description": "未登录或签名无效",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "权限不足",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或不属于当前工作区",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "并发冲突或需重新预览",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "内容过大",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
           }
-        }
+        },
+        "parameters": [
+          {
+            "name": "x-seller-user",
+            "in": "header",
+            "required": true,
+            "description": "真实操作人ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-workspace",
+            "in": "header",
+            "required": true,
+            "description": "真实工作区ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-role",
+            "in": "header",
+            "required": true,
+            "description": "owner或member",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-time",
+            "in": "header",
+            "required": true,
+            "description": "Unix秒，允许60秒偏差",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-signature",
+            "in": "header",
+            "required": true,
+            "description": "SHA256 HMAC，签名由Next.js代理生成",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
       }
     },
     "/api/v1/screening/profit/templates": {
@@ -1483,8 +4498,115 @@
                 "schema": {}
               }
             }
+          },
+          "401": {
+            "description": "未登录或签名无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "权限不足",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或不属于当前工作区",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "并发冲突或需重新预览",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "内容过大",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
-        }
+        },
+        "parameters": [
+          {
+            "name": "x-seller-user",
+            "in": "header",
+            "required": true,
+            "description": "真实操作人ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-workspace",
+            "in": "header",
+            "required": true,
+            "description": "真实工作区ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-role",
+            "in": "header",
+            "required": true,
+            "description": "owner或member",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-time",
+            "in": "header",
+            "required": true,
+            "description": "Unix秒，允许60秒偏差",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-signature",
+            "in": "header",
+            "required": true,
+            "description": "SHA256 HMAC，签名由Next.js代理生成",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
       },
       "post": {
         "tags": [
@@ -1511,17 +4633,123 @@
               }
             }
           },
-          "422": {
-            "description": "Validation Error",
+          "401": {
+            "description": "未登录或签名无效",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "权限不足",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或不属于当前工作区",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "并发冲突或需重新预览",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "内容过大",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
           }
-        }
+        },
+        "parameters": [
+          {
+            "name": "x-seller-user",
+            "in": "header",
+            "required": true,
+            "description": "真实操作人ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-workspace",
+            "in": "header",
+            "required": true,
+            "description": "真实工作区ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-role",
+            "in": "header",
+            "required": true,
+            "description": "owner或member",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-time",
+            "in": "header",
+            "required": true,
+            "description": "Unix秒，允许60秒偏差",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-signature",
+            "in": "header",
+            "required": true,
+            "description": "SHA256 HMAC，签名由Next.js代理生成",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          }
+        ]
       }
     },
     "/api/v1/screening/products/{id}/profit-scenarios": {
@@ -1541,6 +4769,51 @@
               "format": "uuid",
               "title": "Id"
             }
+          },
+          {
+            "name": "x-seller-user",
+            "in": "header",
+            "required": true,
+            "description": "真实操作人ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-workspace",
+            "in": "header",
+            "required": true,
+            "description": "真实工作区ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-role",
+            "in": "header",
+            "required": true,
+            "description": "owner或member",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-time",
+            "in": "header",
+            "required": true,
+            "description": "Unix秒，允许60秒偏差",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-signature",
+            "in": "header",
+            "required": true,
+            "description": "SHA256 HMAC，签名由Next.js代理生成",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -1552,12 +4825,62 @@
               }
             }
           },
-          "422": {
-            "description": "Validation Error",
+          "401": {
+            "description": "未登录或签名无效",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "权限不足",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或不属于当前工作区",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "并发冲突或需重新预览",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "内容过大",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -1580,6 +4903,60 @@
               "format": "uuid",
               "title": "Id"
             }
+          },
+          {
+            "name": "x-seller-user",
+            "in": "header",
+            "required": true,
+            "description": "真实操作人ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-workspace",
+            "in": "header",
+            "required": true,
+            "description": "真实工作区ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-role",
+            "in": "header",
+            "required": true,
+            "description": "owner或member",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-time",
+            "in": "header",
+            "required": true,
+            "description": "Unix秒，允许60秒偏差",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-signature",
+            "in": "header",
+            "required": true,
+            "description": "SHA256 HMAC，签名由Next.js代理生成",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
           }
         ],
         "requestBody": {
@@ -1601,12 +4978,62 @@
               }
             }
           },
-          "422": {
-            "description": "Validation Error",
+          "401": {
+            "description": "未登录或签名无效",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "权限不足",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或不属于当前工作区",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "并发冲突或需重新预览",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "内容过大",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -1640,17 +5067,123 @@
               }
             }
           },
-          "422": {
-            "description": "Validation Error",
+          "401": {
+            "description": "未登录或签名无效",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "权限不足",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或不属于当前工作区",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "并发冲突或需重新预览",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "内容过大",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
           }
-        }
+        },
+        "parameters": [
+          {
+            "name": "x-seller-user",
+            "in": "header",
+            "required": true,
+            "description": "真实操作人ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-workspace",
+            "in": "header",
+            "required": true,
+            "description": "真实工作区ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-role",
+            "in": "header",
+            "required": true,
+            "description": "owner或member",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-time",
+            "in": "header",
+            "required": true,
+            "description": "Unix秒，允许60秒偏差",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-signature",
+            "in": "header",
+            "required": true,
+            "description": "SHA256 HMAC，签名由Next.js代理生成",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          }
+        ]
       }
     },
     "/api/v1/screening/exports": {
@@ -1679,17 +5212,123 @@
               }
             }
           },
-          "422": {
-            "description": "Validation Error",
+          "401": {
+            "description": "未登录或签名无效",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "权限不足",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或不属于当前工作区",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "并发冲突或需重新预览",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "内容过大",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
           }
-        }
+        },
+        "parameters": [
+          {
+            "name": "x-seller-user",
+            "in": "header",
+            "required": true,
+            "description": "真实操作人ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-workspace",
+            "in": "header",
+            "required": true,
+            "description": "真实工作区ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-role",
+            "in": "header",
+            "required": true,
+            "description": "owner或member",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-time",
+            "in": "header",
+            "required": true,
+            "description": "Unix秒，允许60秒偏差",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-signature",
+            "in": "header",
+            "required": true,
+            "description": "SHA256 HMAC，签名由Next.js代理生成",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          }
+        ]
       }
     },
     "/api/v1/screening/jobs/{id}": {
@@ -1709,6 +5348,51 @@
               "format": "uuid",
               "title": "Id"
             }
+          },
+          {
+            "name": "x-seller-user",
+            "in": "header",
+            "required": true,
+            "description": "真实操作人ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-workspace",
+            "in": "header",
+            "required": true,
+            "description": "真实工作区ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-role",
+            "in": "header",
+            "required": true,
+            "description": "owner或member",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-time",
+            "in": "header",
+            "required": true,
+            "description": "Unix秒，允许60秒偏差",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-signature",
+            "in": "header",
+            "required": true,
+            "description": "SHA256 HMAC，签名由Next.js代理生成",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -1720,12 +5404,62 @@
               }
             }
           },
-          "422": {
-            "description": "Validation Error",
+          "401": {
+            "description": "未登录或签名无效",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "权限不足",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或不属于当前工作区",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "并发冲突或需重新预览",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "内容过大",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -1750,6 +5484,60 @@
               "format": "uuid",
               "title": "Id"
             }
+          },
+          {
+            "name": "x-seller-user",
+            "in": "header",
+            "required": true,
+            "description": "真实操作人ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-workspace",
+            "in": "header",
+            "required": true,
+            "description": "真实工作区ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-role",
+            "in": "header",
+            "required": true,
+            "description": "owner或member",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-time",
+            "in": "header",
+            "required": true,
+            "description": "Unix秒，允许60秒偏差",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-signature",
+            "in": "header",
+            "required": true,
+            "description": "SHA256 HMAC，签名由Next.js代理生成",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
           }
         ],
         "responses": {
@@ -1761,12 +5549,62 @@
               }
             }
           },
-          "422": {
-            "description": "Validation Error",
+          "401": {
+            "description": "未登录或签名无效",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "权限不足",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或不属于当前工作区",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "并发冲突或需重新预览",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "内容过大",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -1791,6 +5629,51 @@
               "format": "uuid",
               "title": "Job Id"
             }
+          },
+          {
+            "name": "x-seller-user",
+            "in": "header",
+            "required": true,
+            "description": "真实操作人ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-workspace",
+            "in": "header",
+            "required": true,
+            "description": "真实工作区ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-role",
+            "in": "header",
+            "required": true,
+            "description": "owner或member",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-time",
+            "in": "header",
+            "required": true,
+            "description": "Unix秒，允许60秒偏差",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-signature",
+            "in": "header",
+            "required": true,
+            "description": "SHA256 HMAC，签名由Next.js代理生成",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -1802,17 +5685,600 @@
               }
             }
           },
-          "422": {
-            "description": "Validation Error",
+          "401": {
+            "description": "未登录或签名无效",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "权限不足",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或不属于当前工作区",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "并发冲突或需重新预览",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "内容过大",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
           }
         }
+      }
+    },
+    "/api/v1/screening/parents/monthly": {
+      "get": {
+        "summary": "monthly",
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "401": {
+            "description": "未登录或签名无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "权限不足",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或不属于当前工作区",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "并发冲突或需重新预览",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "内容过大",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "x-seller-user",
+            "in": "header",
+            "required": true,
+            "description": "真实操作人ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-workspace",
+            "in": "header",
+            "required": true,
+            "description": "真实工作区ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-role",
+            "in": "header",
+            "required": true,
+            "description": "owner或member",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-time",
+            "in": "header",
+            "required": true,
+            "description": "Unix秒，允许60秒偏差",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-signature",
+            "in": "header",
+            "required": true,
+            "description": "SHA256 HMAC，签名由Next.js代理生成",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/screening/products/{id}/family": {
+      "get": {
+        "summary": "family",
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "401": {
+            "description": "未登录或签名无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "权限不足",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或不属于当前工作区",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "并发冲突或需重新预览",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "内容过大",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "x-seller-user",
+            "in": "header",
+            "required": true,
+            "description": "真实操作人ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-workspace",
+            "in": "header",
+            "required": true,
+            "description": "真实工作区ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-role",
+            "in": "header",
+            "required": true,
+            "description": "owner或member",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-time",
+            "in": "header",
+            "required": true,
+            "description": "Unix秒，允许60秒偏差",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-signature",
+            "in": "header",
+            "required": true,
+            "description": "SHA256 HMAC，签名由Next.js代理生成",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/screening/products/{id}/category": {
+      "patch": {
+        "summary": "category",
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "401": {
+            "description": "未登录或签名无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "权限不足",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或不属于当前工作区",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "并发冲突或需重新预览",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "内容过大",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Category"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "x-seller-user",
+            "in": "header",
+            "required": true,
+            "description": "真实操作人ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-workspace",
+            "in": "header",
+            "required": true,
+            "description": "真实工作区ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-role",
+            "in": "header",
+            "required": true,
+            "description": "owner或member",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-time",
+            "in": "header",
+            "required": true,
+            "description": "Unix秒，允许60秒偏差",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-signature",
+            "in": "header",
+            "required": true,
+            "description": "SHA256 HMAC，签名由Next.js代理生成",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/screening/products/{id}/parameters": {
+      "patch": {
+        "summary": "parameters",
+        "responses": {
+          "200": {
+            "description": "成功"
+          },
+          "401": {
+            "description": "未登录或签名无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "权限不足",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或不属于当前工作区",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "并发冲突或需重新预览",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "内容过大",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProductParameters"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "x-seller-user",
+            "in": "header",
+            "required": true,
+            "description": "真实操作人ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-workspace",
+            "in": "header",
+            "required": true,
+            "description": "真实工作区ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-role",
+            "in": "header",
+            "required": true,
+            "description": "owner或member",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-time",
+            "in": "header",
+            "required": true,
+            "description": "Unix秒，允许60秒偏差",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-signature",
+            "in": "header",
+            "required": true,
+            "description": "SHA256 HMAC，签名由Next.js代理生成",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          }
+        ]
       }
     }
   },
@@ -1821,14 +6287,14 @@
       "Batch": {
         "properties": {
           "product_ids": {
+            "type": "array",
             "items": {
               "type": "string",
               "format": "uuid"
             },
-            "type": "array",
-            "maxItems": 100,
             "minItems": 1,
-            "title": "Product Ids"
+            "maxItems": 100,
+            "uniqueItems": true
           },
           "mode": {
             "type": "string",
@@ -1872,6 +6338,34 @@
             "maxLength": 10000,
             "title": "Note",
             "default": ""
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "selected",
+              "family"
+            ],
+            "default": "selected"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "review",
+              "categorize"
+            ],
+            "default": "review"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "additionalProperties": false,
@@ -2006,6 +6500,15 @@
             "maxLength": 80,
             "title": "Source Period",
             "default": ""
+          },
+          "default_sales_scope": {
+            "type": "string",
+            "enum": [
+              "child",
+              "parent",
+              "unknown"
+            ],
+            "default": "unknown"
           }
         },
         "additionalProperties": false,
@@ -2247,8 +6750,8 @@
             "anyOf": [
               {
                 "type": "integer",
-                "maximum": 1000000000.0,
-                "minimum": 0.0
+                "maximum": 1000000000,
+                "minimum": 0
               },
               {
                 "type": "null"
@@ -2291,7 +6794,7 @@
             "anyOf": [
               {
                 "type": "integer",
-                "minimum": 1.0
+                "minimum": 1
               },
               {
                 "type": "null"
@@ -2306,7 +6809,7 @@
           },
           "expected_data_revision": {
             "type": "integer",
-            "minimum": 0.0,
+            "minimum": 0,
             "title": "Expected Data Revision"
           },
           "scenarios": {
@@ -2332,12 +6835,12 @@
         "properties": {
           "expected_review_revision": {
             "type": "integer",
-            "minimum": 0.0,
+            "minimum": 0,
             "title": "Expected Review Revision"
           },
           "expected_data_revision": {
             "type": "integer",
-            "minimum": 0.0,
+            "minimum": 0,
             "title": "Expected Data Revision"
           },
           "status": {
@@ -2389,7 +6892,7 @@
             "anyOf": [
               {
                 "type": "integer",
-                "minimum": 1.0
+                "minimum": 1
               },
               {
                 "type": "null"
@@ -2399,7 +6902,7 @@
           },
           "expected_data_revision": {
             "type": "integer",
-            "minimum": 0.0,
+            "minimum": 0,
             "title": "Expected Data Revision"
           },
           "inputs": {
@@ -2513,6 +7016,735 @@
           "type"
         ],
         "title": "ValidationError"
+      },
+      "ProductParameters": {
+        "type": "object",
+        "required": [
+          "expected_data_revision"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "expected_data_revision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "parent_asin": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Z0-9]{10}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "material": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "weight_g": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^[0-9]{1,12}(?:\\.[0-9]{1,6})?$"
+                  },
+                  {
+                    "type": "number",
+                    "minimum": 0
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "package_weight_g": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^[0-9]{1,12}(?:\\.[0-9]{1,6})?$"
+                  },
+                  {
+                    "type": "number",
+                    "minimum": 0
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "package_length_cm": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^[0-9]{1,12}(?:\\.[0-9]{1,6})?$"
+                  },
+                  {
+                    "type": "number",
+                    "minimum": 0
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "package_width_cm": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^[0-9]{1,12}(?:\\.[0-9]{1,6})?$"
+                  },
+                  {
+                    "type": "number",
+                    "minimum": 0
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "package_height_cm": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^[0-9]{1,12}(?:\\.[0-9]{1,6})?$"
+                  },
+                  {
+                    "type": "number",
+                    "minimum": 0
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "carton_weight_g": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^[0-9]{1,12}(?:\\.[0-9]{1,6})?$"
+                  },
+                  {
+                    "type": "number",
+                    "minimum": 0
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "carton_length_cm": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^[0-9]{1,12}(?:\\.[0-9]{1,6})?$"
+                  },
+                  {
+                    "type": "number",
+                    "minimum": 0
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "carton_width_cm": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^[0-9]{1,12}(?:\\.[0-9]{1,6})?$"
+                  },
+                  {
+                    "type": "number",
+                    "minimum": 0
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "carton_height_cm": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^[0-9]{1,12}(?:\\.[0-9]{1,6})?$"
+                  },
+                  {
+                    "type": "number",
+                    "minimum": 0
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "units_per_pack": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 2147483647
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "carton_units": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 2147483647
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "Category": {
+        "type": "object",
+        "required": [
+          "expected_data_revision",
+          "expected_review_revision",
+          "category"
+        ],
+        "properties": {
+          "expected_data_revision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "expected_review_revision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "category": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        }
+      },
+      "Product": {
+        "type": "object",
+        "required": [
+          "id",
+          "asin",
+          "title",
+          "data_revision",
+          "review_revision",
+          "review_status"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "asin": {
+            "type": "string",
+            "pattern": "^[A-Z0-9]{10}$"
+          },
+          "title": {
+            "type": "string"
+          },
+          "parent_asin": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Z0-9]{10}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "material": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "weight_g": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^[0-9]{1,12}(?:\\.[0-9]{1,6})?$"
+                  },
+                  {
+                    "type": "number",
+                    "minimum": 0
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "package_weight_g": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^[0-9]{1,12}(?:\\.[0-9]{1,6})?$"
+                  },
+                  {
+                    "type": "number",
+                    "minimum": 0
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "package_length_cm": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^[0-9]{1,12}(?:\\.[0-9]{1,6})?$"
+                  },
+                  {
+                    "type": "number",
+                    "minimum": 0
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "package_width_cm": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^[0-9]{1,12}(?:\\.[0-9]{1,6})?$"
+                  },
+                  {
+                    "type": "number",
+                    "minimum": 0
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "package_height_cm": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^[0-9]{1,12}(?:\\.[0-9]{1,6})?$"
+                  },
+                  {
+                    "type": "number",
+                    "minimum": 0
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "carton_weight_g": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^[0-9]{1,12}(?:\\.[0-9]{1,6})?$"
+                  },
+                  {
+                    "type": "number",
+                    "minimum": 0
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "carton_length_cm": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^[0-9]{1,12}(?:\\.[0-9]{1,6})?$"
+                  },
+                  {
+                    "type": "number",
+                    "minimum": 0
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "carton_width_cm": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^[0-9]{1,12}(?:\\.[0-9]{1,6})?$"
+                  },
+                  {
+                    "type": "number",
+                    "minimum": 0
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "carton_height_cm": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^[0-9]{1,12}(?:\\.[0-9]{1,6})?$"
+                  },
+                  {
+                    "type": "number",
+                    "minimum": 0
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "units_per_pack": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 2147483647
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "carton_units": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 2147483647
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "seller_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "seller_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "seller_region": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "price_usd": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^-?[0-9]+(?:\\.[0-9]{1,6})?$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "monthly_sales": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reported_monthly_sales": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sales_scope": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "child",
+                  "parent",
+                  "unknown"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "monthly_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "monthly_revision": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "review_status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "kept",
+              "excluded",
+              "unsure"
+            ]
+          },
+          "review_reason": {
+            "type": "string"
+          },
+          "review_note": {
+            "type": "string"
+          },
+          "manual_category": {
+            "type": "string"
+          },
+          "data_revision": {
+            "type": "integer"
+          },
+          "review_revision": {
+            "type": "integer"
+          },
+          "decision": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "passed",
+                  "excluded",
+                  "insufficient"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "recommendation": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "regular",
+                  "exploration"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "direction": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "group_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "profit_output": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "required": [
+          "code",
+          "message",
+          "request_id"
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "details": {},
+          "request_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "JobCreated": {
+        "type": "object",
+        "required": [
+          "job_id",
+          "state"
+        ],
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "import_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "run_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "running",
+              "succeeded",
+              "partial",
+              "failed"
+            ]
+          }
+        }
       }
     }
   }

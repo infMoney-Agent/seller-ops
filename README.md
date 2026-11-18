@@ -12,7 +12,7 @@ Seller Ops 是一个自托管的亚马逊运营工作台。登录后进入简体
 | 竞品监控 | 按登录账号保存监控列表和历史记录。支持手动记录，后台每小时检查到期的 ASIN。使用 Redis、Celery 和 Playwright。 |
 | 广告优化 | 读取广告活动并生成出价建议，需要 Amazon Advertising 账户授权和模型配置。当前适配器的花费、销售额等指标仍是占位值，真实投放表现需要进一步接入。 |
 
-选品研究读取榜单当前页面，未实现翻页，也未提取评论数。综合分来自模型，结果只展示在本次页面里。当前版本没有接入卖家精灵采集、产品库导入或人工复核。模型未配置或单品评分失败时，现有实现可能返回空结果。选品、评论和广告的模型分析使用简体中文，商品页面文案按所选语言生成。
+选品研究读取榜单当前页面，未实现翻页，也未提取评论数。综合分来自模型，结果只展示在本次页面里。产品初筛支持卖家精灵文件导入、产品库和人工复核，使用独立 Go 服务。模型未配置或全部评分失败时返回明确错误。选品、评论和广告的模型分析使用简体中文，商品页面文案按所选语言生成。
 
 ## 项目结构
 
@@ -21,14 +21,15 @@ seller-ops/
 ├── apps/
 │   ├── web/       # Next.js 前端和同域 API 代理
 │   ├── auth/      # Go 登录管理、工作区与成员权限
-│   └── backend/   # FastAPI 电商业务、采集和 Celery 任务
+│   ├── ecom/      # Go 电商业务、采集、模型调用和监控任务
+│   └── screening/ # Go 初筛、独立业务库、迁移和持久化任务
 ├── docs/          # 项目部署文档
 └── package.json   # 根目录脚本代理到 apps/web
 ~~~
 
 Casdoor 初始化文件位于 [apps/auth/casdoor](apps/auth/casdoor)。Go 服务通过 OIDC 接入 Casdoor，Casdoor 进程由 Compose 或宿主机启动。
 
-浏览器通过 Next.js 访问电商接口，Next.js 验证 Casdoor 会话后转发到内部 FastAPI。Compose 将会话、工作区等数据和 Casdoor 数据存到 PostgreSQL，电商服务使用独立 SQLite 卷，竞品列表和快照持久化到 Redis。
+浏览器通过 Next.js 验证 Casdoor 会话并签名访问内部 Go 服务。用户管理和 Casdoor 使用各自 PostgreSQL 数据库，初筛使用独立 seller_screening 业务库；竞品列表和快照沿用 Redis。原 SQLite 数据卷保留。业务后端不再需要 Python 运行环境。
 
 ## 启动方式
 
@@ -92,13 +93,13 @@ seller_local --profile app exec api seller-server create-workspace "运营测试
 查看服务日志或停止测试环境：
 
 ~~~bash
-seller_local --profile app logs --tail=100 web api casdoor ecom-api ecom-worker ecom-beat ecom-redis
+seller_local --profile app logs --tail=100 web api casdoor ecom-api ecom-worker screening-api screening-worker ecom-redis
 seller_local --profile app down
 ~~~
 
 ### 模型和亚马逊配置
 
-在部署使用的私有环境文件里设置所需变量。[EcomAgent 环境变量示例](apps/backend/.env.example)
+在部署使用的私有环境文件里设置所需变量。[EcomAgent 环境变量示例](apps/ecom/.env.example)
 
 | 场景 | 配置 |
 | --- | --- |
@@ -106,23 +107,23 @@ seller_local --profile app down
 | Anthropic 或 Gemini | `LLM_PROVIDER=anthropic` 或 `gemini`，分别设置 `ANTHROPIC_API_KEY` 或 `GEMINI_API_KEY` |
 | Ollama | `LLM_PROVIDER=ollama`，设置业务服务可访问的 `OLLAMA_BASE_URL`。容器中的 `localhost` 指向该容器 |
 | 亚马逊网页采集 | 业务服务需可访问 Amazon，Compose 的电商镜像会安装 Chromium |
-| 广告优化 | 当前实现使用 `AMAZON_CLIENT_ID`、`AMAZON_CLIENT_SECRET`、`AMAZON_REFRESH_TOKEN` 获取 LWA 令牌，并用 `AMAZON_ADS_CLIENT_ID`、`AMAZON_ADS_PROFILE_ID` 请求广告活动 |
+| 广告优化 | 配置 `AMAZON_ADS_CLIENT_ID`、`AMAZON_ADS_CLIENT_SECRET`、`AMAZON_ADS_REFRESH_TOKEN` 和 `AMAZON_ADS_PROFILE_ID`；活动配置缺少绩效数据时显示待补充 |
 
 同一部署使用共享的模型和亚马逊配置。更新 Compose 环境文件后，重新执行 `seller_local --profile app up -d` 让配置生效。
 
 ### Ubuntu 原生进程
 
-已运行 PostgreSQL、Casdoor 和 Redis 的服务器可以直接启动进程。Go 版本见 [go.mod](apps/auth/go.mod)，Web 构建镜像使用 Node.js 22，电商镜像使用 Python 3.12。下表的地址对应上面的 SSH 转发命令。
+已运行 PostgreSQL、Casdoor 和 Redis 的服务器可以直接启动进程。Go 版本见 [go.mod](apps/auth/go.mod)，Web 构建镜像使用 Node.js 22，三个后端使用 Go 1.25，电商采集镜像另带 Chromium。下表的地址对应上面的 SSH 转发命令。
 
 | 服务 | 启动目录与命令 | 配置 |
 | --- | --- | --- |
 | Casdoor | Casdoor 安装目录，运行 `./casdoor` | 监听 `127.0.0.1:18444`，origin 为 `http://localhost:18444` |
 | Go | `apps/auth`，运行 `go run .` | `SELLER_LISTEN_ADDR=127.0.0.1:8080`、`APP_ORIGIN=http://localhost:18443`、`OIDC_ISSUER=http://localhost:18444`，以及 PostgreSQL 的 `DATABASE_URL` 和 OIDC 凭据 |
-| FastAPI | `apps/backend`，运行 `python -m uvicorn app.main:app --host 127.0.0.1 --port 18080` | 独立的 `DATABASE_URL`（例如 `sqlite+aiosqlite:///./ecom.db`）、`REDIS_URL` 和所需模型配置 |
-| Celery | 同 FastAPI，分别运行 `celery -A app.workers.celery_app worker --loglevel=info` 和 `celery -A app.workers.celery_app beat --loglevel=info` | 与业务服务使用同一 Redis，设置 `CELERY_BROKER_URL` 和 `CELERY_RESULT_BACKEND` |
+| Go 电商 | `apps/ecom`，运行 `go run . serve`，另一个进程运行 `go run . worker` | `ECOM_ADDR=127.0.0.1:18080`、`ECOM_INTERNAL_SECRET`、`REDIS_URL` 和模型配置 |
+| Go 初筛 | `apps/screening`，先 `go run . migrate`，再分别运行 `go run . serve` 与 `go run . worker` | `SCREENING_ADDR=127.0.0.1:18090`、独立 `SCREENING_DATABASE_URL`、`SCREENING_STORAGE_DIR`、`SCREENING_INTERNAL_SECRET` |
 | Next.js | `apps/web`，运行 `npm run dev -- --hostname 127.0.0.1 --port 18443` | `SELLER_API_URL=http://127.0.0.1:8080`、`SELLER_APP_ORIGIN=http://localhost:18443`、`ECOM_API_URL=http://127.0.0.1:18080` |
 
-FastAPI 与 Celery 使用同一个 Python 环境。先安装 [Python 依赖](apps/backend/requirements.txt)，再执行 `playwright install chromium`；缺少 Ubuntu 系统库时，按 Playwright 的提示安装依赖。Redis 应绑定回环地址并启用持久化。已验证邮箱的用户登录后，可在 `apps/auth` 运行 `go run . create-workspace "运营测试" owner@example.com` 创建工作区。
+Go 电商采集需要系统 Chromium，可用 `CHROME_BIN` 指定路径。Next.js 额外设置 `SCREENING_API_URL=http://127.0.0.1:18090` 和两个内部签名密钥，分别与对应服务一致。Redis 绑定回环并启用持久化。已验证邮箱的用户登录后，可在 `apps/auth` 运行 `go run . create-workspace "运营测试" owner@example.com` 创建工作区。
 
 ## 开发与检查
 
@@ -135,11 +136,11 @@ npm run lint
 NEXT_PUBLIC_SENTRY_DISABLED=true npm run build
 ~~~
 
-后端离线测试需要一个供测试使用的 Redis 数据库，pytest 默认排除真实模型调用测试。Go 数据库集成测试需要单独的空 PostgreSQL 数据库，设置 `TEST_DATABASE_URL` 后在 `apps/auth` 运行 go test ./...。
+Go 后端测试和专用测试数据库说明见 [Go 后端迁移说明](docs/go-backend-migration.md)。真实模型与 Amazon 凭据无需用于离线测试。
 
 ~~~bash
-cd apps/backend
-python -m pytest -q
+(cd apps/ecom && go test -race ./... && go vet ./...)
+(cd apps/screening && go test -race ./... && go vet ./...)
 ~~~
 
 ## 产品初筛
@@ -152,7 +153,7 @@ python -m pytest -q
 
 ## 许可证
 
-仓库许可证见 [LICENSE](LICENSE)，引入的 EcomAgent 组件见 [电商后端 MIT 许可证](apps/backend/LICENSE)及 [前端改编代码许可证](apps/web/src/features/ecom/LICENSE)。
+仓库许可证见 [LICENSE](LICENSE)，引入的 EcomAgent 组件见 [电商后端 MIT 许可证](apps/ecom/LICENSE)及 [前端改编代码许可证](apps/web/src/features/ecom/LICENSE)。
 
 ## CI/CD
 

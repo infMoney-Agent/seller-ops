@@ -61,10 +61,12 @@ services:
   ecom-api:
     image: $prefix-backend:$revision
   screening-migrate:
-    image: $prefix-backend:$revision
+    image: $prefix-screening:$revision
+  screening-api:
+    image: $prefix-screening:$revision
+  screening-worker:
+    image: $prefix-screening:$revision
   ecom-worker:
-    image: $prefix-backend:$revision
-  ecom-beat:
     image: $prefix-backend:$revision
 YAML
 
@@ -81,7 +83,7 @@ healthy() {
   local directory=$1
   local running
   running=$(compose "$directory" ps --status running --services) || return 1
-  for service in proxy casdoor db api web ecom-api ecom-redis ecom-worker ecom-beat; do
+  for service in proxy casdoor db api web ecom-api ecom-redis ecom-worker screening-api screening-worker; do
     grep -Fxq "$service" <<<"$running" || return 1
   done
   curl -fsS --max-time 4 -H 'Host: localhost:18443' \
@@ -90,8 +92,8 @@ healthy() {
     -H 'Host: localhost:18443' "http://$HEALTH_ADDRESS:18443/api/auth/session") == 401 ]] &&
   curl -fsS --max-time 4 -H 'Host: localhost:18444' \
     "http://$HEALTH_ADDRESS:18444/.well-known/openid-configuration" -o /dev/null &&
-  compose "$directory" exec -T ecom-api python -c \
-    "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=4).close()"
+  compose "$directory" exec -T ecom-api ecom health &&
+  compose "$directory" exec -T screening-api screening health
 }
 
 wait_healthy() {
@@ -105,15 +107,15 @@ wait_healthy() {
 
 previous=$(readlink "$current")
 compose "$release" config --quiet
-compose "$release" pull web api ecom-api ecom-worker ecom-beat screening-migrate
-if compose "$release" up -d --no-build --pull never && wait_healthy "$release"; then
+compose "$release" pull web api ecom-api ecom-worker screening-api screening-worker screening-migrate screening-storage-init screening-db-init
+if compose "$release" up -d --no-build --pull never --remove-orphans && wait_healthy "$release"; then
   rm -f "$STATE_DIR/current.next"
   ln -s "$release" "$STATE_DIR/current.next"
   mv -Tf "$STATE_DIR/current.next" "$current"
   echo "Deployed $revision"
 else
   echo "Deployment failed, restoring $(basename "$previous")" >&2
-  compose "$previous" up -d --no-build --pull never && wait_healthy "$previous" ||
+  compose "$previous" up -d --no-build --pull never --remove-orphans && wait_healthy "$previous" ||
     echo 'Rollback did not pass health checks' >&2
   exit 1
 fi

@@ -17,6 +17,28 @@ func div(a, b *big.Rat) *big.Rat { return new(big.Rat).Quo(a, b) }
 
 // Rational arithmetic keeps decimal inputs exact until formatting final outputs.
 func calculate(in map[string]any) (map[string]any, error) {
+	allowed := map[string]bool{"name": true, "monthly_units": true, "fee_source": true, "note": true}
+	for _, field := range profitFields {
+		allowed[field] = true
+	}
+	for field := range in {
+		if !allowed[field] {
+			return nil, fmt.Errorf("未知测算字段: %s", field)
+		}
+	}
+	if in["name"] == nil {
+		in["name"] = "基准"
+	}
+	if name, ok := in["name"].(string); !ok || len([]rune(name)) == 0 || len([]rune(name)) > 100 {
+		return nil, fmt.Errorf("方案名称无效")
+	}
+	for _, key := range []string{"fee_source", "note"} {
+		if in[key] != nil {
+			if value, ok := in[key].(string); !ok || len([]rune(value)) > 2000 {
+				return nil, fmt.Errorf("%s 无效", key)
+			}
+		}
+	}
 	vals := map[string]*big.Rat{}
 	missing := []string{}
 	one := big.NewRat(1, 1)
@@ -41,6 +63,15 @@ func calculate(in map[string]any) (map[string]any, error) {
 			return nil, fmt.Errorf("%s 必须大于零", key)
 		}
 		vals[key] = n
+	}
+	if raw := in["monthly_units"]; raw != nil {
+		n, ok := new(big.Rat).SetString(fmt.Sprint(raw))
+		if !ok || !n.IsInt() || n.Sign() < 0 || n.Cmp(big.NewRat(1000000000, 1)) > 0 {
+			return nil, fmt.Errorf("预计月销量无效")
+		}
+	}
+	if vals["sale_price_usd"] != nil && vals["discount_usd"] != nil && sub(vals["sale_price_usd"], vals["discount_usd"]).Sign() <= 0 {
+		return nil, fmt.Errorf("优惠后售价必须大于零")
 	}
 	out := map[string]any{"formula_version": formulaVersion}
 	if len(missing) > 0 {

@@ -1,3 +1,4 @@
+import { createHmac } from 'node:crypto';
 import { backendURL } from '@/lib/backend';
 import type { SellerSession } from '@/features/auth/session';
 
@@ -72,11 +73,19 @@ async function proxy(request: Request, { params }: { params: Promise<{ path: str
       base
     );
     target.search = url.search;
+    const secret = process.env.ECOM_INTERNAL_SECRET || '';
+    if (secret.length < 32) return Response.json({ detail: '电商服务签名尚未配置。' }, { status: 503 });
+    const stamp = String(Math.floor(Date.now() / 1000));
+    const internalSignature = createHmac('sha256', secret)
+      .update([stamp, request.method, target.pathname + target.search, String(session.id)].join('\n'))
+      .digest('hex');
     const response = await fetch(target, {
       method: request.method,
       headers: {
         'content-type': 'application/json',
-        'x-seller-user': String(session.id)
+        'x-seller-user': String(session.id),
+        'x-ecom-time': stamp,
+        'x-ecom-signature': internalSignature
       },
       body,
       cache: 'no-store',

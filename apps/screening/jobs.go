@@ -13,6 +13,17 @@ import (
 const goEngine = "go-v1"
 
 func (s *service) enqueueScreen(ctx context.Context, a identity, b Object, policyID string) (any, error) {
+	if b["product_ids"] != nil || b["filters"] != nil {
+		ids, e := s.selection(ctx, a, b)
+		if e != nil {
+			return nil, e
+		}
+		explicit := []any{}
+		for _, id := range ids {
+			explicit = append(explicit, id)
+		}
+		b = Object{"product_ids": explicit}
+	}
 	tx, e := s.db.Begin(ctx)
 	if e != nil {
 		return nil, e
@@ -21,6 +32,20 @@ func (s *service) enqueueScreen(ctx context.Context, a identity, b Object, polic
 	if previous, e := receipt(ctx, tx, a); e != nil || previous != nil {
 		return previous, e
 	}
+	result, e := s.enqueueScreenTx(ctx, tx, a, b, policyID)
+	if e != nil {
+		return nil, e
+	}
+	if e = saveReceipt(ctx, tx, a, result); e != nil {
+		return nil, e
+	}
+	if e = tx.Commit(ctx); e != nil {
+		return nil, e
+	}
+	return result, nil
+}
+func (s *service) enqueueScreenTx(ctx context.Context, tx pgx.Tx, a identity, b Object, policyID string) (Object, error) {
+	var e error
 	var policy []byte
 	if policyID == "" {
 		e = tx.QueryRow(ctx, "SELECT to_jsonb(c) FROM ps_configs c WHERE tenant_id=$1 AND kind='screening' AND active", a.Tenant).Scan(&policy)
@@ -52,7 +77,7 @@ func (s *service) enqueueScreen(ctx context.Context, a identity, b Object, polic
 		}
 	}
 	var rows pgx.Rows
-	if len(ids) > 0 {
+	if b["product_ids"] != nil {
 		rows, e = tx.Query(ctx, "UPDATE ps_products SET screen_generation=screen_generation+1 WHERE tenant_id=$1 AND id=ANY($2::uuid[]) RETURNING id::text,data_revision,screen_generation", a.Tenant, ids)
 	} else {
 		rows, e = tx.Query(ctx, "UPDATE ps_products SET screen_generation=screen_generation+1 WHERE tenant_id=$1 RETURNING id::text,data_revision,screen_generation", a.Tenant)
@@ -81,14 +106,7 @@ func (s *service) enqueueScreen(ctx context.Context, a identity, b Object, polic
 	if e != nil {
 		return nil, e
 	}
-	result := Object{"job_id": id, "run_id": id, "state": "queued"}
-	if e = saveReceipt(ctx, tx, a, result); e != nil {
-		return nil, e
-	}
-	if e = tx.Commit(ctx); e != nil {
-		return nil, e
-	}
-	return result, nil
+	return Object{"job_id": id, "run_id": id, "state": "queued"}, nil
 }
 
 func (s *service) worker(ctx context.Context) error {
@@ -100,14 +118,14 @@ func (s *service) worker(ctx context.Context) error {
 			return nil
 		case <-ticker.C:
 		}
-		if _, e := s.db.Exec(ctx, "UPDATE ps_jobs SET state='failed',error=jsonb_build_object('message','任务超过最大重试次数'),lease_until=NULL,lease_token=NULL,updated_at=now() WHERE payload->>'engine'=$1 AND kind='screen' AND attempts>=5 AND state='running' AND lease_until<now()", goEngine); e != nil {
+		if _, e := s.db.Exec(ctx, "UPDATE ps_jobs SET state='failed',error=jsonb_build_object('message','任务超过最大重试次数'),lease_until=NULL,lease_token=NULL,updated_at=now() WHERE payload->>'engine'=$1 AND kind IN ('screen','parse','import','export','profit_batch') AND attempts>=5 AND state='running' AND lease_until<now()", goEngine); e != nil {
 			log.Printf("screening lease recovery failed: %T", e)
 			continue
 		}
 		var raw []byte
 		token := uuid()
 		e := s.db.QueryRow(ctx, `WITH candidate AS (
-   SELECT tenant_id,id FROM ps_jobs WHERE payload->>'engine'=$1 AND kind='screen' AND attempts<5
+   SELECT tenant_id,id FROM ps_jobs WHERE payload->>'engine'=$1 AND kind IN ('screen','parse','import','export','profit_batch') AND attempts<5
    AND (state='queued' OR (state='running' AND lease_until<now())) ORDER BY created_at,id FOR UPDATE SKIP LOCKED LIMIT 1)
    UPDATE ps_jobs j SET state='running',attempts=attempts+1,lease_until=now()+interval '60 seconds',lease_token=$2,updated_at=now()
    FROM candidate c WHERE j.tenant_id=c.tenant_id AND j.id=c.id RETURNING to_jsonb(j)`, goEngine, token).Scan(&raw)
@@ -140,7 +158,7 @@ func (s *service) worker(ctx context.Context) error {
 				}
 			}
 		}()
-		e = s.runScreen(jobCtx, job, token)
+		e = s.runWork(jobCtx, job, token)
 		cancel()
 		<-heartbeatDone
 		if e != nil && ctx.Err() == nil {
@@ -185,7 +203,7 @@ func (s *service) runScreen(ctx context.Context, job Object, token string) error
 			return e
 		}
 		var raw []byte
-		e = tx.QueryRow(ctx, "SELECT to_jsonb(p) FROM ps_products p WHERE tenant_id=$1 AND id=$2::uuid AND data_revision=$3 AND screen_generation=$4 FOR UPDATE", tenant, target["id"], integer(target["revision"]), integer(target["generation"])).Scan(&raw)
+		e = tx.QueryRow(ctx, "SELECT to_jsonb(p)||jsonb_build_object('price_usd',m.price_usd::text,'occurrences',(SELECT count(DISTINCT stat_month) FROM ps_product_monthly h WHERE h.tenant_id=p.tenant_id AND h.product_id=p.id)) FROM ps_products p LEFT JOIN ps_product_monthly m ON m.tenant_id=p.tenant_id AND m.id=p.current_monthly_id WHERE p.tenant_id=$1 AND p.id=$2::uuid AND p.data_revision=$3 AND p.screen_generation=$4 FOR UPDATE OF p", tenant, target["id"], integer(target["revision"]), integer(target["generation"])).Scan(&raw)
 		if e != nil && e != pgx.ErrNoRows {
 			tx.Rollback(ctx)
 			return e
@@ -193,12 +211,7 @@ func (s *service) runScreen(ctx context.Context, job Object, token string) error
 		if e == nil {
 			p := decodeObject(raw)
 			result := classify(p, config)
-			group := str(p["asin"])
-			if str(p["seller_id"]) != "" {
-				group = shaDigest([]byte(str(p["seller_id"]) + "|" + str(p["asin"])))
-			} else {
-				group = shaDigest([]byte(group))
-			}
+			group := groupKey(p, result)
 			_, e = tx.Exec(ctx, `UPDATE ps_products SET machine_decision=$5,machine_recommendation=$6,machine_direction=$7,machine_group_key=$8,machine_reasons=$9,machine_evidence=$10,machine_policy_id=$11::uuid,machine_source_row_id=current_row_id,machine_monthly_id=current_monthly_id,machine_monthly_revision=current_monthly_revision,current_group_rep_id=id,screened_at=now() WHERE tenant_id=$1 AND id=$2::uuid AND data_revision=$3 AND screen_generation=$4`, tenant, target["id"], integer(target["revision"]), integer(target["generation"]), result["decision"], result["recommendation"], result["direction"], group, encoded(result["reasons"]), encoded(result["evidence"]), policy["id"])
 			if e != nil {
 				tx.Rollback(ctx)
@@ -216,4 +229,30 @@ func (s *service) runScreen(ctx context.Context, job Object, token string) error
 	}
 	_, e := s.db.Exec(ctx, "UPDATE ps_jobs SET state='succeeded',progress=100,lease_until=NULL,lease_token=NULL,updated_at=now() WHERE tenant_id=$1 AND id=$2::uuid AND lease_token=$3::uuid", tenant, id, token)
 	return e
+}
+
+func (s *service) runWork(ctx context.Context, job Object, token string) (err error) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			if e, ok := recovered.(error); ok {
+				err = e
+			} else {
+				err = fmt.Errorf("task panic: %T", recovered)
+			}
+		}
+	}()
+	switch str(job["kind"]) {
+	case "parse":
+		return s.runParse(ctx, job, token)
+	case "import":
+		return s.runImport(ctx, job, token)
+	case "export":
+		return s.runExport(ctx, job, token)
+	case "profit_batch":
+		return s.runProfitBatch(ctx, job, token)
+	case "screen":
+		return s.runScreen(ctx, job, token)
+	default:
+		return fmt.Errorf("unsupported job kind")
+	}
 }

@@ -1,0 +1,59 @@
+package main
+
+import (
+	"context"
+	"github.com/chromedp/cdproto/runtime"
+	"github.com/chromedp/chromedp"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+)
+
+func TestBrowserScreening(t *testing.T) {
+	base := os.Getenv("SCREENING_WEB_QA_URL")
+	if base == "" {
+		t.Skip("browser acceptance disabled")
+	}
+	options := append([]chromedp.ExecAllocatorOption{}, chromedp.DefaultExecAllocatorOptions[:]...)
+	options = append(options, chromedp.Flag("no-sandbox", true), chromedp.Flag("disable-dev-shm-usage", true), chromedp.WindowSize(1440, 1100))
+	if binary := os.Getenv("CHROME_BIN"); binary != "" {
+		options = append(options, chromedp.ExecPath(binary))
+	}
+	alloc, cancel := chromedp.NewExecAllocator(context.Background(), options...)
+	defer cancel()
+	ctx, closeTab := chromedp.NewContext(alloc)
+	defer closeTab()
+	ctx, timeout := context.WithTimeout(ctx, 2*time.Minute)
+	defer timeout()
+	var text string
+	if e := chromedp.Run(ctx, chromedp.Navigate(base+"/dashboard/ecom/screening"), chromedp.WaitReady(`[data-seller-workspace]`, chromedp.ByQuery), chromedp.Text("body", &text)); e != nil {
+		t.Fatal(e)
+	}
+	if !strings.Contains(text, "产品初筛") {
+		t.Fatal("screening page did not render", text)
+	}
+	// Exercise the same-origin proxy in the browser, including Origin, real session
+	// lookup and HMAC forwarding, using a file whose only contents are fixtures.
+	script := `(async()=>{const h={'X-Seller-Workspace':'1800000001','Idempotency-Key':crypto.randomUUID()};const f=new FormData();f.set('file',new Blob(['ASIN,商品标题,月销量,价格($),销量口径\nBROWSER001,manual kitchen tool,120,19.99,child\n'],{type:'text/csv'}),'browser-go.csv');f.set('source_period','2026-11');f.set('observed_on','2026-11-18');f.set('source_type','manual');f.set('period_type','calendar_month');f.set('default_sales_scope','child');const response=await fetch('/api/ecom/screening/imports',{method:'POST',headers:h,body:f});if(!response.ok)throw Error(await response.text());const job=await response.json();let parsed;for(let i=0;i<50;i++){await new Promise(r=>setTimeout(r,250));const j=await(await fetch('/api/ecom/screening/jobs/'+job.job_id,{headers:h})).json();if(j.state==='failed')throw Error(JSON.stringify(j));if(j.state==='succeeded'){parsed=j;break}}if(!parsed)throw Error('parse timed out');const commit=await fetch('/api/ecom/screening/imports/'+job.import_id+'/commit',{method:'POST',headers:{...h,'Idempotency-Key':crypto.randomUUID()}});if(!commit.ok)throw Error(await commit.text());const c=await commit.json();let finished;for(let i=0;i<50;i++){await new Promise(r=>setTimeout(r,250));const j=await(await fetch('/api/ecom/screening/jobs/'+c.job_id,{headers:h})).json();if(j.state==='failed')throw Error(JSON.stringify(j));if(j.state==='succeeded'||j.state==='partial'){finished=j;break}}if(!finished)throw Error('import timed out');const screenId=finished.result?.screen?.job_id;if(screenId){let screened=false;for(let i=0;i<50;i++){await new Promise(r=>setTimeout(r,250));const sj=await(await fetch('/api/ecom/screening/jobs/'+screenId,{headers:h})).json();if(sj.state==='failed')throw Error(JSON.stringify(sj));if(sj.state==='succeeded'||sj.state==='partial'){screened=true;break}}if(!screened)throw Error('screen timed out')}const p=await(await fetch('/api/ecom/screening/products?q=BROWSER001&show_merged=true',{headers:h})).json();if(p.total!==1)throw Error(JSON.stringify(p));const v=p.items[0];const review=await fetch('/api/ecom/screening/products/'+v.id+'/review',{method:'PATCH',headers:{...h,'Idempotency-Key':crypto.randomUUID(),'Content-Type':'application/json'},body:JSON.stringify({expected_data_revision:v.data_revision,expected_review_revision:v.review_revision,status:'kept',reason:'浏览器验证'})});if(!review.ok)throw Error(await review.text());const profit=await fetch('/api/ecom/screening/profit/calculate',{method:'POST',headers:{...h,'Content-Type':'application/json'},body:JSON.stringify({product_id:v.id,expected_data_revision:v.data_revision,scenarios:[{name:'浏览器方案',sale_price_usd:'19.99',discount_usd:'0',purchase_cny:'18',packaging_cny:'2',freight_cny:'8',other_landed_cny:'0',fx_cny_per_usd:'7.20',commission_rate:'0.15',fba_fee_usd:'4.00',storage_usd:'0.10',ad_rate:'0.10',return_rate:'0.03',loss_per_return_usd:'12',other_usd:'0',monthly_units:100}]})});const result=await profit.json();if(!profit.ok||result.items?.[0]?.output?.profit_usd!=='6.64')throw Error(JSON.stringify(result));const listing=await fetch('/api/ecom/listing/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({keyword:'tool',language:'de'})});const listingData=await listing.json();if(!listing.ok||listingData.language!=='de'||listingData.bullet_points.length!==5)throw Error(JSON.stringify(listingData));const categories=await fetch('/api/ecom/product-research/categories');const categoryData=await categories.json();if(!categories.ok||!categoryData.categories.includes('home'))throw Error(JSON.stringify(categoryData));return 'ok'})()`
+	var result string
+	if e := chromedp.Run(ctx, chromedp.Evaluate(script, &result, func(params *runtime.EvaluateParams) *runtime.EvaluateParams { return params.WithAwaitPromise(true) })); e != nil {
+		t.Fatal(e)
+	}
+	if result != "ok" {
+		t.Fatal(result)
+	}
+	if e := chromedp.Run(ctx, chromedp.Reload(), chromedp.WaitReady(`[data-seller-workspace]`, chromedp.ByQuery), chromedp.Poll(`document.body.innerText.includes('BROWSER001')`, nil)); e != nil {
+		t.Fatal(e)
+	}
+	var screenshot []byte
+	if e := chromedp.Run(ctx, chromedp.FullScreenshot(&screenshot, 80)); e != nil {
+		t.Fatal(e)
+	}
+	dir := env("SCREENING_QA_DIR", os.TempDir()+"/screening-go-qa")
+	os.MkdirAll(dir, 0750)
+	if e := os.WriteFile(filepath.Join(dir, "screening-desktop.png"), screenshot, 0640); e != nil {
+		t.Fatal(e)
+	}
+}

@@ -4,7 +4,8 @@
 
 - apps/web 是 Next.js 前端，提供简体中文仪表盘和同域业务 API 代理。
 - apps/auth 是 Go 认证服务，负责 Casdoor OIDC、会话、工作区、成员和邀请。apps/auth/casdoor 保存部署配置。
-- apps/backend 是 FastAPI 电商后端，包含采集、模型调用、Redis 状态和 Celery 任务。
+- apps/ecom 是 Go 电商后端，负责网页采集、模型调用、Redis 监控和定时任务。
+- apps/screening 是独立 Go 初筛服务，拥有独立 PostgreSQL 业务库、迁移和持久化任务。
 - README.md 是使用入口，docs/deployment.md 是部署说明。根目录 compose.yaml 启动整套服务。
 
 修改业务 API 时，同时检查 apps/web 的客户端调用、代理和服务端契约。浏览器通过已验证的会话访问业务 API，工作区和账号标识由服务端校验。生产凭据使用环境配置，测试使用独立的数据源。
@@ -13,7 +14,8 @@
 
 - Web 依赖在 apps/web 安装，安装命令为 bun install --frozen-lockfile。根目录的 npm run dev、npm run build、npm run typecheck 和 npm run lint 代理到 Web。
 - Go 测试在 apps/auth 执行 go test ./...。数据库集成测试使用独立的 TEST_DATABASE_URL。
-- Python 测试在 apps/backend 执行 python -m pytest，监控测试需要可用的测试 Redis 实例。
+- 业务测试分别在 apps/ecom、apps/screening 执行 go test -race ./... 和 go vet ./...。电商集成测试使用隔离的 ECOM_TEST_REDIS_URL（数据库15），初筛集成测试使用新建空的 SCREENING_TEST_DATABASE_URL（名称以 _test 结尾）。
+- 新增业务后端使用 Go，保持用户管理与业务数据库隔离。不要引入 Python 运行时或代理回旧服务。
 - Compose 本地测试覆盖文件位于 apps/auth/casdoor/compose.local.yaml，启动命令见 README.md。
 
 ## Web 约定

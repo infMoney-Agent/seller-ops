@@ -12,3 +12,4 @@ USER screening
 EXPOSE 8090
 ENTRYPOINT ["screening"]
 CMD ["serve"]
+HEALTHCHECK --interval=15s --timeout=5s --retries=5 CMD ["screening", "health"]

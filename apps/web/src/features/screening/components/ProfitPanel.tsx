@@ -109,6 +109,7 @@ export default function ProfitPanel({
         测算数据来源：{product?.stat_month?.slice(0, 7) || '未选择月份'} ·{' '}
         {product?.source_type || '手动录入'}。批量测算采用商品列表选择的月份，默认各商品最新一期。
       </p>
+      <DataBlock title='本子体参数参考' value={product && {父ASIN:product.parent_asin,每套数量:product.units_per_pack,包装重量g:product.package_weight_g,包装长cm:product.package_length_cm,包装宽cm:product.package_width_cm,包装高cm:product.package_height_cm}} /><p className='text-muted-foreground text-xs'>成本按一份可售商品（整套包装）填写；每套数量仅供参考，不自动倍乘采购价，平台费和运费仍需明确录入。</p>
       <p className='text-muted-foreground text-sm'>
         基于输入假设的预计利润。空白成本不会当作零；无费用请明确填 0。平台费和汇率由你核实填写。
       </p>

@@ -1,0 +1,442 @@
+{
+  "ALIASES": {
+    "asin": [
+      "ASIN",
+      "asin"
+    ],
+    "title": [
+      "商品标题",
+      "Title",
+      "title"
+    ],
+    "title_zh": [
+      "商品标题中文（机器翻译）",
+      "中文标题",
+      "商品标题中文"
+    ],
+    "image_url": [
+      "商品主图",
+      "主图",
+      "Image URL"
+    ],
+    "category": [
+      "小类目",
+      "Category"
+    ],
+    "brand": [
+      "品牌",
+      "Brand"
+    ],
+    "seller_id": [
+      "卖家ID",
+      "Seller ID",
+      "SellerId"
+    ],
+    "seller_name": [
+      "卖家名称",
+      "BuyBox卖家",
+      "Seller Name"
+    ],
+    "seller_region": [
+      "卖家所属地",
+      "卖家地区",
+      "Seller Region"
+    ],
+    "price_usd": [
+      "价格($)",
+      "Price",
+      "price"
+    ],
+    "monthly_sales": [
+      "月销量",
+      "Monthly Sales"
+    ],
+    "monthly_revenue": [
+      "月销售额($)",
+      "月销售额",
+      "Monthly Revenue"
+    ],
+    "bsr_rank": [
+      "BSR排名",
+      "BSR Rank",
+      "BSR"
+    ],
+    "review_count": [
+      "评分数",
+      "Review Count"
+    ],
+    "rating": [
+      "评分",
+      "Rating"
+    ],
+    "material": [
+      "材质",
+      "Material"
+    ],
+    "weight_g": [
+      "产品净重(g)",
+      "Weight (g)"
+    ],
+    "package_weight_g": [
+      "包装重量(g)",
+      "Package Weight (g)"
+    ],
+    "package_length_cm": [
+      "包装长(cm)",
+      "Package Length (cm)"
+    ],
+    "package_width_cm": [
+      "包装宽(cm)",
+      "Package Width (cm)"
+    ],
+    "package_height_cm": [
+      "包装高(cm)",
+      "Package Height (cm)"
+    ],
+    "units_per_pack": [
+      "每套数量",
+      "Units per Pack"
+    ],
+    "carton_units": [
+      "装箱数量",
+      "Carton Units"
+    ],
+    "carton_weight_g": [
+      "外箱重量(g)",
+      "Carton Weight (g)"
+    ],
+    "carton_length_cm": [
+      "外箱长(cm)",
+      "Carton Length (cm)"
+    ],
+    "carton_width_cm": [
+      "外箱宽(cm)",
+      "Carton Width (cm)"
+    ],
+    "carton_height_cm": [
+      "外箱高(cm)",
+      "Carton Height (cm)"
+    ],
+    "parent_asin": [
+      "父ASIN",
+      "父体ASIN",
+      "Parent ASIN",
+      "parent_asin"
+    ],
+    "listing_role": [
+      "商品层级",
+      "ASIN类型",
+      "Listing Role"
+    ],
+    "sales_scope": [
+      "销量口径",
+      "Sales Scope"
+    ],
+    "child_monthly_sales": [
+      "子体月销量",
+      "子ASIN月销量",
+      "Child Monthly Sales"
+    ],
+    "parent_monthly_sales": [
+      "父体月销量",
+      "父ASIN月销量",
+      "Parent Monthly Sales"
+    ],
+    "child_monthly_revenue": [
+      "子体月销售额($)",
+      "Child Monthly Revenue"
+    ],
+    "parent_monthly_revenue": [
+      "父体月销售额($)",
+      "Parent Monthly Revenue"
+    ]
+  },
+  "MATERIALS": [
+    [
+      "钛/塑料复合",
+      "titanium\\s*[/+&]\\s*(?:pp|plastic)|titanium.*(?:double.sided|dual.sided).*(?:pp|plastic)"
+    ],
+    [
+      "钛",
+      "\\btitanium\\b"
+    ],
+    [
+      "玻璃",
+      "\\bglass\\b"
+    ],
+    [
+      "硅胶",
+      "\\bsilicone\\b"
+    ],
+    [
+      "不锈钢",
+      "stainless|\\bsus\\s*\\d"
+    ],
+    [
+      "碳钢",
+      "carbon steel"
+    ],
+    [
+      "钢",
+      "\\bsteel\\b"
+    ],
+    [
+      "铝",
+      "alumin"
+    ],
+    [
+      "铜",
+      "\\bcopper\\b"
+    ],
+    [
+      "竹",
+      "\\bbamboo\\b"
+    ],
+    [
+      "相思木",
+      "\\bacacia\\b"
+    ],
+    [
+      "柚木",
+      "\\bteak\\b"
+    ],
+    [
+      "核桃木",
+      "\\bwalnut\\b"
+    ],
+    [
+      "木",
+      "\\bwood(?:en)?\\b"
+    ],
+    [
+      "陶瓷",
+      "ceramic|porcelain"
+    ],
+    [
+      "亚克力",
+      "acrylic|plexiglass"
+    ],
+    [
+      "丁腈",
+      "nitrile"
+    ],
+    [
+      "乳胶",
+      "latex"
+    ],
+    [
+      "橡胶",
+      "\\brubber\\b"
+    ],
+    [
+      "天然丝瓜络",
+      "loofa|loofah|luffa"
+    ],
+    [
+      "猪鬃",
+      "boar bristle"
+    ],
+    [
+      "超细纤维",
+      "microfiber|microfibre"
+    ],
+    [
+      "棉",
+      "\\bcotton\\b"
+    ],
+    [
+      "亚麻",
+      "\\blinen\\b"
+    ],
+    [
+      "涤纶",
+      "polyester|spandex"
+    ],
+    [
+      "尼龙",
+      "\\bnylon\\b"
+    ],
+    [
+      "毛毡",
+      "\\bfelt\\b"
+    ],
+    [
+      "缎面",
+      "\\bsatin\\b"
+    ],
+    [
+      "真丝",
+      "\\bsilk\\b"
+    ],
+    [
+      "PEVA",
+      "\\bpeva\\b"
+    ],
+    [
+      "EVA",
+      "\\beva\\b"
+    ],
+    [
+      "PVC/乙烯基",
+      "\\bpvc\\b|\\bvinyl\\b"
+    ],
+    [
+      "纸",
+      "\\bpaper\\b|cardstock|cardboard|manila"
+    ],
+    [
+      "塑料",
+      "plastic|polypropylene|polyethylene|\\bpp\\b|\\bpet\\b|\\babs\\b|\\bpe\\b|\\bps\\b"
+    ],
+    [
+      "金属",
+      "\\bmetal\\b|\\biron\\b"
+    ],
+    [
+      "织物",
+      "\\bfabric\\b|\\bcloth\\b"
+    ]
+  ],
+  "SIMPLE": {
+    "Packing Tape": "封箱胶带",
+    "Self-Stick Note Pads": "便利贴",
+    "Self-Stick Notes": "便利贴",
+    "Pants Hangers": "裤架",
+    "Standard Hangers": "衣架",
+    "Manila File Folders": "纸质文件夹",
+    "Colored File Folders": "纸质文件夹",
+    "Project Folders": "项目文件夹",
+    "Transparent Tape": "透明办公胶带",
+    "Bubble Wrap": "气泡包装材料",
+    "Measuring Cups": "量杯",
+    "Measuring Spoons": "量勺",
+    "Cooking Tongs": "烹饪夹",
+    "Peelers": "削皮器",
+    "Meat & Poultry Tenderizers": "手动嫩肉工具",
+    "Knife Sharpeners": "手动磨刀器",
+    "Manual Can Openers": "手动开罐器",
+    "Pizza Cutters": "披萨切刀",
+    "Garlic Presses": "压蒜器",
+    "Cooking Spoons": "烹饪勺",
+    "Spatulas": "烹饪铲",
+    "Colanders": "沥水篮",
+    "Whisks": "手动打蛋器",
+    "Kitchen Shears": "厨房剪刀",
+    "Graters": "食材刨丝器",
+    "Cheese Graters": "食材刨丝器",
+    "Food Strainers": "食品滤网",
+    "Funnels": "分装漏斗",
+    "Manual Juicers": "手动榨汁器",
+    "Nut Crackers": "坚果夹",
+    "Splatter Screens": "防油溅网",
+    "Seasoning Injectors": "食物腌料注射器",
+    "Meat & Poultry Basters": "食物滴油工具",
+    "Jar Openers": "开瓶罐工具",
+    "Chef's Knives": "主厨刀",
+    "Bread Knives": "面包刀",
+    "Kitchen Knife Sets": "厨房刀具套装",
+    "Block Knife Sets": "带刀座厨房刀具套装",
+    "Knife Block Sets": "带刀座厨房刀具套装",
+    "Cook's Tool & Gadget Sets": "厨房手工具套装",
+    "Cooking Utensil Sets": "烹饪用具套装",
+    "Oven Mitts": "隔热手套",
+    "Trivets": "隔热垫",
+    "Cookbook Stands": "食谱支架",
+    "Dish Drying Mats": "餐具沥水垫",
+    "Bread Boxes": "面包收纳盒",
+    "Food Jars & Canisters": "食品储存罐",
+    "Cereal Containers": "干粮储存罐",
+    "Spice Cellars": "调味料储存罐",
+    "Refillable Squeeze Bottles": "可挤压分装瓶",
+    "Refillable Cosmetic Spray Bottles": "化妆品空喷瓶",
+    "Insulated Bottles": "保温饮料瓶",
+    "Tumblers": "饮料杯",
+    "Luggage Tags": "行李牌",
+    "Hair Drying Towels": "干发巾",
+    "Bed Pillow Protectors": "枕芯保护套",
+    "Bed Pillow Pillowcases": "枕套",
+    "Fitted Bed Sheets": "床笠",
+    "Sheet & Pillowcase Sets": "床单枕套套装",
+    "Bath Towels": "浴巾",
+    "Bath Towel Sets": "浴巾套装",
+    "Hand Bath Towels": "手巾",
+    "Bath Washcloths": "洗澡方巾",
+    "Bath Loofahs": "沐浴丝瓜络或浴球",
+    "Body Exfoliating Gloves": "去角质手套",
+    "Bath Pillows": "浴缸靠枕",
+    "Hair Bonnets": "护发睡帽",
+    "Hair Elastics & Ties": "发圈",
+    "Women's Fashion Headbands": "发箍",
+    "Hair Combs": "梳子",
+    "Makeup Blotting Paper": "吸油纸",
+    "Makeup Brush Sets & Kits": "化妆刷套装",
+    "Kabuki Brushes": "卡布基化妆刷",
+    "Dish Scouring Pads": "洗碗百洁垫",
+    "Household Surfaces Scouring Pads & Sticks": "清洁擦垫或擦棒",
+    "Household Squeegees": "家用刮水器",
+    "Laundry Bags": "洗衣袋",
+    "Reusable Produce Bags": "可重复使用果蔬袋",
+    "Moving Bags": "搬家收纳袋",
+    "Cosmetic Bags": "化妆包",
+    "Pen, Pencil & Marker Cases": "文具收纳袋",
+    "Toiletry Bags": "洗漱包",
+    "Hat Boxes": "帽子收纳盒",
+    "Boot & Shoe Boxes": "鞋盒",
+    "Lidded Home Storage Bins": "带盖储物箱",
+    "Under-Bed Storage": "床底收纳容器",
+    "Drawer Organizers": "抽屉分隔收纳",
+    "Storage Boxes": "储物盒",
+    "Laundry Hampers": "脏衣篮",
+    "Laundry Baskets": "洗衣篮",
+    "Laundry Sorters": "分类洗衣篮",
+    "Garment Racks": "衣物挂架",
+    "Free Standing Shoe Racks": "落地鞋架",
+    "Shoe Slots": "鞋位收纳架",
+    "Spice Racks": "调料收纳架",
+    "Coffee Pod Stands": "咖啡胶囊架",
+    "Coffee Pod Drawers": "咖啡胶囊抽屉",
+    "Stacking Can Dispensers": "饮料罐堆叠收纳架",
+    "Pot Lid Holders": "锅盖收纳架",
+    "Shelf Liners": "搁板衬垫",
+    "Dish Racks": "餐具沥水架",
+    "Paper Towel Holders": "厨房纸巾架",
+    "Utility Hooks": "通用挂钩",
+    "Hat Racks": "帽子挂架",
+    "Under-Sink Organizers": "水槽下收纳架",
+    "Cosmetic Display Cases": "化妆品展示收纳",
+    "Standing Dry Racks": "落地晾衣架",
+    "Shower Curtain Sets": "浴帘套装",
+    "Shower Curtain Liners": "浴帘内衬",
+    "Shower Curtain Rods": "浴帘杆",
+    "Badge Holders": "证件挂件",
+    "Letter Trays & Stacking Supports": "桌面文件托盘",
+    "Pencil Holders & Pen Holders": "笔筒",
+    "Binder Index Dividers": "活页分类隔页",
+    "Round Ring Binders": "圆环活页夹",
+    "Expanding Files & Wallets": "风琴文件夹",
+    "Clipboards": "写字夹板",
+    "Desk Pads & Blotters": "桌垫",
+    "Mouse Pads": "鼠标垫",
+    "Laser & Inkjet Printer Labels": "打印机标签纸",
+    "All-Purpose Labels": "通用标签",
+    "Supply Organizers": "文具收纳",
+    "Refrigerator Magnets": "冰箱磁贴",
+    "Magnetic Tape": "磁性胶带",
+    "Clothes Pins": "晾衣夹",
+    "Travel Packing Organizers": "行李收纳袋",
+    "Hair Brushes": "发刷",
+    "Bath & Body Brushes": "沐浴身体刷",
+    "Household Cleaning Brushes": "家用清洁刷",
+    "Kitchen Brushes": "厨房清洁刷",
+    "Fruit & Vegetable Cleaning Brushes": "果蔬清洁刷",
+    "Household Push Brooms": "家用扫帚",
+    "Household Dustpans": "家用簸箕",
+    "Household Dust Mops": "除尘拖把",
+    "Household Replacement Mop Pads": "拖把替换布",
+    "Dryer Balls": "烘干机球",
+    "Composition Notebooks": "缝线装订笔记本",
+    "Subject Notebooks": "分科笔记本",
+    "Spiral Notebooks": "螺旋装订笔记本",
+    "Hardcover Executive Notebooks": "精装笔记本"
+  }
+}

@@ -42,7 +42,7 @@ export default function MonthlyHistory({
               {[
                 '月份 / 口径',
                 '价格 USD',
-                '销量',
+                '销量 / 口径',
                 '销售额 USD',
                 '评分 / 数量',
                 'BSR',
@@ -65,7 +65,7 @@ export default function MonthlyHistory({
                   </p>
                 </td>
                 <td>{formatMoney(row.price_usd)}</td>
-                <td>{row.monthly_sales ?? '—'}</td>
+                <td>{row.sales_scope==='child' ? row.monthly_sales ?? '—' : row.sales_scope==='parent' ? '父体汇总见父体数据' : `${row.monthly_sales ?? '—'}（未知，不参与合计）`}</td>
                 <td>{formatMoney(row.monthly_revenue)}</td>
                 <td>
                   {row.rating ?? '—'} / {row.review_count ?? '—'}

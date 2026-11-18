@@ -109,7 +109,20 @@ func TestRuleBoundaries(t *testing.T) {
 			t.Errorf("%s: %v", tc.title, out)
 		}
 	}
-	if e := validatePolicy(Object{"exclusion_patterns": Object{"invalid": "(?<!un)scented"}}); e == nil {
+	if e := validatePolicy(Object{"exclusion_patterns": Object{"invalid": "("}}); e == nil {
 		t.Fatal("unsupported expression accepted")
+	}
+}
+
+func TestDefaultPolicyRegression(t *testing.T) {
+	config := decodeObject(defaultPolicyData)
+	if e := validatePolicy(config); e != nil {
+		t.Fatal(e)
+	}
+	for _, tc := range []struct{ title, want string }{{"220V Electric Aquarium Air Pump", "excluded"}, {"Replacement filter bags compatible with electric vacuum", "passed"}, {"Grow light stand bracket only", "passed"}, {"Pool chlorine tablets", "excluded"}, {"Empty chlorine tablet dispenser", "passed"}, {"Unscented cotton cloth", "passed"}, {"Medical first aid gel", "excluded"}} {
+		result := classify(Object{"asin": "B000000001", "title": tc.title}, config)
+		if result["decision"] != tc.want {
+			t.Errorf("%s: %#v", tc.title, result)
+		}
 	}
 }

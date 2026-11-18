@@ -9,19 +9,24 @@ permissions:
   contents: read
 jobs:
   web:
-    name: Web typecheck and build
+    name: Web typecheck build and browser acceptance
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     services:
-      screening-web-postgres:
+      postgres:
         image: postgres:17.7-alpine
         env:
           POSTGRES_PASSWORD: screening-test
-          POSTGRES_DB: screening_web
+          POSTGRES_DB: screening_web_test
         ports: ["55433:5432"]
         options: >-
-          --health-cmd "pg_isready -U postgres -d screening_web"
+          --health-cmd "pg_isready -U postgres -d screening_web_test"
           --health-interval 5s --health-timeout 3s --health-retries 15
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 3s --health-retries 15
     defaults:
       run:
         working-directory: apps/web
@@ -35,48 +40,56 @@ jobs:
           bun-version: '1.3.10'
       - run: bun install --frozen-lockfile
       - run: npm run typecheck
+      - run: ./node_modules/.bin/oxlint src/features/screening "src/app/api/ecom/[...path]/route.ts" "src/app/api/ecom/screening/[...path]/route.ts"
       - run: npm run build
         env:
           NEXT_PUBLIC_SENTRY_DISABLED: 'true'
           NEXT_TELEMETRY_DISABLED: '1'
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-go@v5
         with:
-          python-version: '3.12'
-      - run: python -m pip install -r apps/backend/requirements-screening-test.txt
-        working-directory: .
-      - run: python -m playwright install --with-deps chromium
-        working-directory: .
-      - name: Browser screening acceptance
+          go-version-file: apps/screening/go.mod
+          cache-dependency-path: |
+            apps/screening/go.sum
+            apps/ecom/go.sum
+      - name: Browser acceptance against Go API
         working-directory: .
         env:
-          PYTHONPATH: apps/backend
-          SCREENING_DATABASE_URL: postgresql+asyncpg://postgres:screening-test@127.0.0.1:55433/screening_web
+          SCREENING_DATABASE_URL: postgresql://postgres:screening-test@127.0.0.1:55433/screening_web_test?sslmode=disable
           SCREENING_STORAGE_DIR: /tmp/screening-browser-data
           SCREENING_INTERNAL_SECRET: ci-browser-test-secret-with-at-least-32-characters
+          SCREENING_BROWSER_FIXTURE: '1'
+          ECOM_BROWSER_FIXTURE: '1'
+          ECOM_INTERNAL_SECRET: ci-ecom-secret-with-at-least-32-characters
+          ECOM_TEST_REDIS_URL: redis://127.0.0.1:6379/15
+          ECOM_API_URL: http://127.0.0.1:19581
           SELLER_APP_ORIGIN: http://127.0.0.1:19443
           SELLER_API_URL: http://127.0.0.1:19580
-          ECOM_API_URL: http://127.0.0.1:19580
+          SCREENING_API_URL: http://127.0.0.1:19580
+          SCREENING_WEB_QA_URL: http://127.0.0.1:19443
           NEXT_PUBLIC_SENTRY_DISABLED: 'true'
         run: |
-          (cd apps/backend && python -m alembic -c alembic-screening.ini upgrade head)
-          python -m uvicorn tests.screening_browser_server:app --host 127.0.0.1 --port 19580 > /tmp/screening-api.log 2>&1 &
+          (cd apps/screening && go test -c -o /tmp/screening-fixture)
+          (cd apps/ecom && go test -c -o /tmp/ecom-fixture)
+          /tmp/ecom-fixture -test.run '^TestEcomBrowserFixture$' -test.timeout 5m > /tmp/ecom-api.log 2>&1 &
+          ecom_pid=$!
+          /tmp/screening-fixture -test.run '^TestBrowserFixture$' -test.timeout 5m > /tmp/screening-api.log 2>&1 &
           api_pid=$!
           npm --prefix apps/web run start -- --hostname 127.0.0.1 --port 19443 > /tmp/screening-web.log 2>&1 &
           web_pid=$!
-          trap 'kill "$api_pid" "$web_pid" 2>/dev/null || true' EXIT
+          trap 'kill "$api_pid" "$web_pid" "$ecom_pid" 2>/dev/null || true' EXIT
           for attempt in {1..60}; do
             if curl -fsS http://127.0.0.1:19443/dashboard/ecom/screening -o /dev/null; then break; fi
             sleep 1
           done
-          python apps/backend/tests/screening_browser.py
-          python apps/backend/tests/screening_monthly_browser.py
+          (cd apps/ecom && go test -count=1 -run '^TestBrowserScreening$' -v)
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: screening-browser-qa
           path: |
-            /tmp/screening-qa
+            /tmp/screening-go-qa
             /tmp/screening-api.log
+            /tmp/ecom-api.log
             /tmp/screening-web.log
   auth:
     name: Go authentication tests
@@ -88,8 +101,7 @@ jobs:
         env:
           POSTGRES_PASSWORD: test-password
           POSTGRES_DB: seller_test
-        ports:
-          - 5432:5432
+        ports: ["5432:5432"]
         options: >-
           --health-cmd "pg_isready -h 127.0.0.1 -U postgres -d seller_test"
           --health-interval 5s --health-timeout 3s --health-retries 15
@@ -99,66 +111,73 @@ jobs:
         with:
           go-version-file: apps/auth/go.mod
           cache-dependency-path: apps/auth/go.sum
-      - run: go test ./...
+      - run: go test -race ./...
         working-directory: apps/auth
         env:
           TEST_DATABASE_URL: postgres://postgres:test-password@127.0.0.1:5432/seller_test?sslmode=disable
-  backend:
-    name: Python backend tests
+  ecom:
+    name: Go e-commerce tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    services:
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 3s --health-retries 15
+    defaults:
+      run:
+        working-directory: apps/ecom
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: apps/ecom/go.mod
+          cache-dependency-path: apps/ecom/go.sum
+      - run: go test -race -count=1 ./...
+        env:
+          ECOM_TEST_REDIS_URL: redis://127.0.0.1:6379/15
+      - run: go vet ./...
+      - run: go build -trimpath ./...
+  screening:
+    name: Go screening PostgreSQL tests
     runs-on: ubuntu-latest
     timeout-minutes: 15
     services:
-      screening-postgres:
+      postgres:
         image: postgres:17.7-alpine
         env:
           POSTGRES_PASSWORD: screening-test
-          POSTGRES_DB: screening_test
+          POSTGRES_DB: screening_ci_test
         ports: ["55432:5432"]
         options: >-
-          --health-cmd "pg_isready -U postgres -d screening_test"
+          --health-cmd "pg_isready -U postgres -d screening_ci_test"
           --health-interval 5s --health-timeout 3s --health-retries 15
-      redis:
-        image: redis:7-alpine
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 3s --health-retries 15
+    defaults:
+      run:
+        working-directory: apps/screening
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-go@v5
         with:
-          python-version: '3.12'
-          cache: pip
-          cache-dependency-path: apps/backend/requirements.txt
-      - run: python -m pip install -r requirements.txt
-        working-directory: apps/backend
-      - run: python -m alembic -c alembic-screening.ini upgrade head
-        working-directory: apps/backend
+          go-version-file: apps/screening/go.mod
+          cache-dependency-path: apps/screening/go.sum
+      - run: go test -race -count=1 -v ./...
         env:
-          SCREENING_DATABASE_URL: postgresql+asyncpg://postgres:screening-test@127.0.0.1:55432/screening_test
-      - name: Verify product monthly migration preserves history
-        run: python scripts/verify-monthly-migration.py
-        working-directory: apps/backend
-        env:
-          SCREENING_MIGRATION_TEST_DATABASE_URL: postgresql+asyncpg://postgres:screening-test@127.0.0.1:55432/screening_monthly_migration_test
-      - run: python -m pytest -q
-        working-directory: apps/backend
-        env:
-          SCREENING_TEST_DATABASE_URL: postgresql+asyncpg://postgres:screening-test@127.0.0.1:55432/screening_test
-          DATABASE_URL: sqlite+aiosqlite:///./ci.db
-          REDIS_URL: redis://127.0.0.1:6379/0
+          SCREENING_TEST_DATABASE_URL: postgresql://postgres:screening-test@127.0.0.1:55432/screening_ci_test?sslmode=disable
+      - run: go vet ./...
+      - run: go build -trimpath ./...
   required:
     name: Dev CI required
     runs-on: ubuntu-latest
     timeout-minutes: 3
     if: always()
-    needs: [web, auth, backend]
+    needs: [web, auth, ecom, screening]
     steps:
-      - name: Require all checks to pass
+      - name: Require all checks
         env:
           WEB: ${{ needs.web.result }}
           AUTH: ${{ needs.auth.result }}
-          BACKEND: ${{ needs.backend.result }}
-        run: |
-          printf 'Web: %s\nAuth: %s\nBackend: %s\n' "$WEB" "$AUTH" "$BACKEND"
-          test "$WEB" = success && test "$AUTH" = success && test "$BACKEND" = success
+          ECOM: ${{ needs.ecom.result }}
+          SCREENING: ${{ needs.screening.result }}
+        run: test "$WEB" = success && test "$AUTH" = success && test "$ECOM" = success && test "$SCREENING" = success

@@ -5,18 +5,18 @@ import type { SellerSession } from '@/features/auth/session';
 export const runtime = 'nodejs';
 const uuid = '[0-9a-fA-F-]{36}';
 const routes = [
-  ['GET', 'summary|months|products|imports|policies|review-batches|profit/templates'],
+  ['GET', 'parents/monthly|summary|months|products|imports|policies|review-batches|profit/templates'],
   [
     'POST',
     'imports|policies|screen-runs|review-batches/preview|profit/calculate|profit/templates|profit/batches|exports'
   ],
-  ['GET', `products/${uuid}(/(observations|monthly|history|references|profit-scenarios))?`],
+  ['GET', `products/${uuid}(/(family|observations|monthly|history|references|profit-scenarios))?`],
   ['GET', `imports/${uuid}(/(preview|errors|source))?`],
   [
     'GET',
     `screen-runs/${uuid}|review-batches/${uuid}|jobs/${uuid}|exports/${uuid}/download|groups/[a-f0-9]{64}/products`
   ],
-  ['PATCH', `products/${uuid}/review`],
+  ['PATCH', `products/${uuid}/(review|category|parameters)`],
   ['PUT', `imports/${uuid}/mapping`],
   [
     'POST',
@@ -118,7 +118,7 @@ async function proxy(request: Request, { params }: { params: Promise<{ path: str
       signal: AbortSignal.timeout(upload ? 180000 : 120000)
     };
     const response = await fetch(
-      new URL(targetPath, process.env.ECOM_API_URL || 'http://127.0.0.1:18080'),
+      new URL(targetPath, process.env.SCREENING_API_URL || 'http://127.0.0.1:18090'),
       init
     );
     const responseHeaders = new Headers({ 'Cache-Control': 'no-store' });

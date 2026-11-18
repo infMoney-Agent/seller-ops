@@ -65,6 +65,9 @@ func readBody(w http.ResponseWriter, r *http.Request) (Object, error) {
 	dec.UseNumber()
 	var b Object
 	if e := dec.Decode(&b); e != nil {
+		if e == io.EOF {
+			return Object{}, nil
+		}
 		var oversized *http.MaxBytesError
 		if errors.As(e, &oversized) {
 			return nil, fail(413, "JSON 请求超过256KB")
@@ -104,7 +107,7 @@ func respond(w http.ResponseWriter, v any, e error) {
 		json.NewEncoder(w).Encode(Object{"code": http.StatusText(status), "message": message, "request_id": uuid()})
 		return
 	}
-	json.NewEncoder(w).Encode(v)
+	json.NewEncoder(w).Encode(publicJSON(v))
 }
 
 func verifyIdentity(r *http.Request, secret string, now time.Time) (identity, error) {
@@ -138,6 +141,10 @@ func verifyIdentity(r *http.Request, secret string, now time.Time) (identity, er
 }
 func (s *service) handler() http.Handler {
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /openapi.json", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.Write(openAPIData)
+	})
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 		defer cancel()
@@ -163,6 +170,13 @@ func (s *service) handler() http.Handler {
 		}()
 		v, e := s.route(w, r)
 		if v != nil || e != nil {
+			if e == nil && r.Method == "POST" {
+				if result, ok := v.(map[string]any); ok && result["job_id"] != nil && result["state"] == "queued" {
+					w.Header().Set("Content-Type", "application/json; charset=utf-8")
+					w.Header().Set("Cache-Control", "no-store")
+					w.WriteHeader(http.StatusAccepted)
+				}
+			}
 			respond(w, v, e)
 		}
 	})
@@ -204,6 +218,18 @@ func (s *service) product(ctx context.Context, a identity, id string) (Object, e
 	return s.one(ctx, "SELECT to_jsonb(p) FROM ps_products p WHERE tenant_id=$1 AND id=$2::uuid", a.Tenant, id)
 }
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "health" {
+		client := http.Client{Timeout: 4 * time.Second}
+		response, e := client.Get("http://127.0.0.1:8090/healthz")
+		if e != nil {
+			os.Exit(1)
+		}
+		defer response.Body.Close()
+		if response.StatusCode != 200 {
+			os.Exit(1)
+		}
+		return
+	}
 	cfg, e := loadConfig()
 	if e != nil {
 		log.Fatal(e)

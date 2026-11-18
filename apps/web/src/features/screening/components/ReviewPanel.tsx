@@ -42,6 +42,9 @@ export default function ReviewPanel({
   busy: boolean;
 }) {
   const [mode, setMode] = useState('direct');
+  const [scope,setScope]=useState('selected');
+  const [action,setAction]=useState('review');
+  const [category,setCategory]=useState('');
   const [status, setStatus] = useState('kept');
   const [reason, setReason] = useState('');
   const [note, setNote] = useState('');
@@ -62,6 +65,9 @@ export default function ReviewPanel({
         已跨页选择 {selected.length} 个商品。每批最多 100 个，仅处理待复核商品。先预览，再确认。
       </p>
       <div className='grid gap-3 md:grid-cols-3'>
+        <Field label='处理范围'><select aria-label='处理范围' className='rounded border bg-transparent p-2' value={scope} onChange={e=>{setScope(e.target.value);setPreview(null);}}><option value='selected'>仅明确勾选的子体</option><option value='family'>首个已选子体的同父体子体</option></select></Field>
+        <Field label='处理动作'><select aria-label='处理动作' className='rounded border bg-transparent p-2' value={action} onChange={e=>{setAction(e.target.value);setPreview(null);}}><option value='review'>人工复核 / 排除</option><option value='categorize'>人工归类（不改变结论）</option></select></Field>
+        {action==='categorize' && <Field label='人工分类'><Input value={category} onChange={e=>{setCategory(e.target.value);setPreview(null);}} /></Field>}
         <Field label='复核方式'>
           <select
             className='rounded border bg-transparent p-2'
@@ -171,7 +177,8 @@ export default function ReviewPanel({
           onClick={() =>
             void act(async () => {
               const p = await request<BatchPreview>('/review-batches/preview', 'POST', {
-                product_ids: selected,
+                product_ids: scope==='family' ? selected.slice(0,1) : selected,
+                scope,action,category:action==='categorize' ? category : null,
                 mode,
                 reference_product_id: reference,
                 status,
@@ -192,7 +199,7 @@ export default function ReviewPanel({
             即将采用：
             <Badge value={preview.status} />
           </h3>
-          <p>{preview.reason}</p>
+          <p>{preview.action==='categorize' ? `将分类为：${preview.category}` : preview.reason}</p><p className='text-sm'>实际目标 {preview.targets.length} 个；范围：{preview.scope==='family' ? '同父体子体（仅以下明确列出的目标）' : '已选子体'}</p>
           <p className='text-muted-foreground text-sm'>
             有效至 {new Date(preview.expires_at).toLocaleString()}
           </p>

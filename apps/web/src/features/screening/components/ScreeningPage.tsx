@@ -20,11 +20,14 @@ import ImportPanel from './ImportPanel';
 import ReviewPanel from './ReviewPanel';
 import ProfitPanel from './ProfitPanel';
 import PolicyPanel from './PolicyPanel';
+import ProductParameters from './ProductParameters';
+import FamilyPanel from './FamilyPanel';
+import ParentMonthlyPanel from './ParentMonthlyPanel';
 import MonthlyHistory, { periodLabels, sourceLabels } from './MonthlyHistory';
 import type { MonthOption } from '../types';
 import { Badge, Button, DataBlock, Field, Input, formatMoney, type Action } from './shared';
 
-const tabs = ['商品库', '导入记录', '批量复核', '利润测算', '规则与历史'];
+const tabs = ['商品库', '导入记录', '批量复核', '利润测算', '规则与历史', '父体数据'];
 export default function ScreeningPage() {
   const session = useSellerSession();
   const client = useQueryClient();
@@ -147,7 +150,7 @@ export default function ScreeningPage() {
               >
                 {row.original.asin}
               </button>
-              <p className='line-clamp-2'>{row.original.title_zh || row.original.title}</p>
+              <p className='line-clamp-2'>{row.original.title_zh || row.original.title}</p><p className='text-xs'>父体：{row.original.parent_asin || '未知'} {row.original.manual_category && `· 人工分类：${row.original.manual_category}`}</p>
               <p className='text-muted-foreground text-xs'>
                 {row.original.stat_month?.slice(0, 7)} ·{' '}
                 {periodLabels[row.original.period_type || ''] || '暂无分期数据'}
@@ -341,7 +344,7 @@ export default function ScreeningPage() {
             <>
               <div className='grid grid-cols-2 gap-3 md:grid-cols-4'>
                 {[
-                  ['source_rows', '来源行数'],
+                  ['source_rows', '子体来源行数'],
                   ['products', '去重商品'],
                   ['displayed', '折叠展示'],
                   ['pending', '待复核']
@@ -653,6 +656,7 @@ export default function ScreeningPage() {
                   act={act}
                   busy={busy}
                   close={() => setFocus(null)}
+                  onChooseFamily={(ids)=>{setSelected(Object.fromEntries(ids.map(id=>[id,true])));setTab(2);}}
                   onCalculate={(p) => {
                     setFocus(p);
                     setTab(3);
@@ -674,6 +678,7 @@ export default function ScreeningPage() {
               busy={busy}
             />
           )}
+          {tab === 5 && <ParentMonthlyPanel />}
           {tab === 4 && <PolicyPanel selected={selectedIds} act={act} watch={watch} busy={busy} />}
         </div>
       </PageContainer>
@@ -686,18 +691,21 @@ function SingleReview({
   act,
   busy,
   close,
-  onCalculate
+  onCalculate,
+  onChooseFamily
 }: {
   product: Product;
   act: Action;
   busy: boolean;
   close: () => void;
   onCalculate: (product: Product) => void;
+  onChooseFamily: (ids:string[])=>void;
 }) {
   const [status, setStatus] = useState<ReviewStatus>(
     product.review_status === 'pending' ? 'kept' : product.review_status
   );
   const [reason, setReason] = useState(product.review_reason);
+  const [manualCategory,setManualCategory]=useState(product.manual_category || '');
   const [note, setNote] = useState(product.review_note);
   const history = useScreeningQuery<unknown>(`/products/${product.id}/history`);
   const observations = useScreeningQuery<unknown>(`/products/${product.id}/observations`);
@@ -710,7 +718,10 @@ function SingleReview({
         </Button>
       </div>
       <p>{product.title}</p>
+      <div className='flex flex-wrap items-end gap-2'><Field label='人工分类'><Input value={manualCategory} onChange={e=>setManualCategory(e.target.value)} /></Field><Button variant='outline' disabled={busy || !manualCategory.trim()} onClick={()=>void act(async()=>{await request(`/products/${product.id}/category`,'PATCH',{expected_data_revision:product.data_revision,expected_review_revision:product.review_revision,category:manualCategory});close();},'人工分类已保存')}>保存人工分类</Button></div>
       <DataBlock title='商品规格' value={product.specs} />
+      <ProductParameters product={product} act={act} busy={busy} close={close} />
+      <FamilyPanel product={product} choose={onChooseFamily} />
       <MonthlyHistory product={product} onCalculate={onCalculate} />
       <div className='grid gap-3 md:grid-cols-3'>
         <Field label='人工结论'>

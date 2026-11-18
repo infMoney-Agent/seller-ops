@@ -17,6 +17,7 @@ export default function ImportPanel({
   const [file, setFile] = useState<File | null>(null);
   const [date, setDate] = useState('');
   const [period, setPeriod] = useState('');
+  const [salesScope,setSalesScope]=useState('unknown');
   const [sourceType, setSourceType] = useState('sellersprite');
   const [periodType, setPeriodType] = useState('calendar_month');
   const [periodStart, setPeriodStart] = useState('');
@@ -41,6 +42,7 @@ export default function ImportPanel({
             onChange={(e) => setFile(e.target.files?.[0] || null)}
           />
         </Field>
+        <Field label='缺省销量口径'><select className='rounded border bg-transparent p-2' value={salesScope} onChange={e=>setSalesScope(e.target.value)}><option value='unknown'>未知（不当作子体销量）</option><option value='child'>已确认子体销量</option><option value='parent'>已确认父体汇总（必须有父ASIN）</option></select></Field>
         <Field label='数据来源'>
           <select
             className='rounded border bg-transparent p-2'
@@ -100,6 +102,7 @@ export default function ImportPanel({
               data.set('file', file);
               data.set('source_period', period);
               data.set('observed_on', date);
+              data.set('default_sales_scope',salesScope);
               data.set('source_type', sourceType);
               data.set('period_type', periodType);
               data.set('period_start', periodType === 'custom' ? periodStart : '');
@@ -156,6 +159,7 @@ export default function ImportPanel({
                       setMapping(JSON.stringify(item.mapping, null, 2));
                       setDate(item.observed_on || '');
                       setPeriod(item.source_period);
+                      setSalesScope(item.default_sales_scope);
                       setSourceType(item.source_type);
                       setPeriodType(item.period_type);
                       setPeriodStart(item.period_start || '');
@@ -199,6 +203,7 @@ export default function ImportPanel({
                 void act(async () => {
                   const job = await request<JobCreated>(`/imports/${active.id}/mapping`, 'PUT', {
                     mapping: JSON.parse(mapping),
+                  default_sales_scope:salesScope,
                     source_type: sourceType,
                     period_type: periodType,
                     period_start: periodType === 'custom' ? periodStart || null : null,

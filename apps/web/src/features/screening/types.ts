@@ -3,6 +3,22 @@ export type ReviewStatus = 'pending' | 'kept' | 'excluded' | 'unsure';
 export interface Product {
   id: string;
   asin: string;
+  parent_asin: string | null;
+  manual_category: string;
+  material: string | null;
+  weight_g: string | number | null;
+  package_weight_g: string | number | null;
+  package_length_cm: string | number | null;
+  package_width_cm: string | number | null;
+  package_height_cm: string | number | null;
+  units_per_pack: number | null;
+  carton_units: number | null;
+  carton_weight_g: string | number | null;
+  carton_length_cm: string | number | null;
+  carton_width_cm: string | number | null;
+  carton_height_cm: string | number | null;
+  sales_scope: 'child' | 'parent' | 'unknown' | null;
+  reported_monthly_sales: number | null;
   title: string;
   title_zh: string | null;
   image_url: string | null;
@@ -54,6 +70,7 @@ export interface ImportRecord {
   period_type: string;
   period_start: string | null;
   period_end: string | null;
+  default_sales_scope: string;
   mapping: Record<string, string>;
   counts: { total?: number; valid?: number; invalid?: number };
 }
@@ -92,6 +109,9 @@ export interface Target {
 export interface BatchPreview {
   id: string;
   expires_at: string;
+  action?: string;
+  category?: string | null;
+  scope?: string;
   targets: Target[];
   status: string;
   reason: string;
@@ -166,6 +186,8 @@ export interface ProfitTemplate {
 export interface MonthlyRecord {
   id: string;
   revision: number;
+  sales_scope: string;
+  parent_asin_snapshot: string | null;
   stat_month: string;
   period_type: string;
   period_start: string;
@@ -187,3 +209,6 @@ export interface MonthOption {
   source_type: string;
   products: number;
 }
+
+export interface ParentMonthly { id:string;parent_asin:string;stat_month:string;period_type:string;period_start:string;period_end:string;observed_on:string;source_type:string;monthly_sales:number|null;monthly_revenue:string|null }
+export interface FamilyResult extends PageResult<Product> {parent_asin:string|null;known_child_sales_total:number|null;unknown_child_count:number;aggregate_label:string;parent_monthly:ParentMonthly[]}

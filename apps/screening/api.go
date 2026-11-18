@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -24,17 +25,16 @@ func page(r *http.Request) (int, int) {
 }
 func (s *service) list(r *http.Request, table, where string, args ...any) (any, error) {
 	p, n := page(r)
-	ctx := r.Context()
 	var total int64
-	if e := s.db.QueryRow(ctx, "SELECT count(*) FROM "+table+" WHERE "+where, args...).Scan(&total); e != nil {
+	if e := s.db.QueryRow(r.Context(), "SELECT count(*) FROM "+table+" WHERE "+where, args...).Scan(&total); e != nil {
 		return nil, e
 	}
 	order := "created_at DESC,id DESC"
 	if table == "ps_import_rows" {
-		order = "row_no,id"
+		order = "member_path,sheet_name,row_no,id"
 	}
 	args = append(args, n, (p-1)*n)
-	items, e := s.query(ctx, fmt.Sprintf("SELECT to_jsonb(t) FROM %s t WHERE %s ORDER BY %s LIMIT $%d OFFSET $%d", table, where, order, len(args)-1, len(args)), args...)
+	items, e := s.query(r.Context(), fmt.Sprintf("SELECT to_jsonb(t) FROM %s t WHERE %s ORDER BY %s LIMIT $%d OFFSET $%d", table, where, order, len(args)-1, len(args)), args...)
 	return Object{"items": items, "total": total, "page": p, "page_size": n}, e
 }
 func (s *service) route(w http.ResponseWriter, r *http.Request) (any, error) {
@@ -42,12 +42,18 @@ func (s *service) route(w http.ResponseWriter, r *http.Request) (any, error) {
 	parts := strings.Split(path, "/")
 	a := actor(r)
 	ctx := r.Context()
+	if len(parts) > 1 && parts[0] != "profit" && parts[0] != "parents" && parts[0] != "groups" && parts[1] != "preview" && !uuidPattern.MatchString(parts[1]) {
+		return nil, fail(422, "资源ID无效")
+	}
+	if r.Method == "POST" && path == "imports" {
+		return s.upload(w, r)
+	}
 	if r.Method == "GET" {
 		switch path {
 		case "products":
 			return s.products(r)
 		case "summary":
-			return s.one(ctx, "SELECT jsonb_build_object('products',count(*),'unique_products',count(*),'displayed',count(*),'pending',count(*) FILTER(WHERE review_status='pending'),'kept',count(*) FILTER(WHERE review_status='kept'),'excluded',count(*) FILTER(WHERE review_status='excluded'),'unsure',count(*) FILTER(WHERE review_status='unsure')) FROM ps_products WHERE tenant_id=$1", a.Tenant)
+			return s.summary(r)
 		case "imports":
 			return s.list(r, "ps_imports", "tenant_id=$1", a.Tenant)
 		case "review-batches":
@@ -56,11 +62,21 @@ func (s *service) route(w http.ResponseWriter, r *http.Request) (any, error) {
 			kind := "screening"
 			if path == "profit/templates" {
 				kind = "profit_template"
+			} else if e := s.ensurePolicy(ctx, a); e != nil {
+				return nil, e
 			}
 			items, e := s.query(ctx, "SELECT to_jsonb(c)||jsonb_build_object('params',config) FROM ps_configs c WHERE tenant_id=$1 AND kind=$2 ORDER BY version DESC", a.Tenant, kind)
 			return Object{"items": items}, e
 		case "parents/monthly":
-			return s.list(r, "ps_parent_monthly", "tenant_id=$1", a.Tenant)
+			where := "tenant_id=$1"
+			args := []any{a.Tenant}
+			for _, key := range []string{"parent_asin", "stat_month"} {
+				if value := r.URL.Query().Get(key); value != "" {
+					args = append(args, value)
+					where += fmt.Sprintf(" AND %s=$%d", key, len(args))
+				}
+			}
+			return s.list(r, "ps_parent_monthly", where, args...)
 		case "months":
 			items, e := s.query(ctx, "SELECT jsonb_build_object('stat_month',stat_month,'period_type',period_type,'source_type',source_type,'products',count(DISTINCT product_id)) FROM ps_product_monthly WHERE tenant_id=$1 GROUP BY stat_month,period_type,source_type ORDER BY stat_month DESC", a.Tenant)
 			return Object{"items": items}, e
@@ -69,34 +85,50 @@ func (s *service) route(w http.ResponseWriter, r *http.Request) (any, error) {
 			id := parts[1]
 			switch parts[0] {
 			case "products":
+				if _, e := s.product(ctx, a, id); e != nil {
+					return nil, e
+				}
 				if len(parts) == 2 {
-					items, e := s.productView(ctx, a, id)
-					return items, e
+					return s.productView(ctx, a, id)
 				}
 				switch parts[2] {
 				case "monthly":
-					return s.list(r, "ps_product_monthly", "tenant_id=$1 AND product_id=$2::uuid", a.Tenant, id)
+					return s.monthlyList(r, id)
 				case "observations":
 					return s.list(r, "ps_import_rows", "tenant_id=$1 AND product_id=$2::uuid", a.Tenant, id)
 				case "history":
 					return s.list(r, "ps_review_events", "tenant_id=$1 AND product_id=$2::uuid", a.Tenant, id)
 				case "references":
-					items, e := s.query(ctx, "SELECT to_jsonb(p) FROM ps_products p WHERE tenant_id=$1 AND id<>$2::uuid AND review_status<>'pending' AND machine_direction IS NOT DISTINCT FROM (SELECT machine_direction FROM ps_products WHERE tenant_id=$1 AND id=$2::uuid) ORDER BY reviewed_at DESC,id LIMIT 100", a.Tenant, id)
+					items, e := s.query(ctx, "SELECT to_jsonb(p)||jsonb_build_object('direction',machine_direction) FROM ps_products p WHERE tenant_id=$1 AND id<>$2::uuid AND review_status<>'pending' AND machine_direction IS NOT DISTINCT FROM (SELECT machine_direction FROM ps_products WHERE tenant_id=$1 AND id=$2::uuid) ORDER BY reviewed_at DESC,id LIMIT 100", a.Tenant, id)
 					return Object{"items": items}, e
 				case "family":
 					return s.family(r, id)
 				case "profit-scenarios":
-					return s.list(r, "ps_profit_scenarios", "tenant_id=$1 AND product_id=$2::uuid", a.Tenant, id)
+					return s.profitScenarios(r, id)
 				}
 			case "imports":
 				if len(parts) == 2 {
 					return s.one(ctx, "SELECT to_jsonb(i) FROM ps_imports i WHERE tenant_id=$1 AND id=$2::uuid", a.Tenant, id)
 				}
+				if _, e := s.one(ctx, "SELECT to_jsonb(i) FROM ps_imports i WHERE tenant_id=$1 AND id=$2::uuid", a.Tenant, id); e != nil {
+					return nil, e
+				}
 				if parts[2] == "preview" {
 					return s.list(r, "ps_import_rows", "tenant_id=$1 AND import_id=$2::uuid", a.Tenant, id)
 				}
-			case "jobs", "screen-runs", "review-batches":
-				return s.one(ctx, "SELECT to_jsonb(j) FROM ps_jobs j WHERE tenant_id=$1 AND id=$2::uuid", a.Tenant, id)
+				return s.importDownload(w, r, id, parts[2])
+			case "jobs", "screen-runs":
+				return s.one(ctx, "SELECT to_jsonb(j)-'payload'-'lease_token'-'request_hash' FROM ps_jobs j WHERE tenant_id=$1 AND id=$2::uuid AND kind<>'request'", a.Tenant, id)
+			case "review-batches":
+				return s.one(ctx, "SELECT to_jsonb(j)-'lease_token' FROM ps_jobs j WHERE tenant_id=$1 AND id=$2::uuid AND kind='review'", a.Tenant, id)
+			case "exports":
+				if len(parts) == 3 && parts[2] == "download" {
+					return s.exportDownload(w, r, id)
+				}
+			case "groups":
+				if len(parts) == 3 && parts[2] == "products" {
+					return s.products(r)
+				}
 			}
 		}
 	}
@@ -105,77 +137,82 @@ func (s *service) route(w http.ResponseWriter, r *http.Request) (any, error) {
 		if e != nil {
 			return nil, e
 		}
+		for _, key := range []string{"expected_data_revision", "expected_review_revision", "expected_monthly_revision"} {
+			if raw, present := body[key]; present {
+				if raw == nil && key == "expected_monthly_revision" {
+					continue
+				}
+				number, ok := raw.(json.Number)
+				if !ok {
+					return nil, fail(422, "版本必须是非负整数")
+				}
+				if n, e := strconv.ParseInt(string(number), 10, 64); e != nil || n < 0 {
+					return nil, fail(422, "版本必须是非负整数")
+				}
+			}
+		}
+		for _, key := range []string{"product_id", "monthly_id", "template_id", "reference_product_id"} {
+			if raw := body[key]; raw != nil && !uuidPattern.MatchString(str(raw)) {
+				return nil, fail(422, "商品或引用ID无效")
+			}
+		}
 		if path == "profit/calculate" {
 			return s.calculateRequest(ctx, a, body)
 		}
 		key := r.Header.Get("Idempotency-Key")
 		if key == "" || len(key) > 200 {
-			return nil, fail(422, "修改请求需要有效的Idempotency-Key")
+			return nil, fail(422, "修改请求需要Idempotency-Key")
 		}
 		a.RequestKey = key
 		a.RequestHash = shaDigest(append([]byte(r.Method+" "+r.URL.RequestURI()+"\n"), encoded(body)...))
-		if path == "screen-runs" {
-			return s.enqueueScreen(ctx, a, body, "")
-		}
-		if path == "policies" || path == "profit/templates" {
+		switch path {
+		case "policies", "profit/templates":
 			return s.createConfig(ctx, a, path, body)
+		case "screen-runs":
+			if e = s.ensurePolicy(ctx, a); e != nil {
+				return nil, e
+			}
+			return s.enqueueScreen(ctx, a, body, "")
+		case "review-batches/preview":
+			return s.previewBatch(ctx, a, body)
+		case "exports":
+			return s.queueExport(ctx, a, body)
+		case "profit/batches":
+			return s.queueProfit(ctx, a, body)
 		}
-		if len(parts) == 3 && parts[0] == "products" {
-			switch parts[2] {
-			case "review", "category", "parameters":
-				return s.mutateProduct(ctx, a, parts[1], parts[2], body)
-			case "profit-scenarios":
-				return s.saveProfit(ctx, a, parts[1], body)
+		if len(parts) == 3 {
+			switch parts[0] {
+			case "products":
+				switch parts[2] {
+				case "review", "category", "parameters":
+					return s.mutateProduct(ctx, a, parts[1], parts[2], body)
+				case "profit-scenarios":
+					return s.saveProfit(ctx, a, parts[1], body)
+				}
+			case "imports":
+				if parts[2] == "mapping" || parts[2] == "commit" {
+					return s.editImport(ctx, a, parts[1], body, parts[2] == "commit")
+				}
+			case "policies":
+				if parts[2] == "activate" || parts[2] == "test" {
+					return s.policyAction(ctx, a, parts[1], parts[2], body)
+				}
+			case "review-batches":
+				if parts[2] == "apply" || parts[2] == "undo" {
+					return s.applyBatch(ctx, a, parts[1], parts[2] == "undo")
+				}
+			case "jobs":
+				if parts[2] == "retry" {
+					return s.retryJob(ctx, a, parts[1])
+				}
 			}
 		}
 	}
-	return nil, fail(404, "Go 初筛接口尚未实现或不存在")
+	return nil, fail(404, "初筛接口不存在")
 }
-
-const productProjection = "to_jsonb(p)||jsonb_build_object('monthly_id',m.id,'monthly_revision',m.revision,'stat_month',m.stat_month,'period_type',m.period_type,'period_start',m.period_start,'period_end',m.period_end,'source_type',m.source_type,'sales_scope',m.sales_scope,'price_usd',m.price_usd::text,'reported_monthly_sales',m.monthly_sales,'monthly_sales',CASE WHEN m.sales_scope='child' THEN m.monthly_sales END,'monthly_revenue',CASE WHEN m.sales_scope='child' THEN m.monthly_revenue::text END,'review_count',m.review_count,'rating',m.rating::text,'bsr_rank',m.bsr_rank,'decision',p.machine_decision,'recommendation',p.machine_recommendation,'direction',p.machine_direction,'group_key',p.machine_group_key,'reasons',p.machine_reasons,'profit_output',q.output,'profit_data_revision',q.product_data_revision,'has_reference',EXISTS(SELECT 1 FROM ps_products ref WHERE ref.tenant_id=p.tenant_id AND ref.id<>p.id AND ref.machine_direction=p.machine_direction AND ref.review_status<>'pending'))"
-const productJoins = " LEFT JOIN ps_product_monthly m ON m.tenant_id=p.tenant_id AND m.id=p.current_monthly_id LEFT JOIN LATERAL(SELECT output,product_data_revision FROM ps_profit_scenarios q WHERE q.tenant_id=p.tenant_id AND q.product_id=p.id ORDER BY created_at DESC,id DESC LIMIT 1) q ON true "
-
 func (s *service) productView(ctx context.Context, a identity, id string) (Object, error) {
-	return s.one(ctx, "SELECT "+productProjection+" FROM ps_products p "+productJoins+" WHERE p.tenant_id=$1 AND p.id=$2::uuid", a.Tenant, id)
-}
-func (s *service) products(r *http.Request) (any, error) {
-	a := actor(r)
-	p, n := page(r)
-	args := []any{a.Tenant}
-	where := "p.tenant_id=$1"
-	q := r.URL.Query()
-	for key, column := range map[string]string{"review_status": "p.review_status", "decision": "p.machine_decision", "recommendation": "p.machine_recommendation", "category": "p.category", "seller_region": "p.seller_region", "direction": "p.machine_direction"} {
-		if value := q.Get(key); value != "" {
-			args = append(args, value)
-			where += fmt.Sprintf(" AND %s=$%d", column, len(args))
-		}
-	}
-	if search := q.Get("search"); search != "" {
-		args = append(args, "%"+search+"%")
-		where += fmt.Sprintf(" AND (p.asin ILIKE $%d OR p.title ILIKE $%d)", len(args), len(args))
-	}
-	var total int64
-	if e := s.db.QueryRow(r.Context(), "SELECT count(*) FROM ps_products p WHERE "+where, args...).Scan(&total); e != nil {
-		return nil, e
-	}
-	args = append(args, n, (p-1)*n)
-	items, e := s.query(r.Context(), fmt.Sprintf("SELECT %s FROM ps_products p %s WHERE %s ORDER BY p.updated_at DESC,p.id LIMIT $%d OFFSET $%d", productProjection, productJoins, where, len(args)-1, len(args)), args...)
-	return Object{"items": items, "page": p, "page_size": n, "total": total}, e
-}
-func (s *service) family(r *http.Request, id string) (any, error) {
-	a := actor(r)
-	p, e := s.product(r.Context(), a, id)
-	if e != nil {
-		return nil, e
-	}
-	parent := str(p["parent_asin"])
-	if parent == "" {
-		return Object{"parent_asin": nil, "items": []Object{}, "total": 0, "page": 1, "page_size": 100, "parent_monthly": []Object{}, "known_child_sales_total": nil, "unknown_child_count": 0}, nil
-	}
-	items, e := s.query(r.Context(), "SELECT "+productProjection+" FROM ps_products p "+productJoins+" WHERE p.tenant_id=$1 AND p.marketplace=$2 AND p.parent_asin=$3 ORDER BY p.asin LIMIT 100", a.Tenant, p["marketplace"], parent)
-	if e != nil {
-		return nil, e
-	}
-	parents, e := s.query(r.Context(), "SELECT to_jsonb(m) FROM ps_parent_monthly m WHERE tenant_id=$1 AND parent_asin=$2 ORDER BY stat_month DESC LIMIT 100", a.Tenant, parent)
-	return Object{"parent_asin": parent, "items": items, "total": len(items), "page": 1, "page_size": 100, "parent_monthly": parents, "known_child_sales_total": nil, "unknown_child_count": 0, "aggregate_label": "仅可比较同来源、同周期且明确为子体的销量"}, e
+	q := newProductQuery(a, nil)
+	q.where += " AND p.id=$2::uuid"
+	q.args = append(q.args, id)
+	return s.one(ctx, "SELECT "+productProjection+" FROM ps_products p "+q.joins+" WHERE "+q.where, q.args...)
 }
