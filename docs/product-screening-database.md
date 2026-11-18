@@ -1,6 +1,6 @@
 # 产品初筛数据库设计
 
-目标实现：独立 Go 服务 `apps/screening`，独立 PostgreSQL 数据库 `seller_screening` 和业务账号。不得将业务表放入用户管理数据库 `seller_ops` 或 Casdoor 数据库，也不将初筛路由放进认证服务。
+目标实现：统一 Go 业务进程内的初筛模块 `apps/backend/internal/screening`，独立 PostgreSQL 数据库 `seller_screening` 和业务账号。不得将业务表放入用户管理数据库 `seller_ops` 或 Casdoor 数据库，也不将初筛路由放进认证服务。
 
 保留九张业务表。迁移版本跟踪表属于部署元数据，不计入业务表数量。
 
@@ -58,7 +58,7 @@ Next.js 校验登录与工作区，再向初筛 Go 服务签名传递身份。�
 
 ## 迁移位置和当前状态
 
-Go 迁移源位于 `apps/screening/migrations`，通过 `screening migrate` 执行，无需 Python/Alembic 运行时。支持新库顺序迁移，也能接管已有的 `screening_0001` 至 `screening_0004` 版本。
+Go 迁移源位于 `apps/backend/internal/screening/migrations`，通过 `seller-backend migrate` 执行，无需 Python/Alembic 运行时。支持新库顺序迁移，也能接管已有的 `screening_0001` 至 `screening_0004` 版本。
 
 Go 导入、父子体口径、单条/批量复核、条件撤销、利润、导出及规则任务已通过独立数据库和浏览器测试。第五步 Go 迁移接管旧任务。前端、Compose 和 CI 已切换 Go；本轮未合入 dev 或执行生产部署。完整验证边界见 Go 后端迁移说明。
 

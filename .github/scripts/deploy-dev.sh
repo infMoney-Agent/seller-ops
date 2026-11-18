@@ -40,33 +40,34 @@ fi
 IFS= read -r actor
 IFS= read -r token
 test -n "$actor" && test -n "$token"
-export DOCKER_CONFIG="$(mktemp -d "$STATE_DIR/registry.XXXXXX")"
-cleanup() {
-  rm -f "$DOCKER_CONFIG/config.json"
-  rmdir "$DOCKER_CONFIG"
-}
-trap cleanup EXIT
-printf '%s\n' "$token" | docker login ghcr.io -u "$actor" --password-stdin >/dev/null
+if [[ -z ${BUILD_IMAGE_SCRIPT:-} ]]; then
+  export DOCKER_CONFIG="$(mktemp -d "$STATE_DIR/registry.XXXXXX")"
+  cleanup() {
+    case "$DOCKER_CONFIG" in
+      "$STATE_DIR"/registry.*) rm -r -- "$DOCKER_CONFIG" ;;
+    esac
+  }
+  trap cleanup EXIT
+  printf '%s\n' "$token" | docker login ghcr.io -u "$actor" --password-stdin >/dev/null
+fi
 unset token
 
 mkdir -p "$release"
 git -C "$REPO_DIR" archive "$revision" | tar -xf - -C "$release"
 prefix=ghcr.io/infmoney-agent/seller-ops
+if [[ -n ${BUILD_IMAGE_SCRIPT:-} ]]; then
+  prefix=seller-ops-dev
+  "$BUILD_IMAGE_SCRIPT" "$release" "$revision" "$prefix"
+fi
 cat >"$release/images.yaml" <<YAML
 services:
   web:
     image: $prefix-web:$revision
   api:
     image: $prefix-auth:$revision
-  ecom-api:
+  backend:
     image: $prefix-backend:$revision
-  screening-migrate:
-    image: $prefix-screening:$revision
-  screening-api:
-    image: $prefix-screening:$revision
-  screening-worker:
-    image: $prefix-screening:$revision
-  ecom-worker:
+  backend-migrate:
     image: $prefix-backend:$revision
 YAML
 
@@ -83,7 +84,13 @@ healthy() {
   local directory=$1
   local running
   running=$(compose "$directory" ps --status running --services) || return 1
-  for service in proxy casdoor db api web ecom-api ecom-redis ecom-worker screening-api screening-worker; do
+  local business_services
+  if compose "$directory" config --services | grep -Fxq backend; then
+    business_services="backend ecom-redis"
+  else
+    business_services="ecom-api ecom-redis ecom-worker ecom-beat"
+  fi
+  for service in proxy casdoor db api web $business_services; do
     grep -Fxq "$service" <<<"$running" || return 1
   done
   curl -fsS --max-time 4 -H 'Host: localhost:18443' \
@@ -91,9 +98,12 @@ healthy() {
   [[ $(curl -sS --max-time 4 -o /dev/null -w '%{http_code}' \
     -H 'Host: localhost:18443' "http://$HEALTH_ADDRESS:18443/api/auth/session") == 401 ]] &&
   curl -fsS --max-time 4 -H 'Host: localhost:18444' \
-    "http://$HEALTH_ADDRESS:18444/.well-known/openid-configuration" -o /dev/null &&
-  compose "$directory" exec -T ecom-api ecom health &&
-  compose "$directory" exec -T screening-api screening health
+    "http://$HEALTH_ADDRESS:18444/.well-known/openid-configuration" -o /dev/null || return 1
+  if compose "$directory" config --services | grep -Fxq backend; then
+    compose "$directory" exec -T backend seller-backend health
+  else
+    compose "$directory" exec -T web node -e "fetch('http://ecom-api:8000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+  fi
 }
 
 wait_healthy() {
@@ -107,7 +117,9 @@ wait_healthy() {
 
 previous=$(readlink "$current")
 compose "$release" config --quiet
-compose "$release" pull web api ecom-api ecom-worker screening-api screening-worker screening-migrate screening-storage-init screening-db-init
+if [[ -z ${BUILD_IMAGE_SCRIPT:-} ]]; then
+  compose "$release" pull web api backend backend-migrate screening-db-init screening-storage-init
+fi
 if compose "$release" up -d --no-build --pull never --remove-orphans && wait_healthy "$release"; then
   rm -f "$STATE_DIR/current.next"
   ln -s "$release" "$STATE_DIR/current.next"

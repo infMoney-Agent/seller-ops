@@ -47,10 +47,9 @@ jobs:
           NEXT_TELEMETRY_DISABLED: '1'
       - uses: actions/setup-go@v5
         with:
-          go-version-file: apps/screening/go.mod
+          go-version-file: apps/backend/go.mod
           cache-dependency-path: |
-            apps/screening/go.sum
-            apps/ecom/go.sum
+            apps/backend/go.sum
       - name: Browser acceptance against Go API
         working-directory: .
         env:
@@ -68,8 +67,8 @@ jobs:
           SCREENING_WEB_QA_URL: http://127.0.0.1:19443
           NEXT_PUBLIC_SENTRY_DISABLED: 'true'
         run: |
-          (cd apps/screening && go test -c -o /tmp/screening-fixture)
-          (cd apps/ecom && go test -c -o /tmp/ecom-fixture)
+          (cd apps/backend && go test ./internal/screening -c -o /tmp/screening-fixture)
+          (cd apps/backend && go test ./internal/ecom -c -o /tmp/ecom-fixture)
           /tmp/ecom-fixture -test.run '^TestEcomBrowserFixture$' -test.timeout 5m > /tmp/ecom-api.log 2>&1 &
           ecom_pid=$!
           /tmp/screening-fixture -test.run '^TestBrowserFixture$' -test.timeout 5m > /tmp/screening-api.log 2>&1 &
@@ -81,7 +80,7 @@ jobs:
             if curl -fsS http://127.0.0.1:19443/dashboard/ecom/screening -o /dev/null; then break; fi
             sleep 1
           done
-          (cd apps/ecom && go test -count=1 -run '^TestBrowserScreening$' -v)
+          (cd apps/backend && go test ./internal/ecom -count=1 -run '^TestBrowserScreening$' -v)
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -115,32 +114,8 @@ jobs:
         working-directory: apps/auth
         env:
           TEST_DATABASE_URL: postgres://postgres:test-password@127.0.0.1:5432/seller_test?sslmode=disable
-  ecom:
-    name: Go e-commerce tests
-    runs-on: ubuntu-latest
-    timeout-minutes: 12
-    services:
-      redis:
-        image: redis:7-alpine
-        ports: ["6379:6379"]
-        options: >-
-          --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 3s --health-retries 15
-    defaults:
-      run:
-        working-directory: apps/ecom
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: apps/ecom/go.mod
-          cache-dependency-path: apps/ecom/go.sum
-      - run: go test -race -count=1 ./...
-        env:
-          ECOM_TEST_REDIS_URL: redis://127.0.0.1:6379/15
-      - run: go vet ./...
-      - run: go build -trimpath ./...
-  screening:
-    name: Go screening PostgreSQL tests
+  backend:
+    name: Go unified business and PostgreSQL Redis tests
     runs-on: ubuntu-latest
     timeout-minutes: 15
     services:
@@ -153,18 +128,24 @@ jobs:
         options: >-
           --health-cmd "pg_isready -U postgres -d screening_ci_test"
           --health-interval 5s --health-timeout 3s --health-retries 15
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 3s --health-retries 15
     defaults:
       run:
-        working-directory: apps/screening
+        working-directory: apps/backend
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version-file: apps/screening/go.mod
-          cache-dependency-path: apps/screening/go.sum
+          go-version-file: apps/backend/go.mod
+          cache-dependency-path: apps/backend/go.sum
       - run: go test -race -count=1 -v ./...
         env:
           SCREENING_TEST_DATABASE_URL: postgresql://postgres:screening-test@127.0.0.1:55432/screening_ci_test?sslmode=disable
+          ECOM_TEST_REDIS_URL: redis://127.0.0.1:6379/15
       - run: go vet ./...
       - run: go build -trimpath ./...
   required:
@@ -172,12 +153,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 3
     if: always()
-    needs: [web, auth, ecom, screening]
+    needs: [web, auth, backend]
     steps:
       - name: Require all checks
         env:
           WEB: ${{ needs.web.result }}
           AUTH: ${{ needs.auth.result }}
-          ECOM: ${{ needs.ecom.result }}
-          SCREENING: ${{ needs.screening.result }}
-        run: test "$WEB" = success && test "$AUTH" = success && test "$ECOM" = success && test "$SCREENING" = success
+          BACKEND: ${{ needs.backend.result }}
+        run: test "$WEB" = success && test "$AUTH" = success && test "$BACKEND" = success

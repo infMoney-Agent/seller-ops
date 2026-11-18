@@ -2,7 +2,7 @@
 
 产品初筛后端使用 Go，前端沿用 Next.js、React Query 和 TanStack Table。页面位于 `/dashboard/ecom/screening`，流程为：导入商品 → 规则初筛与归并 → 人工复核 → FBA 利润测算 → 导出。
 
-整个业务后端已迁为 Go。原五个模块位于 `apps/ecom`，初筛位于 `apps/screening`，用户管理仍位于 `apps/auth`。不需要 Python/FastAPI/Celery/Alembic 运行环境。
+整个业务后端已迁为 Go。原五个模块位于 `apps/backend/internal/ecom`，初筛位于 `apps/backend/internal/screening`；两者在 `apps/backend` 同一进程运行，用户管理仍位于 `apps/auth`。不需要 Python/FastAPI/Celery/Alembic 运行环境。
 
 ## 数据模型
 
