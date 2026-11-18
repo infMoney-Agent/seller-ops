@@ -144,7 +144,7 @@ python -m pytest -q
 
 ## 产品初筛
 
-新增导入、规则初筛、人工批量复核与FBA利润测算，配置与上线步骤见 [产品初筛说明](docs/product-screening.md)，建表与API契约随功能分支交付。已有部署需要先追加初筛数据库密码和内部签名密钥，再更新应用。
+新增导入、规则初筛、人工批量复核与FBA利润测算，配置与上线步骤见 [产品初筛说明](docs/product-screening.md)，商品主表与月度副表设计见 [数据库方案](docs/product-screening-database.md)，建表与API契约随功能分支交付。已有部署需要先追加初筛数据库密码和内部签名密钥，再更新应用。
 
 ## 上游参考
 

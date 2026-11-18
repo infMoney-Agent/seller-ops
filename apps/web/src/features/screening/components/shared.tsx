@@ -51,3 +51,11 @@ export function DataBlock({ title, value }: { title: string; value: unknown }) {
   );
 }
 export type Action = <T>(work: () => Promise<T>, success?: string) => Promise<T | undefined>;
+
+export function formatMoney(value: string | null | undefined) {
+  if (value == null || value === '') return '—';
+  const number = Number(value);
+  return Number.isFinite(number)
+    ? number.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    : '—';
+}

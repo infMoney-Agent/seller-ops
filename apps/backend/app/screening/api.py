@@ -15,6 +15,7 @@ from fastapi.routing import APIRoute
 from sqlalchemy.exc import IntegrityError
 from . import contracts as C
 from .db import transaction, rows, one, execute
+from .monthly import CURRENT_JOIN, METRIC_SELECT, base_for, product_with_metrics
 from .domain import MAX_BYTES, calculate, classify, digest, FORMULA_VERSION
 
 
@@ -213,6 +214,11 @@ async def resource(c, table, id):
         "ps_profit_templates",
     }:
         raise ValueError("Unknown resource")
+    if table == "ps_products":
+        row = await product_with_metrics(c.conn, c.tenant, id)
+        if not row:
+            fail(404, "未找到记录")
+        return row
     row = await one(
         c.conn,
         f"SELECT * FROM {table} WHERE tenant_id=:t AND id=:id",
@@ -272,12 +278,35 @@ async def new_job(c, kind, payload, key):
     return {"job_id": id, "state": "queued"}
 
 
-BASE = """ FROM ps_products p LEFT JOIN ps_screen_results s ON s.tenant_id=p.tenant_id AND s.id=p.current_result_id
+BASE = (
+    """ FROM ps_products p """
+    + CURRENT_JOIN
+    + """ LEFT JOIN ps_screen_results s ON s.tenant_id=p.tenant_id AND s.id=p.current_result_id
  LEFT JOIN (SELECT ref.tenant_id,rs.direction,count(*) AS n FROM ps_products ref JOIN ps_screen_results rs ON rs.tenant_id=ref.tenant_id AND rs.id=ref.current_result_id WHERE ref.review_status<>'pending' GROUP BY ref.tenant_id,rs.direction) refs ON refs.tenant_id=p.tenant_id AND refs.direction=s.direction
- LEFT JOIN LATERAL (SELECT output,product_data_revision FROM ps_profit_scenarios q WHERE q.tenant_id=p.tenant_id AND q.product_id=p.id ORDER BY created_at DESC,id DESC LIMIT 1) profit ON true """
-FIELDS = """p.*,s.decision,s.recommendation,s.direction,s.group_key,COALESCE(p.current_group_rep_id,s.representative_id) AS representative_id,s.reasons,s.evidence,
- profit.output AS profit_output,profit.product_data_revision AS profit_data_revision,
+ LEFT JOIN LATERAL (SELECT output,product_data_revision,monthly_id,monthly_revision FROM ps_profit_scenarios q WHERE q.tenant_id=p.tenant_id AND q.product_id=p.id AND q.monthly_id IS NOT DISTINCT FROM m.id ORDER BY created_at DESC,id DESC LIMIT 1) profit ON true """
+)
+FIELDS = (
+    """p.*, """
+    + METRIC_SELECT
+    + """,s.decision,s.recommendation,s.direction,s.group_key,COALESCE(p.current_group_rep_id,s.representative_id) AS representative_id,s.reasons,s.evidence,
+ profit.output AS profit_output,profit.product_data_revision AS profit_data_revision,profit.monthly_revision AS profit_monthly_revision,
  COALESCE(refs.n>CASE WHEN p.review_status<>'pending' THEN 1 ELSE 0 END,false) AS has_reference"""
+)
+
+
+def filter_base(params):
+    # Counts and page IDs do not need profit/reference enrichment unless filtering by it.
+    prefix, rest = BASE.split(" LEFT JOIN (SELECT ref.", 1)
+    reference, profit = rest.split(" LEFT JOIN LATERAL (SELECT output", 1)
+    base = prefix
+    if params.get("has_reference") in ("true", "false"):
+        base += " LEFT JOIN (SELECT ref." + reference
+    if params.get("profit_min") not in (None, "") or params.get("profit_max") not in (
+        None,
+        "",
+    ):
+        base += " LEFT JOIN LATERAL (SELECT output" + profit
+    return base_for(base, params)
 
 
 def filters(params, t):
@@ -295,6 +324,12 @@ def filters(params, t):
         if value:
             clauses.append(f"{column}=:{name}")
             args[name] = value
+    if (
+        params.get("stat_month")
+        or params.get("source_type")
+        or params.get("period_type")
+    ):
+        clauses.append("m.id IS NOT NULL")
     if params.get("q"):
         clauses.append("(p.asin ILIKE :q OR p.title ILIKE :q OR p.title_zh ILIKE :q)")
         args["q"] = "%" + str(params["q"])[:200] + "%"
@@ -325,11 +360,45 @@ async def selected(c, selection):
         where += " AND p.id IN (SELECT value::uuid FROM jsonb_array_elements_text(CAST(:ids AS jsonb)))"
         args["ids"] = js(ids)
     return await rows(
-        c.conn, "SELECT p.id" + BASE + " WHERE " + where + " ORDER BY p.id", **args
+        c.conn,
+        "SELECT p.id,p.data_revision,m.id AS monthly_id,m.revision AS monthly_revision"
+        + filter_base(selection.filters)
+        + " WHERE "
+        + where
+        + " ORDER BY p.id",
+        **args,
     )
 
 
-@router.get("/products")
+MONTH_FILTER_DOCS = [
+    {
+        "name": "stat_month",
+        "in": "query",
+        "required": False,
+        "description": "经营数据月份 YYYY-MM；不传则各商品最新一期",
+        "schema": {"type": "string"},
+    },
+    {
+        "name": "period_type",
+        "in": "query",
+        "required": False,
+        "description": "自然月、滚动30天或自定义；指定月份时默认自然月",
+        "schema": {
+            "type": "string",
+            "enum": ["calendar_month", "rolling_30d", "custom"],
+        },
+    },
+    {
+        "name": "source_type",
+        "in": "query",
+        "required": False,
+        "description": "sellersprite、manual、other、legacy_import或明确来源代码",
+        "schema": {"type": "string"},
+    },
+]
+
+
+@router.get("/products", openapi_extra={"parameters": MONTH_FILTER_DOCS})
 async def products(
     request: Request,
     page: int = Query(1, ge=1),
@@ -341,11 +410,11 @@ async def products(
     collapsed = params.get("show_merged", "false") != "true"
     # Choose a representative from the filtered result, so filters never hide the entire group.
     rank = "row_number() OVER(PARTITION BY CASE WHEN recommendation='exploration' OR group_key IS NULL THEN id::text ELSE group_key END ORDER BY CASE WHEN id=representative_id THEN 0 ELSE 1 END,id) AS group_rank"
-    lean = "p.id,p.monthly_sales,p.price_usd,p.updated_at,s.recommendation,s.group_key,COALESCE(p.current_group_rep_id,s.representative_id) AS representative_id"
+    lean = "p.id,m.monthly_sales,m.price_usd,p.updated_at,s.recommendation,s.group_key,COALESCE(p.current_group_rep_id,s.representative_id) AS representative_id"
     cte = (
         "WITH filtered AS (SELECT "
         + lean
-        + BASE
+        + filter_base(request.query_params)
         + " WHERE "
         + where
         + "), ranked AS (SELECT *, "
@@ -377,7 +446,7 @@ async def products(
             c.conn,
             "SELECT "
             + FIELDS
-            + BASE
+            + base_for(BASE, request.query_params, ids)
             + " WHERE p.tenant_id=:t AND p.id IN (SELECT value::uuid FROM jsonb_array_elements_text(CAST(:ids AS jsonb)))",
             t=c.tenant,
             ids=js(ids),
@@ -390,14 +459,14 @@ async def products(
     return {"items": items, "total": count["n"], "page": page, "page_size": page_size}
 
 
-@router.get("/summary")
+@router.get("/summary", openapi_extra={"parameters": MONTH_FILTER_DOCS})
 async def summary(request: Request):
     c = ctx(request)
     where, args = filters(request.query_params, c.tenant)
     value = await one(
         c.conn,
         "SELECT count(*) AS products,count(*) FILTER(WHERE review_status='pending') AS pending,count(*) FILTER(WHERE review_status='kept') AS kept,count(*) FILTER(WHERE review_status='excluded') AS excluded,count(*) FILTER(WHERE review_status='unsure') AS unsure,count(DISTINCT CASE WHEN recommendation='exploration' OR group_key IS NULL THEN p.id::text ELSE group_key END) AS displayed"
-        + BASE
+        + filter_base(request.query_params)
         + " WHERE "
         + where,
         **args,
@@ -405,7 +474,7 @@ async def summary(request: Request):
     raw = await one(
         c.conn,
         "SELECT count(*) AS n FROM ps_import_rows WHERE tenant_id=:t AND product_id IN (SELECT p.id"
-        + BASE
+        + filter_base(request.query_params)
         + " WHERE "
         + where
         + ")",
@@ -414,16 +483,65 @@ async def summary(request: Request):
     return {**value, "source_rows": raw["n"]}
 
 
-@router.get("/products/{id}")
+@router.get("/products/{id}", openapi_extra={"parameters": MONTH_FILTER_DOCS})
 async def product(id: UUID, request: Request):
     c = ctx(request)
     await resource(c, "ps_products", id)
-    return await one(
+    p = await one(
         c.conn,
-        "SELECT " + FIELDS + BASE + " WHERE p.tenant_id=:t AND p.id=:id",
+        "SELECT "
+        + FIELDS
+        + base_for(BASE, request.query_params, [str(id)])
+        + " WHERE p.tenant_id=:t AND p.id=:id",
         t=c.tenant,
         id=str(id),
     )
+    return p
+
+
+@router.get("/months")
+async def month_options(request: Request):
+    c = ctx(request)
+    return {
+        "items": await rows(
+            c.conn,
+            "SELECT stat_month,period_type,source_type,count(*) AS products FROM ps_product_monthly WHERE tenant_id=:t GROUP BY stat_month,period_type,source_type ORDER BY stat_month DESC,period_type,source_type",
+            t=c.tenant,
+        )
+    }
+
+
+@router.get("/products/{id}/monthly")
+async def monthly_history(
+    id: UUID,
+    request: Request,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=100),
+):
+    c = ctx(request)
+    await resource(c, "ps_products", id)
+    n = await one(
+        c.conn,
+        "SELECT count(*) AS n FROM ps_product_monthly WHERE tenant_id=:t AND product_id=:p",
+        t=c.tenant,
+        p=str(id),
+    )
+    items = await rows(
+        c.conn,
+        "SELECT m.*,i.file_name,i.source_period,r.member_path,r.sheet_name,r.row_no FROM ps_product_monthly m JOIN ps_import_rows r ON r.tenant_id=m.tenant_id AND r.id=m.source_row_id JOIN ps_imports i ON i.tenant_id=r.tenant_id AND i.id=r.import_id WHERE m.tenant_id=:t AND m.product_id=:p ORDER BY m.stat_month DESC,m.period_end DESC,m.observed_on DESC,m.id DESC LIMIT :l OFFSET :o",
+        t=c.tenant,
+        p=str(id),
+        l=page_size,
+        o=(page - 1) * page_size,
+    )
+    from decimal import Decimal
+
+    return {
+        "items": jsonable_encoder(items, custom_encoder={Decimal: str}),
+        "total": n["n"],
+        "page": page,
+        "page_size": page_size,
+    }
 
 
 @router.get("/products/{id}/observations")
@@ -490,7 +608,9 @@ async def references(id: UUID, request: Request):
     return {"items": items}
 
 
-@router.get("/groups/{group_key}/products")
+@router.get(
+    "/groups/{group_key}/products", openapi_extra={"parameters": MONTH_FILTER_DOCS}
+)
 async def group(
     group_key: str,
     request: Request,
@@ -498,23 +618,23 @@ async def group(
     page_size: int = Query(50, ge=1, le=100),
 ):
     c = ctx(request)
+    where, args = filters(request.query_params, c.tenant)
+    args["g"] = group_key
+    where += " AND s.group_key=:g"
+    base = base_for(BASE, request.query_params)
     items = await rows(
         c.conn,
         "SELECT "
         + FIELDS
-        + BASE
-        + " WHERE p.tenant_id=:t AND s.group_key=:g ORDER BY p.id LIMIT :l OFFSET :o",
-        t=c.tenant,
-        g=group_key,
+        + base
+        + " WHERE "
+        + where
+        + " ORDER BY p.id LIMIT :l OFFSET :o",
+        **args,
         l=page_size,
         o=(page - 1) * page_size,
     )
-    n = await one(
-        c.conn,
-        "SELECT count(*) AS n" + BASE + " WHERE p.tenant_id=:t AND s.group_key=:g",
-        t=c.tenant,
-        g=group_key,
-    )
+    n = await one(c.conn, "SELECT count(*) AS n" + base + " WHERE " + where, **args)
     return {"items": items, "total": n["n"], "page": page, "page_size": page_size}
 
 
@@ -581,6 +701,10 @@ async def upload(
     file: UploadFile = File(...),
     source_period: str = Form(""),
     observed_on: str = Form(""),
+    source_type: str = Form("sellersprite"),
+    period_type: str = Form("calendar_month"),
+    period_start: str = Form(""),
+    period_end: str = Form(""),
 ):
     c = ctx(request)
     name = Path(file.filename or "").name
@@ -591,6 +715,20 @@ async def upload(
     from datetime import date
 
     observed = date.fromisoformat(observed_on) if observed_on else None
+    metadata = C.Mapping(
+        source_period=source_period,
+        observed_on=observed,
+        source_type=source_type,
+        period_type=period_type,
+        period_start=period_start or None,
+        period_end=period_end or None,
+    )
+    bounds = {
+        "source": metadata.source_type,
+        "kind": metadata.period_type,
+        "start": metadata.period_start,
+        "end": metadata.period_end,
+    }
     hash = hashlib.sha256()
     count = 0
     id = uid()
@@ -611,7 +749,15 @@ async def upload(
         mh = digest({})
         request_key = request.headers["idempotency-key"]
         upload_hash = digest(
-            [c.user, "upload", sha, name, source_period, str(observed)]
+            [
+                c.user,
+                "upload",
+                sha,
+                name,
+                source_period,
+                str(observed),
+                jsonable_encoder(bounds),
+            ]
         )
         previous = await one(
             c.conn,
@@ -626,12 +772,13 @@ async def upload(
             return previous["result"]["body"]
         old = await one(
             c.conn,
-            "SELECT * FROM ps_imports WHERE tenant_id=:t AND file_sha256=:h AND source_period=:p AND mapping_hash=:m AND observed_on IS NOT DISTINCT FROM CAST(:d AS date)",
+            "SELECT * FROM ps_imports WHERE tenant_id=:t AND file_sha256=:h AND source_period=:p AND mapping_hash=:m AND observed_on IS NOT DISTINCT FROM CAST(:d AS date) AND source_type=:source AND period_type=:kind AND period_start IS NOT DISTINCT FROM CAST(:start AS date) AND period_end IS NOT DISTINCT FROM CAST(:end AS date)",
             t=c.tenant,
             h=sha,
             p=source_period,
             m=mh,
             d=observed,
+            **bounds,
         )
         if old:
             path.unlink()
@@ -651,7 +798,7 @@ async def upload(
             return result
         await execute(
             c.conn,
-            "INSERT INTO ps_imports(tenant_id,id,file_name,file_sha256,storage_key,file_size,source_period,observed_on,mapping_hash,state,created_by) VALUES(:t,:id,:n,:h,:k,:s,:p,:d,:m,'uploaded',:u)",
+            "INSERT INTO ps_imports(tenant_id,id,file_name,file_sha256,storage_key,file_size,source_period,observed_on,mapping_hash,state,created_by,source_type,period_type,period_start,period_end) VALUES(:t,:id,:n,:h,:k,:s,:p,:d,:m,'uploaded',:u,:source,:kind,:start,:end)",
             t=c.tenant,
             id=id,
             n=name,
@@ -661,6 +808,7 @@ async def upload(
             p=source_period,
             d=observed,
             m=mh,
+            **bounds,
             u=c.user,
         )
         job = await new_job(
@@ -703,16 +851,30 @@ async def mapping(id: UUID, body: C.Mapping, request: Request):
     p = await resource(c, "ps_imports", id)
     if p["state"] not in ("preview", "failed"):
         fail(409, "当前状态不允许调整映射")
+    committed = await one(
+        c.conn,
+        "SELECT 1 AS n FROM ps_import_rows WHERE tenant_id=:t AND import_id=:id AND state='committed' LIMIT 1",
+        t=c.tenant,
+        id=str(id),
+    )
+    if committed:
+        fail(
+            409, "此批次已有入库行，不能修改来源和统计周期；请重试原任务或新建导入批次"
+        )
     generation = p["parse_generation"] + 1
     await execute(
         c.conn,
-        "UPDATE ps_imports SET mapping=CAST(:m AS jsonb),mapping_hash=:h,observed_on=:d,source_period=:p,state='uploaded',parse_generation=:g WHERE tenant_id=:t AND id=:id",
+        "UPDATE ps_imports SET mapping=CAST(:m AS jsonb),mapping_hash=:h,observed_on=:d,source_period=:p,source_type=:source,period_type=:kind,period_start=:start,period_end=:end,state='uploaded',parse_generation=:g WHERE tenant_id=:t AND id=:id",
         t=c.tenant,
         id=str(id),
         m=js(body.mapping),
         h=digest(body.mapping),
         d=body.observed_on,
         p=body.source_period,
+        source=body.source_type,
+        kind=body.period_type,
+        start=body.period_start,
+        end=body.period_end,
         g=generation,
     )
     return await new_job(
@@ -741,8 +903,8 @@ async def preview_import(
 async def commit_import(id: UUID, request: Request):
     c = ctx(request)
     p = await resource(c, "ps_imports", id)
-    if not p["observed_on"]:
-        fail(422, "请先填写观察日期并重新解析")
+    if not p["observed_on"] or not p["period_start"] or not p["period_end"]:
+        fail(422, "请先填写观察日期与统计周期并重新解析")
     if p["state"] not in ("preview", "importing", "completed", "partial"):
         fail(409, "解析完成后才能确认导入")
     if not p["counts"].get("valid"):
@@ -1103,9 +1265,23 @@ async def undo_batch(id: UUID, request: Request):
     return result
 
 
+async def profit_product(c, id, body):
+    p = await product_with_metrics(c.conn, c.tenant, id, body.monthly_id)
+    if not p:
+        fail(404, "未找到商品")
+    if body.monthly_id is not None and p["monthly_id"] is None:
+        fail(404, "未找到此商品的月度记录")
+    if (
+        body.expected_monthly_revision is not None
+        and p["monthly_revision"] != body.expected_monthly_revision
+    ):
+        fail(409, "月度数据已更新，请重新测算")
+    return p
+
+
 @router.post("/profit/calculate")
 async def profit_calculate(body: C.ProfitRequest, request: Request):
-    p = await resource(ctx(request), "ps_products", body.product_id)
+    p = await profit_product(ctx(request), body.product_id, body)
     if p["data_revision"] != body.expected_data_revision:
         fail(409, "商品已更新")
     return {
@@ -1151,7 +1327,7 @@ async def scenarios(id: UUID, request: Request):
     p = await resource(c, "ps_products", id)
     items = await rows(
         c.conn,
-        "SELECT q.*, (product_data_revision<>:v OR EXISTS(SELECT 1 FROM ps_profit_templates newer JOIN ps_profit_templates old ON old.tenant_id=newer.tenant_id AND old.name=newer.name WHERE old.tenant_id=q.tenant_id AND old.id=q.template_id AND newer.version>old.version)) AS stale FROM ps_profit_scenarios q WHERE tenant_id=:t AND product_id=:id ORDER BY created_at DESC,id DESC",
+        "SELECT q.*, (product_data_revision<>:v OR (monthly_id IS NOT NULL AND monthly_revision IS DISTINCT FROM (SELECT m.revision FROM ps_product_monthly m WHERE m.tenant_id=q.tenant_id AND m.id=q.monthly_id)) OR EXISTS(SELECT 1 FROM ps_profit_templates newer JOIN ps_profit_templates old ON old.tenant_id=newer.tenant_id AND old.name=newer.name WHERE old.tenant_id=q.tenant_id AND old.id=q.template_id AND newer.version>old.version)) AS stale FROM ps_profit_scenarios q WHERE tenant_id=:t AND product_id=:id ORDER BY created_at DESC,id DESC",
         t=c.tenant,
         id=str(id),
         v=p["data_revision"],
@@ -1160,6 +1336,7 @@ async def scenarios(id: UUID, request: Request):
 
 
 async def save_scenario(c, p, body):
+    p = await profit_product(c, p["id"], body)
     if p["data_revision"] != body.expected_data_revision:
         fail(409, "商品已更新")
     template = (
@@ -1172,7 +1349,7 @@ async def save_scenario(c, p, body):
     id = uid()
     await execute(
         c.conn,
-        "INSERT INTO ps_profit_scenarios(tenant_id,id,product_id,template_id,name,inputs,output,template_snapshot,formula_version,product_data_revision,created_by) VALUES(:t,:id,:p,:template,:name,CAST(:i AS jsonb),CAST(:o AS jsonb),CAST(:snapshot AS jsonb),:f,:v,:u)",
+        "INSERT INTO ps_profit_scenarios(tenant_id,id,product_id,template_id,name,inputs,output,template_snapshot,formula_version,product_data_revision,created_by,monthly_id,monthly_revision,monthly_snapshot) VALUES(:t,:id,:p,:template,:name,CAST(:i AS jsonb),CAST(:o AS jsonb),CAST(:snapshot AS jsonb),:f,:v,:u,:monthly,:monthly_rev,CAST(:monthly_snapshot AS jsonb))",
         t=c.tenant,
         id=id,
         p=str(p["id"]),
@@ -1182,6 +1359,27 @@ async def save_scenario(c, p, body):
         o=js(output),
         snapshot=js(template) if template else None,
         f=FORMULA_VERSION,
+        monthly=str(p["monthly_id"]) if p["monthly_id"] else None,
+        monthly_rev=p["monthly_revision"],
+        monthly_snapshot=js(
+            {
+                k: p[k]
+                for k in (
+                    "monthly_id",
+                    "monthly_revision",
+                    "stat_month",
+                    "period_type",
+                    "period_start",
+                    "period_end",
+                    "source_type",
+                    "monthly_source_row_id",
+                    "price_usd",
+                    "monthly_sales",
+                )
+            }
+        )
+        if p["monthly_id"]
+        else None,
         v=p["data_revision"],
         u=c.user,
     )
@@ -1200,15 +1398,7 @@ async def profit_batch(body: C.ProfitBatch, request: Request):
     if body.template_id:
         await resource(c, "ps_profit_templates", body.template_id)
     targets = await selected(c, body)
-    snapshots = [
-        {
-            "id": str(p["id"]),
-            "data_revision": (await resource(c, "ps_products", p["id"]))[
-                "data_revision"
-            ],
-        }
-        for p in targets
-    ]
+    snapshots = jsonable_encoder(targets)
     return await new_job(
         c,
         "profit_batch",
@@ -1228,7 +1418,7 @@ async def export_create(body: C.Selection, request: Request):
     return await new_job(
         c,
         "export",
-        {"product_ids": [str(v["id"]) for v in targets]},
+        {"product_ids": [str(v["id"]) for v in targets], "filters": body.filters},
         request.headers["idempotency-key"],
     )
 

@@ -9,6 +9,17 @@ export interface Product {
   category: string | null;
   seller_name: string | null;
   seller_region: string | null;
+  monthly_id: string | null;
+  monthly_revision: number | null;
+  stat_month: string | null;
+  period_type: string | null;
+  period_start: string | null;
+  period_end: string | null;
+  source_type: string | null;
+  monthly_revenue: string | null;
+  review_count: number | null;
+  rating: string | null;
+  bsr_rank: number | null;
   price_usd: string | null;
   monthly_sales: number | null;
   specs: Record<string, Json>;
@@ -25,6 +36,7 @@ export interface Product {
   reasons: string[] | null;
   profit_output: ProfitOutput | null;
   profit_data_revision: number | null;
+  profit_monthly_revision: number | null;
 }
 export interface PageResult<T> {
   items: T[];
@@ -38,6 +50,10 @@ export interface ImportRecord {
   state: string;
   observed_on: string | null;
   source_period: string;
+  source_type: string;
+  period_type: string;
+  period_start: string | null;
+  period_end: string | null;
   mapping: Record<string, string>;
   counts: { total?: number; valid?: number; invalid?: number };
 }
@@ -145,4 +161,29 @@ export interface ProfitTemplate {
   name: string;
   version: number;
   params: ProfitInputs;
+}
+
+export interface MonthlyRecord {
+  id: string;
+  revision: number;
+  stat_month: string;
+  period_type: string;
+  period_start: string;
+  period_end: string;
+  observed_on: string;
+  source_type: string;
+  source_row_id: string;
+  price_usd: string | null;
+  monthly_sales: number | null;
+  monthly_revenue: string | null;
+  review_count: number | null;
+  rating: string | null;
+  bsr_rank: number | null;
+  file_name: string;
+}
+export interface MonthOption {
+  stat_month: string;
+  period_type: string;
+  source_type: string;
+  products: number;
 }

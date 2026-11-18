@@ -2,11 +2,15 @@
 
 新增入口：`/dashboard/ecom/screening`。功能为商品导入、规则筛选、同类归并、人工复核、FBA 假设利润测算与 XLSX 导出。原选品研究和 SQLite 功能保持独立。
 
+## 当前数据库方案
+
+商品核心采用 **商品主表 `ps_products` + 月度经营副表 `ps_product_monthly`**。价格、销量、销售额、评分数、评分和BSR已移出主表，按月份、数据来源和统计周期保存。前端支持月份/来源切换、多期明细和指定月份利润测算。完整字段、索引、覆盖规则与迁移见 [主副表设计方案](product-screening-database.md)，当前完整建表快照见 [数据库DDL](product-screening-schema.sql)。最新验证见 [月度改造验证](product-screening-monthly-validation.md)。本节取代初版将经营字段放入主表的设计。
+
 ## 服务和数据
 
-初筛使用独立 PostgreSQL 数据库 `seller_screening`。Alembic 配置为 `apps/backend/alembic-screening.ini`，版本化建表 SQL 为 `apps/backend/app/screening/schema.sql`。现有认证数据库的用户、成员、工作区不迁移，也没有跨库外键。
+初筛使用独立 PostgreSQL 数据库 `seller_screening`。Alembic 配置为 `apps/backend/alembic-screening.ini`，初版SQL为 `apps/backend/app/screening/schema.sql`，最终主副表DDL与数据回填为 `apps/backend/app/screening/monthly-schema.sql`（迁移0003）。现有认证数据库的用户、成员、工作区不迁移，也没有跨库外键。
 
-业务表：`ps_jobs`、`ps_imports`、`ps_import_rows`、`ps_products`、`ps_policies`、`ps_screen_runs`、`ps_screen_results`、`ps_review_batches`、`ps_review_events`、`ps_profit_templates`、`ps_profit_scenarios`。额外的 `ps_requests` 保存写请求的请求哈希和响应，保证幂等键相同但内容不同返回 409。第二版迁移新增 `ps_products.current_group_rep_id`，将当前派生归并关系与历史运行快照分离。
+业务表：`ps_product_monthly`、`ps_jobs`、`ps_imports`、`ps_import_rows`、`ps_products`、`ps_policies`、`ps_screen_runs`、`ps_screen_results`、`ps_review_batches`、`ps_review_events`、`ps_profit_templates`、`ps_profit_scenarios`。额外的 `ps_requests` 保存写请求的请求哈希和响应，保证幂等键相同但内容不同返回 409。第二版迁移新增 `ps_products.current_group_rep_id`，将当前派生归并关系与历史运行快照分离。
 
 所有业务引用包含 `tenant_id`。Next.js 每次向现有 Go 服务校验会话及当前工作区，再对时间戳、方法、路径、用户、工作区及角色签名。FastAPI 不信任浏览器身份头。服务间必须保持网络隔离，HMAC 密钥至少32字符，不向浏览器暴露。有效签名窗口60秒。
 
@@ -43,9 +47,9 @@ SCREENING_INTERNAL_SECRET=与Web一致的密钥
 
 支持 XLSX、UTF-8/GB18030 CSV、含上述文件的 ZIP。单文件30MB、展开250MB、100个成员、10万数据行，不支持嵌套ZIP或加密ZIP。默认前20行查找 ASIN 表头。映射为标准字段到原始列名，如 `{"title":"商品标题"}`。
 
-先解析预览，再确认入库。观察日期在确认前必填，来源期用于跨期统计。重复识别除文件哈希、站点、来源期、映射外，还包括观察日期，防止相同字节文件在不同观察日期被误当成同一观察。原始文件、ZIP成员、工作表与行号可追溯。无效行保留并可下载报告。ZIP成员解析失败会留下错误记录，不会静默丢弃。
+先解析预览，再确认入库。观察日期在确认前必填，来源期用于跨期统计。重复识别除文件哈希、站点、来源期、映射外，还包括观察日期、数据来源、统计口径及起止日期，防止相同字节文件在不同观察日期被误当成同一观察。原始文件、ZIP成员、工作表与行号可追溯。无效行保留并可下载报告。ZIP成员解析失败会留下错误记录，不会静默丢弃。
 
-当前来源按观察日期、导入时间、成员路径、工作表、行号和ID稳定排序。重复ASIN仅更新最新商品字段，不更新人工结论。机器与人工结果独立；待确认不会归入保留。
+商品档案来源按观察日期、导入时间、成员路径、工作表、行号和ID稳定排序；经营数据默认按最新统计月份取值。同商品、来源、统计周期重复导入时更新该期有效值并递增版本，旧导入行始终保留。重复ASIN仅更新最新商品字段，不更新人工结论。机器与人工结果独立；待确认不会归入保留。
 
 通用筛选策略、方向和用途/材质/结构归并规则迁自现有资料库。去掉历史 ASIN 覆盖及历史探索推荐。缺少卖家身份时不跨 ASIN 归并。人工样本仅供参考，不自动批量采纳。
 
@@ -72,11 +76,11 @@ F = C + FBA费 + 仓储费 + 其他USD + A
 
 每次退货净损失指相对于正常订单的净减少额，综合退款、手续费、逆向物流及可回收价值，避免重复扣采购成本。采购成本为零时不计算回报率；费率分母非正时不返回保本售价。结果是输入假设下的估计，与AI选品评分无关。
 
-输入输出、数据版本、公式版本、模板快照均保存。数据或模板更新后历史方案提示过期，重新测算创建新快照。导出包含机器/人工结论、利润结果及来源记录，文本防Excel公式注入。
+输入输出、商品数据版本、月度数据ID/版本/快照、公式版本和模板快照均保存。数据或模板更新后历史方案提示过期，重新测算创建新快照。导出包含机器/人工结论、利润结果及来源记录，文本防Excel公式注入。
 
 ## API 与验证
 
-浏览器前缀 `/api/ecom/screening`，内部前缀 `/api/v1/screening`。完整逐项契约由FastAPI OpenAPI生成。新增任务重试接口 `POST /jobs/{id}/retry`。
+浏览器前缀 `/api/ecom/screening`，内部前缀 `/api/v1/screening`。完整逐项契约由FastAPI OpenAPI生成。新增 `GET /months`、`GET /products/{id}/monthly`；列表、汇总和详情支持 `stat_month`、`period_type`、`source_type`。新增任务重试接口 `POST /jobs/{id}/retry`。
 
 写请求需要 `Idempotency-Key`；JSON上限256KB，上传文件上限30MB。列表默认50、最大100。异步接口返回202和任务ID，前端轮询任务状态。错误返回code、message和request_id。
 

@@ -20,7 +20,9 @@ import ImportPanel from './ImportPanel';
 import ReviewPanel from './ReviewPanel';
 import ProfitPanel from './ProfitPanel';
 import PolicyPanel from './PolicyPanel';
-import { Badge, Button, DataBlock, Field, Input, type Action } from './shared';
+import MonthlyHistory, { periodLabels, sourceLabels } from './MonthlyHistory';
+import type { MonthOption } from '../types';
+import { Badge, Button, DataBlock, Field, Input, formatMoney, type Action } from './shared';
 
 const tabs = ['商品库', '导入记录', '批量复核', '利润测算', '规则与历史'];
 export default function ScreeningPage() {
@@ -43,9 +45,10 @@ export default function ScreeningPage() {
     '/summary?' + new URLSearchParams(filters)
   );
   const imports = useScreeningQuery<PageResult<ImportRecord>>('/imports');
+  const months = useScreeningQuery<{ items: MonthOption[] }>('/months');
   const [groupPage, setGroupPage] = useState(1);
   const expanded = useScreeningQuery<PageResult<Product>>(
-    group ? `/groups/${group}/products?page=${groupPage}` : null
+    group ? `/groups/${group}/products?page=${groupPage}&${new URLSearchParams(filters)}` : null
   );
   const job = useJob(activeJob);
   const selectedIds = Object.keys(selected).filter((id) => selected[id]);
@@ -146,6 +149,10 @@ export default function ScreeningPage() {
               </button>
               <p className='line-clamp-2'>{row.original.title_zh || row.original.title}</p>
               <p className='text-muted-foreground text-xs'>
+                {row.original.stat_month?.slice(0, 7)} ·{' '}
+                {periodLabels[row.original.period_type || ''] || '暂无分期数据'}
+              </p>
+              <p className='text-muted-foreground text-xs'>
                 {row.original.seller_name} · {row.original.seller_region || '地区未知'}
               </p>
             </div>
@@ -157,7 +164,7 @@ export default function ScreeningPage() {
         header: '价格 / 月销量',
         cell: ({ row }) => (
           <span>
-            ${row.original.price_usd ?? '—'} / {row.original.monthly_sales ?? '—'}
+            ${formatMoney(row.original.price_usd)} / {row.original.monthly_sales ?? '—'}
           </span>
         )
       },
@@ -194,7 +201,8 @@ export default function ScreeningPage() {
               ? `$${row.original.profit_output.profit_usd}`
               : '待测算'}
             {row.original.profit_data_revision !== null &&
-              row.original.profit_data_revision !== row.original.data_revision && (
+              (row.original.profit_data_revision !== row.original.data_revision ||
+                row.original.profit_monthly_revision !== row.original.monthly_revision) && (
                 <p className='text-xs'>来源已更新</p>
               )}
           </div>
@@ -345,6 +353,71 @@ export default function ScreeningPage() {
                 ))}
               </div>
               <div className='grid gap-3 rounded border p-3 md:grid-cols-4'>
+                <p className='text-muted-foreground text-xs md:col-span-4'>
+                  月份筛选切换经营数据；人工结论为商品级，机器结果依据最新商品资料计算。
+                </p>
+                <Field label='经营数据来源'>
+                  <select
+                    className='rounded border bg-transparent p-2'
+                    value={filters.source_type || ''}
+                    onChange={(e) => {
+                      filter('source_type', e.target.value);
+                      setFocus(null);
+                      setSelected({});
+                    }}
+                  >
+                    <option value=''>全部来源（采用所选周期最新观察值）</option>
+                    {[...new Set((months.data?.items || []).map((m) => m.source_type))].map(
+                      (source) => (
+                        <option
+                          key={sourceLabels[source] || source}
+                          value={sourceLabels[source] || source}
+                        >
+                          {sourceLabels[source] || source}
+                        </option>
+                      )
+                    )}
+                  </select>
+                </Field>
+                <Field label='经营数据月份'>
+                  <select
+                    aria-label='经营数据月份'
+                    className='rounded border bg-transparent p-2'
+                    value={
+                      filters.stat_month
+                        ? `${filters.stat_month}|${filters.period_type || 'calendar_month'}`
+                        : ''
+                    }
+                    onChange={(e) => {
+                      const [month = '', kind = 'calendar_month'] = e.target.value.split('|');
+                      setFilters((old) => ({
+                        ...old,
+                        stat_month: month,
+                        period_type: month ? kind : ''
+                      }));
+                      setPage(1);
+                      setSelected({});
+                      setFocus(null);
+                    }}
+                  >
+                    <option value=''>各商品最新一期</option>
+                    {[
+                      ...new Map(
+                        (months.data?.items || []).map((m) => [
+                          `${m.stat_month.slice(0, 7)}|${m.period_type}`,
+                          m
+                        ])
+                      ).values()
+                    ].map((m) => (
+                      <option
+                        key={`${m.stat_month}|${m.period_type}`}
+                        value={`${m.stat_month.slice(0, 7)}|${m.period_type}`}
+                      >
+                        {m.stat_month.slice(0, 7)} · {periodLabels[m.period_type]}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
                 <Field label='关键词 / ASIN'>
                   <Input value={filters.q || ''} onChange={(e) => filter('q', e.target.value)} />
                 </Field>
@@ -580,6 +653,10 @@ export default function ScreeningPage() {
                   act={act}
                   busy={busy}
                   close={() => setFocus(null)}
+                  onCalculate={(p) => {
+                    setFocus(p);
+                    setTab(3);
+                  }}
                 />
               )}
             </>
@@ -588,9 +665,10 @@ export default function ScreeningPage() {
           {tab === 2 && <ReviewPanel selected={selectedIds} act={act} busy={busy} />}
           {tab === 3 && (
             <ProfitPanel
-              key={focus?.id || 'none'}
+              key={`${focus?.id || 'none'}:${focus?.monthly_id || 'latest'}`}
               product={focus}
               selected={selectedIds}
+              filters={filters}
               act={act}
               watch={watch}
               busy={busy}
@@ -607,12 +685,14 @@ function SingleReview({
   product,
   act,
   busy,
-  close
+  close,
+  onCalculate
 }: {
   product: Product;
   act: Action;
   busy: boolean;
   close: () => void;
+  onCalculate: (product: Product) => void;
 }) {
   const [status, setStatus] = useState<ReviewStatus>(
     product.review_status === 'pending' ? 'kept' : product.review_status
@@ -631,6 +711,7 @@ function SingleReview({
       </div>
       <p>{product.title}</p>
       <DataBlock title='商品规格' value={product.specs} />
+      <MonthlyHistory product={product} onCalculate={onCalculate} />
       <div className='grid gap-3 md:grid-cols-3'>
         <Field label='人工结论'>
           <select

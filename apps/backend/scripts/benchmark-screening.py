@@ -35,7 +35,7 @@ async def main():
             )
             await db.execute(
                 conn,
-                "INSERT INTO ps_products(tenant_id,id,asin,title,category,seller_region,monthly_sales) SELECT :t,md5('bench-product-'||i)::uuid,lpad(i::text,10,'0'),'Manual steel tray '||i,'Trays','CN',i%10000 FROM generate_series(1,100000) i",
+                "INSERT INTO ps_products(tenant_id,id,asin,title,category,seller_region) SELECT :t,md5('bench-product-'||i)::uuid,lpad(i::text,10,'0'),'Manual steel tray '||i,'Trays','CN' FROM generate_series(1,100000) i",
                 t=tenant,
             )
             await db.execute(
@@ -47,6 +47,16 @@ async def main():
             await db.execute(
                 conn,
                 "UPDATE ps_products SET current_row_id=md5('bench-row-'||asin::int)::uuid WHERE tenant_id=:t",
+                t=tenant,
+            )
+            await db.execute(
+                conn,
+                "INSERT INTO ps_product_monthly(tenant_id,id,product_id,stat_month,period_type,period_start,period_end,observed_on,source_type,source_row_id,price_usd,monthly_sales) SELECT :t,md5('bench-month-'||asin)::uuid,id,'2026-01-01','calendar_month','2026-01-01','2026-01-31','2026-01-31','benchmark',current_row_id,20,asin::int%10000 FROM ps_products WHERE tenant_id=:t",
+                t=tenant,
+            )
+            await db.execute(
+                conn,
+                "UPDATE ps_products SET current_monthly_id=md5('bench-month-'||asin)::uuid,current_monthly_revision=1 WHERE tenant_id=:t",
                 t=tenant,
             )
             jid, pid, rid = [str(uuid4()) for _ in range(3)]
@@ -99,6 +109,7 @@ async def main():
             "/products?show_merged=true",
             "/products?review_status=pending",
             "/products?machine=passed",
+            "/products?stat_month=2026-01",
             "/products?q=Manual",
             "/summary",
         ):

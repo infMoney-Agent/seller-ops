@@ -17,6 +17,10 @@ export default function ImportPanel({
   const [file, setFile] = useState<File | null>(null);
   const [date, setDate] = useState('');
   const [period, setPeriod] = useState('');
+  const [sourceType, setSourceType] = useState('sellersprite');
+  const [periodType, setPeriodType] = useState('calendar_month');
+  const [periodStart, setPeriodStart] = useState('');
+  const [periodEnd, setPeriodEnd] = useState('');
   const [selected, setSelected] = useState<string | null>(null);
   const [mapping, setMapping] = useState('{}');
   const [page, setPage] = useState(1);
@@ -37,6 +41,46 @@ export default function ImportPanel({
             onChange={(e) => setFile(e.target.files?.[0] || null)}
           />
         </Field>
+        <Field label='数据来源'>
+          <select
+            className='rounded border bg-transparent p-2'
+            value={sourceType}
+            onChange={(e) => setSourceType(e.target.value)}
+          >
+            <option value='sellersprite'>卖家精灵</option>
+            <option value='manual'>人工表格</option>
+            <option value='other'>其他来源</option>
+          </select>
+        </Field>
+        <Field label='统计口径'>
+          <select
+            className='rounded border bg-transparent p-2'
+            value={periodType}
+            onChange={(e) => {
+              setPeriodType(e.target.value);
+              setPeriodStart('');
+              setPeriodEnd('');
+            }}
+          >
+            <option value='calendar_month'>自然月</option>
+            <option value='rolling_30d'>滚动30天</option>
+            <option value='custom'>自定义周期</option>
+          </select>
+        </Field>
+        {periodType === 'custom' && (
+          <>
+            <Field label='统计开始'>
+              <Input
+                type='date'
+                value={periodStart}
+                onChange={(e) => setPeriodStart(e.target.value)}
+              />
+            </Field>
+            <Field label='统计结束'>
+              <Input type='date' value={periodEnd} onChange={(e) => setPeriodEnd(e.target.value)} />
+            </Field>
+          </>
+        )}
         <Field label='来源期'>
           <Input
             value={period}
@@ -56,6 +100,10 @@ export default function ImportPanel({
               data.set('file', file);
               data.set('source_period', period);
               data.set('observed_on', date);
+              data.set('source_type', sourceType);
+              data.set('period_type', periodType);
+              data.set('period_start', periodType === 'custom' ? periodStart : '');
+              data.set('period_end', periodType === 'custom' ? periodEnd : '');
               const job = await request<JobCreated & { import_id: string }>(
                 '/imports',
                 'POST',
@@ -71,7 +119,8 @@ export default function ImportPanel({
         </Button>
       </div>
       <p className='text-muted-foreground text-sm'>
-        站点：美国。重复 ASIN 保留来源历史和人工结论；历史人工结论列仅作为来源展示。
+        站点：美国。重复 ASIN
+        保留各月经营数据、来源历史和人工结论。自然月与滚动30天独立保存；更改月份或观察日期时，请先保存日期与映射。
       </p>
       {imports.isError && <p role='alert'>{imports.error.message}</p>}
       <div className='overflow-auto rounded border'>
@@ -107,6 +156,10 @@ export default function ImportPanel({
                       setMapping(JSON.stringify(item.mapping, null, 2));
                       setDate(item.observed_on || '');
                       setPeriod(item.source_period);
+                      setSourceType(item.source_type);
+                      setPeriodType(item.period_type);
+                      setPeriodStart(item.period_start || '');
+                      setPeriodEnd(item.period_end || '');
                       setPage(1);
                     }}
                   >
@@ -146,6 +199,10 @@ export default function ImportPanel({
                 void act(async () => {
                   const job = await request<JobCreated>(`/imports/${active.id}/mapping`, 'PUT', {
                     mapping: JSON.parse(mapping),
+                    source_type: sourceType,
+                    period_type: periodType,
+                    period_start: periodType === 'custom' ? periodStart || null : null,
+                    period_end: periodType === 'custom' ? periodEnd || null : null,
                     observed_on: date || null,
                     source_period: period
                   });

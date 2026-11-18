@@ -35,6 +35,38 @@
               "default": 50,
               "title": "Page Size"
             }
+          },
+          {
+            "name": "stat_month",
+            "in": "query",
+            "required": false,
+            "description": "经营数据月份 YYYY-MM；不传则各商品最新一期",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "period_type",
+            "in": "query",
+            "required": false,
+            "description": "自然月、滚动30天或自定义；指定月份时默认自然月",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "calendar_month",
+                "rolling_30d",
+                "custom"
+              ]
+            }
+          },
+          {
+            "name": "source_type",
+            "in": "query",
+            "required": false,
+            "description": "sellersprite、manual、other、legacy_import或明确来源代码",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -75,7 +107,41 @@
               }
             }
           }
-        }
+        },
+        "parameters": [
+          {
+            "name": "stat_month",
+            "in": "query",
+            "required": false,
+            "description": "经营数据月份 YYYY-MM；不传则各商品最新一期",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "period_type",
+            "in": "query",
+            "required": false,
+            "description": "自然月、滚动30天或自定义；指定月份时默认自然月",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "calendar_month",
+                "rolling_30d",
+                "custom"
+              ]
+            }
+          },
+          {
+            "name": "source_type",
+            "in": "query",
+            "required": false,
+            "description": "sellersprite、manual、other、legacy_import或明确来源代码",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
       }
     },
     "/api/v1/screening/products/{id}": {
@@ -94,6 +160,121 @@
               "type": "string",
               "format": "uuid",
               "title": "Id"
+            }
+          },
+          {
+            "name": "stat_month",
+            "in": "query",
+            "required": false,
+            "description": "经营数据月份 YYYY-MM；不传则各商品最新一期",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "period_type",
+            "in": "query",
+            "required": false,
+            "description": "自然月、滚动30天或自定义；指定月份时默认自然月",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "calendar_month",
+                "rolling_30d",
+                "custom"
+              ]
+            }
+          },
+          {
+            "name": "source_type",
+            "in": "query",
+            "required": false,
+            "description": "sellersprite、manual、other、legacy_import或明确来源代码",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/screening/months": {
+      "get": {
+        "tags": [
+          "Product Screening"
+        ],
+        "summary": "Month Options",
+        "operationId": "month_options_api_v1_screening_months_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/screening/products/{id}/monthly": {
+      "get": {
+        "tags": [
+          "Product Screening"
+        ],
+        "summary": "Monthly History",
+        "operationId": "monthly_history_api_v1_screening_products__id__monthly_get",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Page Size"
             }
           }
         ],
@@ -326,6 +507,38 @@
               "minimum": 1,
               "default": 50,
               "title": "Page Size"
+            }
+          },
+          {
+            "name": "stat_month",
+            "in": "query",
+            "required": false,
+            "description": "经营数据月份 YYYY-MM；不传则各商品最新一期",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "period_type",
+            "in": "query",
+            "required": false,
+            "description": "自然月、滚动30天或自定义；指定月份时默认自然月",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "calendar_month",
+                "rolling_30d",
+                "custom"
+              ]
+            }
+          },
+          {
+            "name": "source_type",
+            "in": "query",
+            "required": false,
+            "description": "sellersprite、manual、other、legacy_import或明确来源代码",
+            "schema": {
+              "type": "string"
             }
           }
         ],
@@ -1684,6 +1897,26 @@
             "type": "string",
             "title": "Observed On",
             "default": ""
+          },
+          "source_type": {
+            "type": "string",
+            "title": "Source Type",
+            "default": "sellersprite"
+          },
+          "period_type": {
+            "type": "string",
+            "title": "Period Type",
+            "default": "calendar_month"
+          },
+          "period_start": {
+            "type": "string",
+            "title": "Period Start",
+            "default": ""
+          },
+          "period_end": {
+            "type": "string",
+            "title": "Period End",
+            "default": ""
           }
         },
         "type": "object",
@@ -1707,6 +1940,48 @@
       },
       "Mapping": {
         "properties": {
+          "source_type": {
+            "type": "string",
+            "maxLength": 50,
+            "minLength": 1,
+            "pattern": "^[a-zA-Z0-9_-]+$",
+            "title": "Source Type",
+            "default": "sellersprite"
+          },
+          "period_type": {
+            "type": "string",
+            "enum": [
+              "calendar_month",
+              "rolling_30d",
+              "custom"
+            ],
+            "title": "Period Type",
+            "default": "calendar_month"
+          },
+          "period_start": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Period Start"
+          },
+          "period_end": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Period End"
+          },
           "mapping": {
             "additionalProperties": {
               "type": "string"
@@ -2000,6 +2275,30 @@
       },
       "ProfitRequest": {
         "properties": {
+          "monthly_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Monthly Id"
+          },
+          "expected_monthly_revision": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Monthly Revision"
+          },
           "product_id": {
             "type": "string",
             "format": "uuid",
@@ -2074,6 +2373,30 @@
       },
       "SaveProfit": {
         "properties": {
+          "monthly_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Monthly Id"
+          },
+          "expected_monthly_revision": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Monthly Revision"
+          },
           "expected_data_revision": {
             "type": "integer",
             "minimum": 0.0,

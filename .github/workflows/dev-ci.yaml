@@ -69,6 +69,7 @@ jobs:
             sleep 1
           done
           python apps/backend/tests/screening_browser.py
+          python apps/backend/tests/screening_monthly_browser.py
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -135,6 +136,11 @@ jobs:
         working-directory: apps/backend
         env:
           SCREENING_DATABASE_URL: postgresql+asyncpg://postgres:screening-test@127.0.0.1:55432/screening_test
+      - name: Verify product monthly migration preserves history
+        run: python scripts/verify-monthly-migration.py
+        working-directory: apps/backend
+        env:
+          SCREENING_MIGRATION_TEST_DATABASE_URL: postgresql+asyncpg://postgres:screening-test@127.0.0.1:55432/screening_monthly_migration_test
       - run: python -m pytest -q
         working-directory: apps/backend
         env:

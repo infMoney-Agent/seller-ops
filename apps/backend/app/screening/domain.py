@@ -26,6 +26,8 @@ ALIASES = {
     "seller_region": ["卖家所属地", "卖家地区", "Seller Region"],
     "price_usd": ["价格($)", "Price", "price"],
     "monthly_sales": ["月销量", "Monthly Sales"],
+    "monthly_revenue": ["月销售额($)", "月销售额", "Monthly Revenue"],
+    "bsr_rank": ["BSR排名", "BSR Rank", "BSR"],
     "review_count": ["评分数", "Review Count"],
     "rating": ["评分", "Rating"],
 }
@@ -56,7 +58,14 @@ def normalize(raw, mapping):
             if header
             else next((raw[k] for k in aliases if raw.get(k) not in (None, "")), None)
         )
-        if field in ("price_usd", "monthly_sales", "review_count", "rating"):
+        if field in (
+            "price_usd",
+            "monthly_sales",
+            "monthly_revenue",
+            "review_count",
+            "rating",
+            "bsr_rank",
+        ):
             value = numeric(value)
             if value is not None:
                 n = Decimal(value)
@@ -64,13 +73,13 @@ def normalize(raw, mapping):
                     n < 0
                     or (field == "rating" and n > 5)
                     or (
-                        field in ("monthly_sales", "review_count")
+                        field in ("monthly_sales", "review_count", "bsr_rank")
                         and n != n.to_integral_value()
                     )
                     or n > Decimal("999999999999")
                 ):
                     errors.append(f"{field} 数值无效")
-                if field in ("monthly_sales", "review_count"):
+                if field in ("monthly_sales", "review_count", "bsr_rank"):
                     value = int(n)
         else:
             value = str(value).strip() if value is not None else None

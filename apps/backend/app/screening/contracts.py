@@ -46,7 +46,16 @@ class Batch(Strict):
         return self
 
 
-class Mapping(Strict):
+class PeriodMetadata(Strict):
+    source_type: str = Field(
+        default="sellersprite", min_length=1, max_length=50, pattern=r"^[a-zA-Z0-9_-]+$"
+    )
+    period_type: Literal["calendar_month", "rolling_30d", "custom"] = "calendar_month"
+    period_start: date | None = None
+    period_end: date | None = None
+
+
+class Mapping(PeriodMetadata):
     mapping: dict[str, str] = Field(default_factory=dict)
     observed_on: date | None = None
     source_period: str = Field(default="", max_length=80)
@@ -54,6 +63,17 @@ class Mapping(Strict):
     @model_validator(mode="after")
     def check(self):
         from .domain import ALIASES
+        from .monthly import period_metadata
+
+        bounds = period_metadata(
+            self.observed_on,
+            self.source_period,
+            self.period_type,
+            self.period_start,
+            self.period_end,
+        )
+        self.period_start = bounds["period_start"]
+        self.period_end = bounds["period_end"]
 
         if set(self.mapping) - set(ALIASES):
             raise ValueError("未知映射字段")
@@ -119,13 +139,24 @@ class ProfitInputs(Strict):
         return self
 
 
-class ProfitRequest(Strict):
+class MonthlyReference(Strict):
+    monthly_id: UUID | None = None
+    expected_monthly_revision: int | None = Field(default=None, ge=1)
+
+    @model_validator(mode="after")
+    def monthly_reference_pair(self):
+        if (self.monthly_id is None) != (self.expected_monthly_revision is None):
+            raise ValueError("月度记录ID与版本必须一起提供")
+        return self
+
+
+class ProfitRequest(MonthlyReference):
     product_id: UUID
     expected_data_revision: int = Field(ge=0)
     scenarios: list[ProfitInputs] = Field(min_length=1, max_length=20)
 
 
-class SaveProfit(Strict):
+class SaveProfit(MonthlyReference):
     expected_data_revision: int = Field(ge=0)
     inputs: ProfitInputs
     template_id: UUID | None = None

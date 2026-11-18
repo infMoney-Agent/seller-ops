@@ -16,6 +16,7 @@ from .api import (
     FIELDS,
 )
 from .contracts import Selection, SaveProfit, ProfitInputs
+from .monthly import upsert_monthly, base_for, product_with_metrics
 from .domain import MAX_ROWS, parse_file, classify, digest, excel_text
 
 log = logging.getLogger(__name__)
@@ -120,10 +121,6 @@ PRODUCT_FIELDS = [
     "seller_id",
     "seller_name",
     "seller_region",
-    "price_usd",
-    "monthly_sales",
-    "review_count",
-    "rating",
 ]
 
 
@@ -208,11 +205,12 @@ async def import_job(c, job, token):
                     id=str(row["id"]),
                     p=pid,
                 )
+                await upsert_monthly(conn, c.tenant, pid, p, row)
                 if previous is None or incoming > previous:
                     params = {k: n.get(k) for k in PRODUCT_FIELDS}
                     from decimal import Decimal
 
-                    for key in ("price_usd", "rating"):
+                    for key in ():
                         if params[key] is not None:
                             params[key] = Decimal(str(params[key]))
                     await db.execute(
@@ -295,6 +293,17 @@ async def screen_task(c, job, token):
                 result = classify(
                     {**p, "occurrences": occurrence["n"]}, policy["config"]
                 )
+                result["evidence"].append(
+                    {
+                        "rule": "商品与分期来源快照",
+                        "profile_source_row_id": p["current_row_id"],
+                        "monthly_id": p["monthly_id"],
+                        "monthly_revision": p["monthly_revision"],
+                        "monthly_source_row_id": p["monthly_source_row_id"],
+                        "price_usd": p["price_usd"],
+                        "monthly_sales": p["monthly_sales"],
+                    }
+                )
                 rid = uid()
                 grouping = policy["config"].get("grouping", {})
                 seller = p["seller_id"] or "unknown:" + p["asin"]
@@ -310,12 +319,14 @@ async def screen_task(c, job, token):
                 )
                 await db.execute(
                     conn,
-                    "INSERT INTO ps_screen_results(tenant_id,id,run_id,product_id,source_row_id,data_revision,generation,decision,recommendation,direction,group_key,representative_id,reasons,evidence) VALUES(:t,:id,:run,:p,:row,:v,:g,:d,:rec,:direction,:group,:p,CAST(:r AS jsonb),CAST(:e AS jsonb)) ON CONFLICT(tenant_id,run_id,product_id) DO NOTHING",
+                    "INSERT INTO ps_screen_results(tenant_id,id,run_id,product_id,source_row_id,data_revision,generation,decision,recommendation,direction,group_key,representative_id,reasons,evidence,monthly_id,monthly_revision) VALUES(:t,:id,:run,:p,:row,:v,:g,:d,:rec,:direction,:group,:p,CAST(:r AS jsonb),CAST(:e AS jsonb),:mid,:mrev) ON CONFLICT(tenant_id,run_id,product_id) DO NOTHING",
                     t=c.tenant,
                     id=rid,
                     run=str(run["id"]),
                     p=str(p["id"]),
-                    row=str(p["current_row_id"]),
+                    row=str(p["monthly_source_row_id"] or p["current_row_id"]),
+                    mid=str(p["monthly_id"]) if p["monthly_id"] else None,
+                    mrev=p["monthly_revision"],
                     v=p["data_revision"],
                     g=p["screen_generation"],
                     d=result["decision"],
@@ -355,7 +366,7 @@ async def screen_task(c, job, token):
         # Include all current results, including untouched products from previous imports.
         await db.execute(
             conn,
-            "WITH reps AS (SELECT s.group_key,(array_agg(p.id ORDER BY (p.review_status='kept') DESC,p.monthly_sales DESC NULLS LAST,p.id))[1] AS rep FROM ps_products p JOIN ps_screen_results s ON s.tenant_id=p.tenant_id AND s.id=p.current_result_id WHERE p.tenant_id=:t AND s.decision='passed' AND s.recommendation='regular' GROUP BY s.group_key) UPDATE ps_products p SET current_group_rep_id=reps.rep FROM reps,ps_screen_results s WHERE p.tenant_id=:t AND s.tenant_id=p.tenant_id AND s.id=p.current_result_id AND s.group_key=reps.group_key AND s.decision='passed' AND s.recommendation='regular'",
+            "WITH reps AS (SELECT s.group_key,(array_agg(p.id ORDER BY (p.review_status='kept') DESC,m.monthly_sales DESC NULLS LAST,p.id))[1] AS rep FROM ps_products p LEFT JOIN ps_product_monthly m ON m.tenant_id=p.tenant_id AND m.id=p.current_monthly_id JOIN ps_screen_results s ON s.tenant_id=p.tenant_id AND s.id=p.current_result_id WHERE p.tenant_id=:t AND s.decision='passed' AND s.recommendation='regular' GROUP BY s.group_key) UPDATE ps_products p SET current_group_rep_id=reps.rep FROM reps,ps_screen_results s WHERE p.tenant_id=:t AND s.tenant_id=p.tenant_id AND s.id=p.current_result_id AND s.group_key=reps.group_key AND s.decision='passed' AND s.recommendation='regular'",
             t=c.tenant,
         )
         # Finalize only this run's snapshot. Earlier run history is never rewritten.
@@ -391,8 +402,12 @@ async def profits_task(c, job, token):
             if any(x["id"] == target["id"] for x in saved):
                 items = saved
                 continue
-            p = await resource(c, "ps_products", target["id"])
-            if p["data_revision"] != target["data_revision"]:
+            p = await product_with_metrics(
+                conn, c.tenant, target["id"], target.get("monthly_id")
+            )
+            if p["data_revision"] != target["data_revision"] or p[
+                "monthly_revision"
+            ] != target.get("monthly_revision"):
                 item = {"id": target["id"], "success": False, "reason": "商品已更新"}
             else:
                 inputs = {**job["payload"]["inputs"]}
@@ -406,6 +421,8 @@ async def profits_task(c, job, token):
                     p,
                     SaveProfit(
                         expected_data_revision=p["data_revision"],
+                        monthly_id=target.get("monthly_id"),
+                        expected_monthly_revision=target.get("monthly_revision"),
                         inputs=ProfitInputs(**inputs),
                         template_id=job["payload"].get("template_id"),
                     ),
@@ -479,6 +496,25 @@ async def export_task(c, job, token):
             "数据版本",
         ]
     )
+    monthly_sheet = book.create_sheet("月度数据")
+    monthly_sheet.append(
+        [
+            "ASIN",
+            "月份",
+            "统计口径",
+            "统计开始",
+            "统计结束",
+            "观察日期",
+            "来源",
+            "价格USD",
+            "月销量",
+            "月销售额USD",
+            "评分数",
+            "评分",
+            "BSR",
+            "版本",
+        ]
+    )
     source = book.create_sheet("来源记录")
     source.append(["ASIN", "文件", "来源期", "观察日期", "ZIP成员", "工作表", "行号"])
     async with db.transaction() as conn:
@@ -492,7 +528,7 @@ async def export_task(c, job, token):
                 conn,
                 "SELECT "
                 + FIELDS
-                + BASE
+                + base_for(BASE, job["payload"].get("filters", {}))
                 + " WHERE p.tenant_id=:t AND p.id IN (SELECT value::uuid FROM jsonb_array_elements_text(CAST(:ids AS jsonb))) ORDER BY p.id",
                 t=c.tenant,
                 ids=js(chunk),
@@ -506,6 +542,14 @@ async def export_task(c, job, token):
                         for k in fields
                     ]
                 )
+            monthly_rows = await db.rows(
+                conn,
+                "SELECT p.asin,m.stat_month,m.period_type,m.period_start,m.period_end,m.observed_on,m.source_type,m.price_usd,m.monthly_sales,m.monthly_revenue,m.review_count,m.rating,m.bsr_rank,m.revision FROM ps_product_monthly m JOIN ps_products p ON p.tenant_id=m.tenant_id AND p.id=m.product_id WHERE m.tenant_id=:t AND m.product_id IN (SELECT value::uuid FROM jsonb_array_elements_text(CAST(:ids AS jsonb))) ORDER BY p.asin,m.stat_month,m.period_end",
+                t=c.tenant,
+                ids=js(chunk),
+            )
+            for metric in monthly_rows:
+                monthly_sheet.append([excel_text(v) for v in metric.values()])
             observations = await db.rows(
                 conn,
                 "SELECT p.asin,i.file_name,i.source_period,i.observed_on,r.member_path,r.sheet_name,r.row_no FROM ps_import_rows r JOIN ps_products p ON p.tenant_id=r.tenant_id AND p.id=r.product_id JOIN ps_imports i ON i.tenant_id=r.tenant_id AND i.id=r.import_id WHERE r.tenant_id=:t AND r.product_id IN (SELECT value::uuid FROM jsonb_array_elements_text(CAST(:ids AS jsonb))) ORDER BY p.asin,r.id",

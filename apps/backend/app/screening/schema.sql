@@ -1,3 +1,4 @@
+-- Initial schema (migration 0001). Apply 0002 and monthly-schema.sql (0003) for the current product/monthly design.
 CREATE TABLE ps_jobs (
  tenant_id bigint NOT NULL,id uuid NOT NULL,kind text NOT NULL CHECK(kind IN ('parse','import','screen','profit_batch','export')),
  state text NOT NULL DEFAULT 'queued' CHECK(state IN ('queued','running','succeeded','partial','failed')),

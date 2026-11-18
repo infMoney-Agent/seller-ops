@@ -5,12 +5,12 @@ import type { SellerSession } from '@/features/auth/session';
 export const runtime = 'nodejs';
 const uuid = '[0-9a-fA-F-]{36}';
 const routes = [
-  ['GET', 'summary|products|imports|policies|review-batches|profit/templates'],
+  ['GET', 'summary|months|products|imports|policies|review-batches|profit/templates'],
   [
     'POST',
     'imports|policies|screen-runs|review-batches/preview|profit/calculate|profit/templates|profit/batches|exports'
   ],
-  ['GET', `products/${uuid}(/(observations|history|references|profit-scenarios))?`],
+  ['GET', `products/${uuid}(/(observations|monthly|history|references|profit-scenarios))?`],
   ['GET', `imports/${uuid}(/(preview|errors|source))?`],
   [
     'GET',

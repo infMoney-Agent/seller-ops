@@ -55,12 +55,14 @@ type Calculated = { inputs: ProfitInputs; output: ProfitOutput };
 export default function ProfitPanel({
   product,
   selected,
+  filters,
   act,
   watch,
   busy
 }: {
   product: Product | null;
   selected: string[];
+  filters: Record<string, string>;
   act: Action;
   watch: (id: string) => void;
   busy: boolean;
@@ -102,6 +104,10 @@ export default function ProfitPanel({
         {product
           ? `${product.asin} · ${product.title_zh || product.title}`
           : '请在商品库点击“测算”选择商品'}
+      </p>
+      <p className='text-muted-foreground text-sm'>
+        测算数据来源：{product?.stat_month?.slice(0, 7) || '未选择月份'} ·{' '}
+        {product?.source_type || '手动录入'}。批量测算采用商品列表选择的月份，默认各商品最新一期。
       </p>
       <p className='text-muted-foreground text-sm'>
         基于输入假设的预计利润。空白成本不会当作零；无费用请明确填 0。平台费和汇率由你核实填写。
@@ -158,7 +164,7 @@ export default function ProfitPanel({
           disabled={!product}
           onClick={() => product && update('sale_price_usd', product.price_usd || '')}
         >
-          使用当前商品售价
+          使用所选期售价
         </Button>
         {fields.map(([key, label]) => (
           <Field key={key} label={label}>
@@ -191,6 +197,8 @@ export default function ProfitPanel({
               const r = await request<{ items: Calculated[] }>('/profit/calculate', 'POST', {
                 product_id: product.id,
                 expected_data_revision: product.data_revision,
+                monthly_id: product.monthly_id,
+                expected_monthly_revision: product.monthly_revision,
                 scenarios: drafts
               });
               setResults(r.items);
@@ -207,6 +215,8 @@ export default function ProfitPanel({
               if (!product) return;
               await request(`/products/${product.id}/profit-scenarios`, 'POST', {
                 expected_data_revision: product.data_revision,
+                monthly_id: product.monthly_id,
+                expected_monthly_revision: product.monthly_revision,
                 inputs: input,
                 template_id: templateId
               });
@@ -222,6 +232,7 @@ export default function ProfitPanel({
             void act(async () => {
               const job = await request<JobCreated>('/profit/batches', 'POST', {
                 product_ids: selected,
+                filters,
                 inputs: input,
                 template_id: templateId
               });
