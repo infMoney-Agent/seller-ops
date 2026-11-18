@@ -55,6 +55,7 @@ export default function PolicyPanel({
           <label key={key} className='text-sm'>
             <input
               type='checkbox'
+              aria-label={`排除${key}`}
               checked={Boolean(value)}
               disabled={session.role !== 'owner'}
               onChange={(e) => toggle(key, e.target.checked)}

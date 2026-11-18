@@ -143,6 +143,7 @@ export default function ReviewPanel({
                 <label className='text-sm'>
                   <input
                     type='checkbox'
+                    aria-label={`比较样本 ${p.asin}`}
                     checked={compare.includes(p.id)}
                     onChange={(e) =>
                       setCompare((old) =>

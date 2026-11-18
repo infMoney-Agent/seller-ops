@@ -509,6 +509,7 @@ export default function ScreeningPage() {
                 <label className='flex items-center gap-2 text-sm'>
                   <input
                     type='checkbox'
+                    aria-label='展示全部归并商品'
                     checked={filters.show_merged === 'true'}
                     onChange={(e) => filter('show_merged', String(e.target.checked))}
                   />{' '}
@@ -638,6 +639,7 @@ export default function ScreeningPage() {
                       <label className='text-sm'>
                         <input
                           type='checkbox'
+                          aria-label={`选择商品 ${p.asin}`}
                           checked={Boolean(selected[p.id])}
                           onChange={(e) =>
                             setSelected((old) => ({ ...old, [p.id]: e.target.checked }))
