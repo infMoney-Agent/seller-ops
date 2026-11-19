@@ -95,6 +95,9 @@ export default function ImportPanel({
               const selectedFile = e.target.files?.[0] || null;
               setFile(selectedFile);
               setSourceType('sellersprite');
+              setPeriodType((current) => (current === 'rolling_30d' ? current : 'calendar_month'));
+              setPeriodStart('');
+              setPeriodEnd('');
               setSelected(null);
               setMapping({});
               setDate(defaultObservationDate());
@@ -106,31 +109,30 @@ export default function ImportPanel({
           <Input readOnly value={sourceLabels[sourceType] || sourceType} className='bg-muted/50' />
         </Field>
         <Field label='统计周期'>
-          <select
-            className='rounded border bg-transparent p-2'
-            value={periodType}
-            onChange={(e) => {
-              setPeriodType(e.target.value);
-              setPeriodStart('');
-              setPeriodEnd('');
-            }}
-          >
-            <option value='calendar_month'>自然月</option>
-            <option value='rolling_30d'>滚动30天</option>
-            <option value='custom'>自定义周期</option>
-          </select>
+          {periodType === 'custom' ? (
+            <Input readOnly value='历史自定义周期' className='bg-muted/50' />
+          ) : (
+            <select
+              className='rounded border bg-transparent p-2'
+              value={periodType}
+              onChange={(e) => {
+                setPeriodType(e.target.value);
+                setPeriodStart('');
+                setPeriodEnd('');
+              }}
+            >
+              <option value='calendar_month'>固定月份</option>
+              <option value='rolling_30d'>近30天</option>
+            </select>
+          )}
         </Field>
         {periodType === 'custom' && (
           <>
             <Field label='统计开始'>
-              <Input
-                type='date'
-                value={periodStart}
-                onChange={(e) => setPeriodStart(e.target.value)}
-              />
+              <Input type='date' value={periodStart} readOnly />
             </Field>
             <Field label='统计结束'>
-              <Input type='date' value={periodEnd} onChange={(e) => setPeriodEnd(e.target.value)} />
+              <Input type='date' value={periodEnd} readOnly />
             </Field>
           </>
         )}
@@ -155,9 +157,12 @@ export default function ImportPanel({
               data.set('observed_on', date);
               data.set('default_sales_scope', salesScope);
               data.set('source_type', 'sellersprite');
-              data.set('period_type', periodType);
-              data.set('period_start', periodType === 'custom' ? periodStart : '');
-              data.set('period_end', periodType === 'custom' ? periodEnd : '');
+              data.set(
+                'period_type',
+                periodType === 'rolling_30d' ? 'rolling_30d' : 'calendar_month'
+              );
+              data.set('period_start', '');
+              data.set('period_end', '');
               const job = await request<JobCreated & { import_id: string }>(
                 '/imports',
                 'POST',
@@ -195,7 +200,7 @@ export default function ImportPanel({
       </details>
       <p className='text-muted-foreground text-sm'>
         站点：美国。重复 ASIN
-        保留各月经营数据、来源历史和人工结论。自然月与滚动30天独立保存；更改月份或观察日期时，请先保存日期与映射。
+        保留各月经营数据、来源历史和人工结论。固定月份与近30天独立保存；固定月份按来源期保存；近30天以观察日期为截止日。更改月份或观察日期时，请先保存日期与映射。
       </p>
       {imports.isError && <p role='alert'>{imports.error.message}</p>}
       <details open={!active} className='rounded-lg border p-3'>

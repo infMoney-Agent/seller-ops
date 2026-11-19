@@ -10,8 +10,8 @@ const sources: Record<string, string> = {
   legacy_import: '历史导入'
 };
 const periods: Record<string, string> = {
-  calendar_month: '自然月',
-  rolling_30d: '滚动30天',
+  calendar_month: '固定月份',
+  rolling_30d: '近30天',
   custom: '自定义周期'
 };
 const scopes: Record<string, string> = {
