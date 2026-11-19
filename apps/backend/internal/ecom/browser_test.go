@@ -65,10 +65,10 @@ func TestBrowserScreening(t *testing.T) {
 		t.Fatal(e)
 	}
 	if e := chromedp.Run(ctx,
-		chromedp.Evaluate(`(()=>{if(performance.getEntriesByType('resource').some(x=>x.name.includes('/monthly?')))throw Error('history fetched before expansion');const row=[...document.querySelectorAll('tbody tr')].find(r=>r.textContent.includes('BROWSER001'));row.querySelector('button[aria-expanded]').click()})()`, nil),
+		chromedp.Evaluate(`(()=>{if(performance.getEntriesByType('resource').some(x=>x.name.includes('/monthly?')))throw Error('history fetched before expansion');const row=[...document.querySelectorAll('tbody tr')].find(r=>r.textContent.includes('BROWSER001'));[...row.querySelectorAll('button')].find(b=>b.textContent.trim()==='查看详细数据').click()})()`, nil),
 		chromedp.Poll(`document.body.innerText.includes('近一年经营数据') && performance.getEntriesByType('resource').some(x=>x.name.includes('recent_months=12'))`, nil),
 	); e != nil {
-		t.Fatalf("lazy annual expansion failed: %v", e)
+		t.Fatalf("annual data popover failed: %v", e)
 	}
 	var screenshot []byte
 	if e := chromedp.Run(ctx, chromedp.FullScreenshot(&screenshot, 80)); e != nil {

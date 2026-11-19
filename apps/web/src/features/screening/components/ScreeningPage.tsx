@@ -1,6 +1,6 @@
 'use client';
 /* oxlint-disable react/no-unstable-nested-components -- TanStack column renderers are stable useMemo callbacks. */
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Image from 'next/image';
 import { useQueryClient } from '@tanstack/react-query';
 import {
@@ -11,6 +11,13 @@ import {
   type RowSelectionState
 } from '@tanstack/react-table';
 import PageContainer from '@/components/layout/page-container';
+import {
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+  PopoverTitle,
+  PopoverDescription
+} from '@/components/ui/popover';
 import { useSellerSession } from '@/features/auth/session';
 import { cn } from '@/lib/utils';
 import { useJob, useScreeningQuery } from '../queries';
@@ -36,7 +43,6 @@ export default function ScreeningPage() {
   const [filters, setFilters] = useState<Record<string, string>>({ show_merged: 'false' });
   const [selected, setSelected] = useState<RowSelectionState>({});
   const [focus, setFocus] = useState<Product | null>(null);
-  const [yearRows, setYearRows] = useState<Record<string, boolean>>({});
   const [group, setGroup] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
@@ -84,7 +90,6 @@ export default function ScreeningPage() {
   }
   useEffect(() => {
     setSelected({});
-    setYearRows({});
     setFocus(null);
     setGroup(null);
     setJobs([]);
@@ -112,23 +117,6 @@ export default function ScreeningPage() {
   }
   const columns = useMemo<ColumnDef<Product>[]>(
     () => [
-      {
-        id: 'history',
-        header: '经营数据',
-        cell: ({ row }) => (
-          <Button
-            size='sm'
-            variant='ghost'
-            aria-expanded={Boolean(yearRows[row.original.id])}
-            aria-controls={`year-history-${row.original.id}`}
-            onClick={() =>
-              setYearRows((old) => ({ ...old, [row.original.id]: !old[row.original.id] }))
-            }
-          >
-            {yearRows[row.original.id] ? '收起' : '展开近一年'}
-          </Button>
-        )
-      },
       {
         id: 'selection',
         header: ({ table }) => (
@@ -192,9 +180,13 @@ export default function ScreeningPage() {
         accessorKey: 'price_usd',
         header: '价格 / 月销量',
         cell: ({ row }) => (
-          <span>
-            ${formatMoney(row.original.price_usd)} / {row.original.monthly_sales ?? '—'}
-          </span>
+          <PriceHistoryCard
+            product={row.original}
+            onCalculate={(product) => {
+              setFocus(product);
+              setTab(3);
+            }}
+          />
         )
       },
       {
@@ -271,7 +263,7 @@ export default function ScreeningPage() {
         )
       }
     ],
-    [yearRows]
+    []
   );
   // oxlint-disable-next-line react/incompatible-library -- TanStack Table is intentionally kept outside React Compiler memoization.
   const table = useReactTable({
@@ -383,7 +375,8 @@ export default function ScreeningPage() {
               </div>
               <div className='grid gap-3 rounded border p-3 md:grid-cols-4'>
                 <p className='text-muted-foreground text-xs md:col-span-4'>
-                  默认展示各商品最新一期经营数据，点击商品行可展开近一年历史；人工结论为商品级，机器结果依据最新商品资料计算。
+                  默认展示各商品最新一期经营数据，点击价格 /
+                  月销量列的“查看详细数据”可查看近一年历史；人工结论为商品级，机器结果依据最新商品资料计算。
                 </p>
                 <Field label='经营数据来源'>
                   <select
@@ -545,32 +538,16 @@ export default function ScreeningPage() {
                     </thead>
                     <tbody>
                       {table.getRowModel().rows.map((row) => (
-                        <Fragment key={row.id}>
-                          <tr className={cn('border-t', row.getIsSelected() && 'bg-muted/50')}>
-                            {row.getVisibleCells().map((cell) => (
-                              <td key={cell.id} className='p-3 align-top'>
-                                {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                              </td>
-                            ))}
-                          </tr>
-                          {yearRows[row.original.id] && (
-                            <tr
-                              id={`year-history-${row.original.id}`}
-                              className='border-t bg-muted/20'
-                            >
-                              <td colSpan={row.getVisibleCells().length} className='p-3'>
-                                <MonthlyHistory
-                                  product={row.original}
-                                  recentYear
-                                  onCalculate={(product) => {
-                                    setFocus(product);
-                                    setTab(3);
-                                  }}
-                                />
-                              </td>
-                            </tr>
-                          )}
-                        </Fragment>
+                        <tr
+                          key={row.id}
+                          className={cn('border-t', row.getIsSelected() && 'bg-muted/50')}
+                        >
+                          {row.getVisibleCells().map((cell) => (
+                            <td key={cell.id} className='p-3 align-top'>
+                              {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                            </td>
+                          ))}
+                        </tr>
                       ))}
                     </tbody>
                   </table>
@@ -691,6 +668,54 @@ export default function ScreeningPage() {
           {tab === 4 && <PolicyPanel selected={selectedIds} act={act} watch={watch} busy={busy} />}
         </div>
       </PageContainer>
+    </div>
+  );
+}
+
+function PriceHistoryCard({
+  product,
+  onCalculate
+}: {
+  product: Product;
+  onCalculate: (product: Product) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className='space-y-1'>
+      <p className='whitespace-nowrap'>
+        ${formatMoney(product.price_usd)} / {product.monthly_sales ?? '—'}
+      </p>
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger className='text-primary text-xs underline underline-offset-2'>
+          查看详细数据
+        </PopoverTrigger>
+        <PopoverContent
+          align='start'
+          className='max-h-[65vh] w-[min(46rem,calc(100vw-2rem))] overflow-y-auto p-3'
+        >
+          <div className='flex items-start justify-between gap-3'>
+            <div className='min-w-0'>
+              <PopoverTitle>经营数据 · {product.asin}</PopoverTitle>
+              <PopoverDescription className='line-clamp-2'>
+                {product.title_zh || product.title}
+              </PopoverDescription>
+            </div>
+            <Button size='sm' variant='ghost' onClick={() => setOpen(false)}>
+              关闭
+            </Button>
+          </div>
+          {open && (
+            <MonthlyHistory
+              product={product}
+              recentYear
+              onCalculate={(p) => {
+                setOpen(false);
+                onCalculate(p);
+              }}
+            />
+          )}
+        </PopoverContent>
+      </Popover>
     </div>
   );
 }
