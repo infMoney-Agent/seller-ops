@@ -728,10 +728,14 @@ function FamilyChildren({
 }) {
   const [page, setPage] = useState(1);
   const family = useScreeningQuery<FamilyResult>(`/products/${product.id}/family?page=${page}`);
+  const children = useMemo(
+    () => family.data?.items.filter((p) => p.id !== product.id) || [],
+    [family.data?.items, product.id]
+  );
   // Child products share the exact column renderers and selection behavior of the main table.
   // oxlint-disable-next-line react/incompatible-library -- TanStack renders the shared product columns.
   const table = useReactTable({
-    data: family.data?.items.filter((p) => p.id !== product.id) || [],
+    data: children,
     columns,
     state: { rowSelection: selected },
     onRowSelectionChange: onSelectionChange,
