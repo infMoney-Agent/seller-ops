@@ -8,6 +8,7 @@ import {
   getCoreRowModel,
   useReactTable,
   type ColumnDef,
+  type OnChangeFn,
   type RowSelectionState
 } from '@tanstack/react-table';
 import PageContainer from '@/components/layout/page-container';
@@ -568,7 +569,13 @@ export default function ScreeningPage() {
                     <tbody>
                       {table.getRowModel().rows.map((row) => (
                         <Fragment key={row.id}>
-                          <tr className={cn('border-t', row.getIsSelected() && 'bg-muted/50')}>
+                          <tr
+                            className={cn(
+                              'border-t',
+                              familyRows[row.original.id] && 'bg-primary/[0.035]',
+                              row.getIsSelected() && 'bg-muted/50'
+                            )}
+                          >
                             {row.getVisibleCells().map((cell) => (
                               <td key={cell.id} className='p-3 align-top'>
                                 {flexRender(cell.column.columnDef.cell, cell.getContext())}
@@ -576,22 +583,12 @@ export default function ScreeningPage() {
                             ))}
                           </tr>
                           {familyRows[row.original.id] && (
-                            <tr id={`family-${row.original.id}`} className='border-t bg-muted/20'>
-                              <td colSpan={row.getVisibleCells().length} className='p-3'>
-                                <FamilyChildren
-                                  product={row.original}
-                                  selected={selected}
-                                  choose={(id, value) =>
-                                    setSelected((old) => ({ ...old, [id]: value }))
-                                  }
-                                  review={setFocus}
-                                  calculate={(p) => {
-                                    setFocus(p);
-                                    setTab(3);
-                                  }}
-                                />
-                              </td>
-                            </tr>
+                            <FamilyChildren
+                              product={row.original}
+                              columns={columns}
+                              selected={selected}
+                              onSelectionChange={setSelected}
+                            />
                           )}
                         </Fragment>
                       ))}
@@ -720,105 +717,85 @@ export default function ScreeningPage() {
 
 function FamilyChildren({
   product,
+  columns,
   selected,
-  choose,
-  review,
-  calculate
+  onSelectionChange
 }: {
   product: Product;
+  columns: ColumnDef<Product>[];
   selected: RowSelectionState;
-  choose: (id: string, value: boolean) => void;
-  review: (p: Product) => void;
-  calculate: (p: Product) => void;
+  onSelectionChange: OnChangeFn<RowSelectionState>;
 }) {
   const [page, setPage] = useState(1);
   const family = useScreeningQuery<FamilyResult>(`/products/${product.id}/family?page=${page}`);
+  // Child products share the exact column renderers and selection behavior of the main table.
+  // oxlint-disable-next-line react/incompatible-library -- TanStack renders the shared product columns.
+  const table = useReactTable({
+    data: family.data?.items.filter((p) => p.id !== product.id) || [],
+    columns,
+    state: { rowSelection: selected },
+    onRowSelectionChange: onSelectionChange,
+    getRowId: (p) => p.id,
+    getCoreRowModel: getCoreRowModel(),
+    enableRowSelection: true
+  });
   return (
-    <section className='space-y-3'>
-      <p className='text-sm font-medium'>
-        父体 {product.parent_asin} · 共 {family.data?.total ?? product.family_count}{' '}
-        个子体（下方展示其他子体，各自取最新一期）
-      </p>
-      {family.isLoading && <p role='status'>正在加载子体…</p>}
-      {family.isError && <p role='alert'>{family.error.message}</p>}
-      <div className='overflow-auto'>
-        <table className='w-full text-left text-sm'>
-          <thead>
-            <tr>
-              {['选择', '子 ASIN / 商品', '价格 / 月销量', '机器 / 人工结论', '操作'].map((x) => (
-                <th key={x} className='p-2'>
-                  {x}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {family.data?.items
-              .filter((p) => p.id !== product.id)
-              .map((p) => (
-                <tr key={p.id} className='border-t'>
-                  <td className='p-2'>
-                    <input
-                      type='checkbox'
-                      aria-label={`选择子体 ${p.asin}`}
-                      checked={Boolean(selected[p.id])}
-                      onChange={(e) => choose(p.id, e.target.checked)}
-                    />
-                  </td>
-                  <td className='p-2'>
-                    <button className='font-medium underline' onClick={() => review(p)}>
-                      {p.asin}
-                    </button>
-                    <p className='line-clamp-2'>{p.title_zh || p.title}</p>
-                    <p className='text-muted-foreground text-xs'>
-                      {p.stat_month?.slice(0, 7)} ·{' '}
-                      {sourceLabels[p.source_type || ''] || p.source_type} ·{' '}
-                      {periodLabels[p.period_type || '']}
-                    </p>
-                  </td>
-                  <td className='p-2'>
-                    <PriceHistoryCard product={p} onCalculate={calculate} />
-                    {(p.sales_scope !== 'child' || p.monthly_sales === null) && (
-                      <p className='text-muted-foreground text-xs'>子体销量待确认</p>
-                    )}
-                  </td>
-                  <td className='p-2'>
-                    <Badge value={p.decision} />
-                    <Badge value={p.review_status} />
-                  </td>
-                  <td className='p-2'>
-                    <Button size='sm' variant='ghost' onClick={() => review(p)}>
-                      复核
-                    </Button>
-                    <Button size='sm' variant='ghost' onClick={() => calculate(p)}>
-                      测算
-                    </Button>
-                  </td>
-                </tr>
-              ))}
-          </tbody>
-        </table>
-      </div>
-      <div className='flex items-center gap-2'>
-        <Button
-          size='sm'
-          variant='outline'
-          disabled={page === 1}
-          onClick={() => setPage((p) => p - 1)}
+    <>
+      {table.getRowModel().rows.map((row) => (
+        <tr
+          key={row.id}
+          data-family={product.id}
+          className={cn('border-t bg-primary/[0.035]', row.getIsSelected() && 'bg-muted/50')}
         >
-          上一页子体
-        </Button>
-        <span>第 {page} 页</span>
-        <Button
-          size='sm'
-          variant='outline'
-          disabled={page * 50 >= (family.data?.total || 0)}
-          onClick={() => setPage((p) => p + 1)}
-        >
-          下一页子体
-        </Button>
-      </div>
-    </section>
+          {row.getVisibleCells().map((cell) => (
+            <td key={cell.id} className='p-3 align-top'>
+              {flexRender(cell.column.columnDef.cell, cell.getContext())}
+            </td>
+          ))}
+        </tr>
+      ))}
+      <tr id={`family-${product.id}`} className='border-b-2 border-primary/20 bg-primary/[0.035]'>
+        <td colSpan={columns.length} className='p-3'>
+          {family.isLoading && <p role='status'>正在加载同父体商品…</p>}
+          {family.isError && (
+            <div role='alert'>
+              {family.error.message}
+              <Button size='sm' variant='outline' onClick={() => void family.refetch()}>
+                重试
+              </Button>
+            </div>
+          )}
+          {family.data && (
+            <div className='flex flex-wrap items-center gap-2 text-xs text-muted-foreground'>
+              <span>
+                同父体 {product.parent_asin} · 共 {family.data.total} 个商品，各自展示最新一期
+              </span>
+              {family.data.total > 50 && (
+                <>
+                  <Button
+                    size='sm'
+                    variant='outline'
+                    disabled={page === 1}
+                    onClick={() => setPage((p) => p - 1)}
+                  >
+                    上一页同父体商品
+                  </Button>
+                  <span>第 {page} 页</span>
+                  <Button
+                    size='sm'
+                    variant='outline'
+                    disabled={page * 50 >= family.data.total}
+                    onClick={() => setPage((p) => p + 1)}
+                  >
+                    下一页同父体商品
+                  </Button>
+                </>
+              )}
+            </div>
+          )}
+        </td>
+      </tr>
+    </>
   );
 }
 

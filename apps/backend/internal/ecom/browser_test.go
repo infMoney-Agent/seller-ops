@@ -66,9 +66,12 @@ func TestBrowserScreening(t *testing.T) {
 	}
 	if e := chromedp.Run(ctx,
 		chromedp.Evaluate(`(()=>{const row=[...document.querySelectorAll('tbody tr')].find(r=>r.textContent.includes('BROWSER001'));row.querySelector('button[aria-controls^="family-"]').click()})()`, nil),
-		chromedp.Poll(`!!document.querySelector('[id^="family-"]')?.innerText.includes('GUI0000001')`, nil),
+		chromedp.Poll(`[...document.querySelectorAll('tr[data-family]')].some(r=>r.innerText.includes('GUI0000001'))`, nil),
 	); e != nil {
 		t.Fatalf("ASIN family expansion failed: %v", e)
+	}
+	if e := chromedp.Run(ctx, chromedp.Evaluate(`(()=>{const rep=[...document.querySelectorAll('tbody>tr')].find(r=>r.innerText.includes('BROWSER001'));const child=document.querySelector('tr[data-family]');if(!child||child.parentElement!==rep.parentElement||child.cells.length!==rep.cells.length||child.querySelector('table')||!child.querySelector('img')&&rep.querySelector('img')||!child.innerText.includes('查看详细数据')||!child.innerText.includes('测算'))throw Error('Family members must use full peer product rows')})()`, nil)); e != nil {
+		t.Fatal(e)
 	}
 	if e := chromedp.Run(ctx,
 		chromedp.Evaluate(`(()=>{if(performance.getEntriesByType('resource').some(x=>x.name.includes('/monthly?')))throw Error('history fetched before expansion');const row=[...document.querySelectorAll('tbody tr')].find(r=>r.textContent.includes('BROWSER001'));[...row.querySelectorAll('button')].find(b=>b.textContent.trim()==='查看详细数据').click()})()`, nil),
