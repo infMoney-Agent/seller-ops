@@ -50,7 +50,7 @@ func TestBrowserScreening(t *testing.T) {
 	}
 	// Exercise actual import controls as well as the HTTP workflow below.
 	fixturePath := filepath.Join(t.TempDir(), "Product-Tools-US-2026.08-ui.csv")
-	if e := os.WriteFile(fixturePath, []byte("ASIN,商品标题,月销量,价格($),销量口径,父ASIN\nGUI0000001,manual storage tool,100,19.99,child,PARENT0001\n"), 0600); e != nil {
+	if e := os.WriteFile(fixturePath, []byte("ASIN,商品标题,月销量,价格($),销量口径,父ASIN,商品尺寸（单位换算）,商品重量（单位换算）,包装尺寸（单位换算）,包装重量（单位换算）,BuyBox卖家,卖家所属地,FBA($),毛利率\nGUI0000001,manual storage tool,100,19.99,child,PARENT0001,22.86 x 7.62 x 17.78 cm,154.22 g,25.65 x 21.59 x 8.13 cm,181.44 g,Fixture Seller,US,5.91,70%\n"), 0600); e != nil {
 		t.Fatal(e)
 	}
 	if e := chromedp.Run(ctx,
@@ -101,7 +101,7 @@ func TestBrowserScreening(t *testing.T) {
 	); e != nil {
 		t.Fatalf("ASIN family expansion failed: %v", e)
 	}
-	if e := chromedp.Run(ctx, chromedp.Evaluate(`(()=>{const rep=[...document.querySelectorAll('tbody>tr')].find(r=>r.innerText.includes('BROWSER001'));const child=document.querySelector('tr[data-family]');if(!child||child.parentElement!==rep.parentElement||child.cells.length!==rep.cells.length||child.querySelector('table')||!child.querySelector('img')&&rep.querySelector('img')||!child.innerText.includes('查看详细数据')||!child.innerText.includes('测算'))throw Error('Family members must use full peer product rows')})()`, nil)); e != nil {
+	if e := chromedp.Run(ctx, chromedp.Evaluate(`(()=>{const rep=[...document.querySelectorAll('tbody>tr')].find(r=>r.innerText.includes('BROWSER001'));const child=document.querySelector('tr[data-family]');if(!document.querySelector('[data-screening-table]').innerText.includes('尺寸 / 重量')||!document.querySelector('[data-screening-table]').innerText.includes('卖家'))throw Error('new table headers missing');if(!child?.innerText.includes('22.86 × 7.62 × 17.78 cm')||!child.innerText.includes('154.22 g')||!child.innerText.includes('Fixture Seller'))throw Error('measurements or seller absent in peer row');if(!child||child.parentElement!==rep.parentElement||child.cells.length!==rep.cells.length||child.querySelector('table')||!child.querySelector('img')&&rep.querySelector('img')||!child.innerText.includes('查看详细数据')||!child.innerText.includes('测算'))throw Error('Family members must use full peer product rows')})()`, nil)); e != nil {
 		t.Fatal(e)
 	}
 	if e := chromedp.Run(ctx,

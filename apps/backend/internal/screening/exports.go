@@ -209,6 +209,11 @@ func (s *service) runExport(ctx context.Context, job Object, token string) error
 	book := excelize.NewFile()
 	defer book.Close()
 	productFields := []string{"asin", "parent_asin", "title", "title_zh", "category", "manual_category", "brand", "seller_id", "seller_name", "seller_region", "material", "package_weight_g", "package_length_cm", "package_width_cm", "package_height_cm", "units_per_pack", "review_status", "review_reason", "review_note", "machine_decision", "machine_recommendation", "machine_direction", "machine_reasons", "data_revision"}
+	for _, field := range importedColumns {
+		if field.Table == "product" && !containsColumn(productFields, field.Key) {
+			productFields = append(productFields, field.Key)
+		}
+	}
 	args := []any{tenant, ids}
 	if e = streamSheet(ctx, tx, book, "商品", productFields, "SELECT to_jsonb(p) FROM ps_products p WHERE tenant_id=$1 AND id=ANY($2::uuid[]) ORDER BY asin", args...); e != nil {
 		return e
@@ -224,6 +229,14 @@ func (s *service) runExport(ctx context.Context, job Object, token string) error
 		{"父体销量", []string{"parent_asin", "stat_month", "period_type", "period_start", "period_end", "source_type", "monthly_sales", "monthly_revenue", "observed_on"}, "SELECT to_jsonb(m) FROM ps_parent_monthly m WHERE tenant_id=$1 AND parent_asin IN (SELECT parent_asin FROM ps_products WHERE tenant_id=$1 AND id=ANY($2::uuid[])) ORDER BY parent_asin,stat_month,id"},
 	}
 	for _, spec := range specs {
+		for _, field := range importedColumns {
+			if (spec.name == "月份数据" && field.Table == "monthly") || (spec.name == "利润方案" && field.Table == "profit") {
+				spec.headers = append(spec.headers, field.Key)
+			}
+		}
+		if spec.name == "利润方案" {
+			spec.headers = append(spec.headers, "record_kind", "source_row_id")
+		}
 		if e = streamSheet(ctx, tx, book, spec.name, spec.headers, spec.sql, args...); e != nil {
 			return e
 		}

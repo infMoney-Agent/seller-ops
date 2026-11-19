@@ -3,7 +3,7 @@
   "info": {
     "title": "Seller Ops Go Screening API",
     "version": "2.0.0",
-    "description": "Go 服务。浏览器使用 /api/ecom/screening 同源代理；内部路径须通过带工作区及角色的 HMAC 身份校验。商品参数在主表，价格销量在月份副表。"
+    "description": "Go 服务。浏览器使用 /api/ecom/screening 同源代理；内部路径须通过带工作区及角色的 HMAC 身份校验。商品参数在主表，价格销量在月份副表。 SellerSprite imports retain every raw column. Structured product attributes are stored in ps_products, operating columns in ps_product_monthly, and source FBA/gross-margin snapshots in ps_profit_scenarios with record_kind=imported. Source estimates are not calculated profits."
   },
   "paths": {
     "/api/v1/screening/products": {
@@ -7253,6 +7253,63 @@
                 "type": "integer",
                 "minimum": 1,
                 "maximum": 2147483647
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "product_length_cm": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^[0-9]{1,12}(?:\\.[0-9]{1,6})?$"
+                  },
+                  {
+                    "type": "number",
+                    "minimum": 0
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "product_width_cm": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^[0-9]{1,12}(?:\\.[0-9]{1,6})?$"
+                  },
+                  {
+                    "type": "number",
+                    "minimum": 0
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "product_height_cm": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^[0-9]{1,12}(?:\\.[0-9]{1,6})?$"
+                  },
+                  {
+                    "type": "number",
+                    "minimum": 0
+                  }
+                ]
               },
               {
                 "type": "null"

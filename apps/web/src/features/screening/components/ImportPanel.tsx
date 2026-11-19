@@ -49,6 +49,7 @@ export default function ImportPanel({
   const headers = [
     ...new Set([
       ...Object.values(mapping),
+      ...(active?.counts.headers || []),
       ...(preview.data?.items.flatMap((row) => Object.keys(row.raw_data)) || [])
     ])
   ].toSorted();
@@ -133,6 +134,57 @@ export default function ImportPanel({
       </Field>
     </>
   );
+  const matchesHeader = (field: (typeof importFields)[number]) =>
+    Boolean(mapping[field.key]) ||
+    headers.some(
+      (header) =>
+        header === field.key ||
+        field.aliases.some((alias) => alias.toLowerCase() === header.toLowerCase())
+    );
+  const availableFields = importFields.filter(
+    (field) => matchesHeader(field) || ['asin', 'title'].includes(field.key)
+  );
+  const absentFields = importFields.filter((field) => !availableFields.includes(field));
+  const renderFields = (fields: typeof importFields) =>
+    fields.map((field) => {
+      const auto = headers.find((header) =>
+        field.aliases.some((alias) => alias.toLowerCase() === header.toLowerCase())
+      );
+      return (
+        <Field
+          key={field.key}
+          label={
+            field.label +
+            (['asin', 'title'].includes(field.key) ? ' *' : '') +
+            ' · ' +
+            field.storage
+          }
+        >
+          <select
+            aria-label={'映射 ' + field.label}
+            disabled={!editable || busy}
+            className='w-full min-w-0 rounded border bg-transparent p-2 text-sm'
+            value={mapping[field.key] || ''}
+            onChange={(event) => {
+              const value = event.target.value;
+              setMapping((current) => {
+                const next = { ...current };
+                if (value) next[field.key] = value;
+                else delete next[field.key];
+                return next;
+              });
+            }}
+          >
+            <option value=''>{auto ? '自动识别：' + auto : '文件未提供（留空）'}</option>
+            {headers.map((header) => (
+              <option key={header} value={header}>
+                {header}
+              </option>
+            ))}
+          </select>
+        </Field>
+      );
+    });
   return (
     <div className='space-y-5'>
       <ol aria-label='导入步骤' className='grid grid-cols-3 gap-2'>
@@ -332,46 +384,24 @@ export default function ImportPanel({
               <legend className='sr-only'>导入日期与字段对应关系</legend>
               <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-3'>{importMetadata}</div>
               <p className='text-muted-foreground text-xs'>
-                ASIN、标题为必填数据；未指定的字段继续自动识别。修改后请保存并重新解析。
+                ASIN、标题为必填数据。下方按整份文件的表头识别，字段旁标明入库位置；可选列缺失时留空，不影响其他列保存。修改后请保存并重新解析。
               </p>
               <div className='grid gap-3 sm:grid-cols-2 lg:grid-cols-3'>
-                {importFields.map((field) => {
-                  const auto = headers.find((header) =>
-                    field.aliases.some((alias) => alias.toLowerCase() === header.toLowerCase())
-                  );
-                  return (
-                    <Field
-                      key={field.key}
-                      label={field.label + (['asin', 'title'].includes(field.key) ? ' *' : '')}
-                    >
-                      <select
-                        aria-label={'映射 ' + field.label}
-                        disabled={!editable || busy}
-                        className='w-full min-w-0 rounded border bg-transparent p-2 text-sm'
-                        value={mapping[field.key] || ''}
-                        onChange={(event) => {
-                          const value = event.target.value;
-                          setMapping((current) => {
-                            const next = { ...current };
-                            if (value) next[field.key] = value;
-                            else delete next[field.key];
-                            return next;
-                          });
-                        }}
-                      >
-                        <option value=''>
-                          {auto ? '自动识别：' + auto : '自动识别（当前页未匹配）'}
-                        </option>
-                        {headers.map((header) => (
-                          <option key={header} value={header}>
-                            {header}
-                          </option>
-                        ))}
-                      </select>
-                    </Field>
-                  );
-                })}
+                {renderFields(availableFields)}
               </div>
+              {absentFields.length > 0 && (
+                <details className='mt-4 rounded border p-3'>
+                  <summary className='cursor-pointer text-sm'>
+                    文件未提供的可选字段（{absentFields.length}）
+                  </summary>
+                  <p className='text-muted-foreground my-3 text-xs'>
+                    这些列不是必填项，保持留空即可。若文件使用其他列名，可在这里手动对应；原始列始终保留。
+                  </p>
+                  <div className='grid gap-3 sm:grid-cols-2 lg:grid-cols-3'>
+                    {renderFields(absentFields)}
+                  </div>
+                </details>
+              )}
               <div className='mt-4'>
                 {' '}
                 <Button

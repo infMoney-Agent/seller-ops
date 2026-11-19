@@ -7,6 +7,7 @@ import (
 	"math/big"
 	"os"
 	"path/filepath"
+	"sort"
 	"time"
 )
 
@@ -39,9 +40,13 @@ func (s *service) runParse(ctx context.Context, job Object, token string) error 
 		return e
 	}
 	total, valid, invalid := 0, 0, 0
+	headers := map[string]bool{}
 	skipped := []Object{}
 	e = parseSourceReport(data, str(batch["file_name"]), mapping, func(row sourceRow) error {
 		total++
+		for header := range row.Raw {
+			headers[header] = true
+		}
 		state := "valid"
 		if len(row.Errors) > 0 {
 			state = "invalid"
@@ -59,7 +64,7 @@ func (s *service) runParse(ctx context.Context, job Object, token string) error 
 	if e = tx.QueryRow(ctx, "SELECT true FROM ps_jobs WHERE tenant_id=$1 AND id=$2::uuid AND lease_token=$3::uuid AND state='running' FOR UPDATE", a.Tenant, job["id"], token).Scan(&owner); e != nil {
 		return e
 	}
-	_, e = tx.Exec(ctx, "UPDATE ps_imports SET state='preview',counts=$3 WHERE tenant_id=$1 AND id=$2::uuid", a.Tenant, batch["id"], encoded(Object{"total": total, "valid": valid, "invalid": invalid, "skipped_sheets": skipped}))
+	_, e = tx.Exec(ctx, "UPDATE ps_imports SET state='preview',counts=$3 WHERE tenant_id=$1 AND id=$2::uuid", a.Tenant, batch["id"], encoded(Object{"total": total, "valid": valid, "invalid": invalid, "skipped_sheets": skipped, "headers": sortedHeaders(headers)}))
 	if e != nil {
 		return e
 	}
@@ -139,7 +144,7 @@ func (s *service) editImport(ctx context.Context, a identity, id string, b Objec
 		batch[k] = v
 	}
 	mapping, ok := batch["mapping"].(map[string]any)
-	if !ok || len(mapping) > 60 {
+	if !ok || len(mapping) > len(normalConfig.Aliases) {
 		return nil, fail(422, "映射无效")
 	}
 	var aliases struct {
@@ -327,6 +332,9 @@ func importObservation(ctx context.Context, tx pgx.Tx, a identity, batch, meta, 
 	if e != nil {
 		return "", e
 	}
+	if e = saveImportedMonthly(ctx, tx, a, id, str(row["id"]), n); e != nil {
+		return "", e
+	}
 	var currentRow string
 	var monthlyID string
 	var monthlyRevision int64
@@ -342,6 +350,11 @@ func importObservation(ctx context.Context, tx pgx.Tx, a identity, batch, meta, 
 	args := []any{a.Tenant, id, row["id"]}
 	set := "current_row_id=$3::uuid,data_revision=data_revision+1,screen_generation=screen_generation+1,machine_decision=NULL,machine_group_key=NULL,current_group_rep_id=NULL,updated_at=now()"
 	columns := append([]string{"title", "title_zh", "image_url", "category", "brand", "seller_id", "seller_name", "seller_region", "specs"}, parameterColumns...)
+	for _, field := range importedColumns {
+		if field.Table == "product" && !containsColumn(columns, field.Key) {
+			columns = append(columns, field.Key)
+		}
+	}
 	for _, column := range columns {
 		v := n[column]
 		if v == nil || str(v) == "" {
@@ -355,4 +368,13 @@ func importObservation(ctx context.Context, tx pgx.Tx, a identity, batch, meta, 
 	}
 	_, e = tx.Exec(ctx, "UPDATE ps_products SET "+set+" WHERE tenant_id=$1 AND id=$2::uuid", args...)
 	return id, e
+}
+
+func sortedHeaders(headers map[string]bool) []string {
+	result := make([]string, 0, len(headers))
+	for header := range headers {
+		result = append(result, header)
+	}
+	sort.Strings(result)
+	return result
 }

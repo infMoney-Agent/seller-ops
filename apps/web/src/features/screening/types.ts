@@ -8,6 +8,13 @@ export interface Product {
   parent_asin: string | null;
   manual_category: string;
   material: string | null;
+  product_length_cm: string | number | null;
+  product_width_cm: string | number | null;
+  product_height_cm: string | number | null;
+  product_dimensions?: string | null;
+  product_dimensions_original?: string | null;
+  package_dimensions?: string | null;
+  package_dimensions_original?: string | null;
   weight_g: string | number | null;
   package_weight_g: string | number | null;
   package_length_cm: string | number | null;
@@ -26,6 +33,7 @@ export interface Product {
   image_url: string | null;
   category: string | null;
   seller_name: string | null;
+  seller_id?: string | null;
   seller_region: string | null;
   monthly_id: string | null;
   monthly_revision: number | null;
@@ -76,6 +84,7 @@ export interface ImportRecord {
   default_sales_scope: string;
   mapping: Record<string, string>;
   counts: {
+    headers?: string[];
     total?: number;
     valid?: number;
     invalid?: number;
@@ -178,6 +187,9 @@ export interface ProfitInputs {
   note: string;
 }
 export interface ProfitScenario {
+  record_kind?: 'calculated' | 'imported';
+  imported_fba_fee_usd?: string | null;
+  imported_gross_margin_rate?: string | null;
   id: string;
   name: string;
   inputs: ProfitInputs;

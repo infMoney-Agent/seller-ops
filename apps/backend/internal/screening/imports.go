@@ -100,6 +100,8 @@ func normalizeRow(raw Object, mapping Object) (Object, []string) {
 			}
 		}
 	}
+	out["source_monthly_sales"] = out["monthly_sales"]
+	out["source_monthly_revenue"] = out["monthly_revenue"]
 	out["asin"] = strings.ToUpper(str(out["asin"]))
 	out["parent_asin"] = strings.ToUpper(str(out["parent_asin"]))
 	role := strings.ToLower(str(out["listing_role"]))
@@ -185,6 +187,7 @@ func normalizeRow(raw Object, mapping Object) (Object, []string) {
 	if str(out["image_url"]) != "" && !strings.HasPrefix(str(out["image_url"]), "https://") {
 		out["image_url"] = nil
 	}
+	normalizeImportedColumns(out)
 	out["specs"] = Object{"详细参数": str(raw["详细参数"])}
 	return out, errs
 }

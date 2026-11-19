@@ -14,7 +14,7 @@ const referenceSQL = "EXISTS(SELECT 1 FROM ps_products ref WHERE ref.tenant_id=p
 const productProjection = "to_jsonb(p)||jsonb_build_object('monthly_id',m.id,'monthly_revision',m.revision,'stat_month',m.stat_month,'period_type',m.period_type,'period_start',m.period_start,'period_end',m.period_end,'source_type',m.source_type,'sales_scope',m.sales_scope,'price_usd',m.price_usd::text,'reported_monthly_sales',m.monthly_sales,'monthly_sales',CASE WHEN m.sales_scope='child' THEN m.monthly_sales END,'monthly_revenue',CASE WHEN m.sales_scope='child' THEN m.monthly_revenue::text END,'review_count',m.review_count,'rating',m.rating::text,'bsr_rank',m.bsr_rank,'decision',p.machine_decision,'recommendation',p.machine_recommendation,'direction',p.machine_direction,'group_key',p.machine_group_key,'reasons',p.machine_reasons,'profit_output',q.output,'profit_data_revision',q.product_data_revision,'profit_monthly_revision',q.monthly_revision,'has_reference'," + referenceSQL + ")"
 const parentFamilySQL = "COALESCE('parent:'||p.marketplace||':'||NULLIF(p.parent_asin,''),'product:'||p.id::text)"
 const familyRankSQL = "m.stat_month DESC NULLS LAST,m.period_end DESC NULLS LAST,m.period_type,m.source_type,CASE WHEN m.sales_scope='child' THEN m.monthly_sales END DESC NULLS LAST,p.updated_at DESC,p.id"
-const profitJoin = " LEFT JOIN LATERAL(SELECT output,product_data_revision,monthly_revision FROM ps_profit_scenarios q WHERE q.tenant_id=p.tenant_id AND q.product_id=p.id AND q.monthly_id IS NOT DISTINCT FROM m.id ORDER BY created_at DESC,id DESC LIMIT 1) q ON true "
+const profitJoin = " LEFT JOIN LATERAL(SELECT output,product_data_revision,monthly_revision FROM ps_profit_scenarios q WHERE q.tenant_id=p.tenant_id AND q.product_id=p.id AND q.record_kind='calculated' AND q.monthly_id IS NOT DISTINCT FROM m.id ORDER BY created_at DESC,id DESC LIMIT 1) q ON true "
 
 type productQuery struct {
 	joins, sets, where string
@@ -116,6 +116,11 @@ func (s *service) products(r *http.Request) (any, error) {
 	items, e := s.query(r.Context(), sql, q.args...)
 	// List clients use the public aliases. Keep full machine evidence on detail responses.
 	for _, item := range items {
+		for _, field := range importedColumns {
+			if field.Table == "product" && !containsColumn([]string{"product_length_cm", "product_width_cm", "product_height_cm", "product_dimensions", "product_dimensions_original", "package_dimensions", "package_dimensions_original"}, field.Key) {
+				delete(item, field.Key)
+			}
+		}
 		for _, key := range []string{"machine_evidence", "machine_direction", "machine_group_key", "machine_decision", "machine_recommendation", "machine_reasons"} {
 			delete(item, key)
 		}
@@ -154,7 +159,7 @@ func (s *service) profitScenarios(r *http.Request, id string) (any, error) {
 	if e := s.db.QueryRow(r.Context(), "SELECT count(*) FROM ps_profit_scenarios WHERE tenant_id=$1 AND product_id=$2::uuid", a.Tenant, id).Scan(&count); e != nil {
 		return nil, e
 	}
-	items, e := s.query(r.Context(), "SELECT to_jsonb(q)||jsonb_build_object('stale',q.product_data_revision<>p.data_revision OR q.monthly_revision IS DISTINCT FROM m.revision OR EXISTS(SELECT 1 FROM ps_configs newer JOIN ps_configs old ON old.tenant_id=newer.tenant_id AND old.id=q.template_id WHERE newer.tenant_id=q.tenant_id AND newer.kind='profit_template' AND newer.name=old.name AND newer.version>old.version)) FROM ps_profit_scenarios q JOIN ps_products p ON p.tenant_id=q.tenant_id AND p.id=q.product_id LEFT JOIN ps_product_monthly m ON m.tenant_id=q.tenant_id AND m.id=q.monthly_id WHERE q.tenant_id=$1 AND q.product_id=$2::uuid ORDER BY q.created_at DESC,q.id LIMIT $3 OFFSET $4", a.Tenant, id, n, (p-1)*n)
+	items, e := s.query(r.Context(), "SELECT to_jsonb(q)||jsonb_build_object('stale',q.record_kind='calculated' AND (q.product_data_revision<>p.data_revision OR q.monthly_revision IS DISTINCT FROM m.revision OR EXISTS(SELECT 1 FROM ps_configs newer JOIN ps_configs old ON old.tenant_id=newer.tenant_id AND old.id=q.template_id WHERE newer.tenant_id=q.tenant_id AND newer.kind='profit_template' AND newer.name=old.name AND newer.version>old.version))) FROM ps_profit_scenarios q JOIN ps_products p ON p.tenant_id=q.tenant_id AND p.id=q.product_id LEFT JOIN ps_product_monthly m ON m.tenant_id=q.tenant_id AND m.id=q.monthly_id WHERE q.tenant_id=$1 AND q.product_id=$2::uuid ORDER BY q.created_at DESC,q.id LIMIT $3 OFFSET $4", a.Tenant, id, n, (p-1)*n)
 	return Object{"items": items, "total": count, "page": p, "page_size": n}, e
 }
 func (s *service) family(r *http.Request, id string) (any, error) {

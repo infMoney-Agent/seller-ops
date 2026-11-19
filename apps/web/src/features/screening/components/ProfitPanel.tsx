@@ -417,11 +417,15 @@ export default function ProfitPanel({
           </table>
         </TableScroll>
       )}
-      <h3 className='font-semibold'>已保存方案</h3>
+      <h3 className='font-semibold'>利润记录与已保存方案</h3>
       {saved.data?.items.map((s) => (
         <DataBlock
           key={s.id}
-          title={`${s.name}${s.stale ? ' · 数据或模板已更新，请重新测算' : ''} · 单件利润 ${s.output.profit_usd ?? '待补充'} USD`}
+          title={
+            s.record_kind === 'imported'
+              ? `卖家精灵来源估算 · FBA ${s.imported_fba_fee_usd ?? '未提供'} USD · 毛利率 ${s.imported_gross_margin_rate == null ? '未提供' : (Number(s.imported_gross_margin_rate) * 100).toFixed(2) + '%'}（非自行测算）`
+              : `${s.name}${s.stale ? ' · 数据或模板已更新，请重新测算' : ''} · 单件利润 ${s.output.profit_usd ?? '待补充'} USD`
+          }
           value={s}
         />
       ))}

@@ -281,9 +281,6 @@ export default function ScreeningPage() {
                 {row.original.stat_month?.slice(0, 7)} ·{' '}
                 {periodLabels[row.original.period_type || ''] || '暂无分期数据'}
               </p>
-              <p className='text-muted-foreground text-xs'>
-                {row.original.seller_name} · {row.original.seller_region || '地区未知'}
-              </p>
             </div>
           </div>
         )
@@ -299,6 +296,24 @@ export default function ScreeningPage() {
               setTab(3);
             }}
           />
+        )
+      },
+      {
+        id: 'dimensions',
+        header: '尺寸 / 重量',
+        cell: ({ row }) => <ProductMeasurements product={row.original} />
+      },
+      {
+        id: 'seller',
+        header: '卖家',
+        cell: ({ row }) => (
+          <div className='min-w-36 max-w-52 space-y-1 text-xs leading-5'>
+            <p className='break-words text-sm font-medium'>{row.original.seller_name || '—'}</p>
+            <p className='text-muted-foreground'>所属地：{row.original.seller_region || '—'}</p>
+            {row.original.seller_id && (
+              <p className='text-muted-foreground break-all'>ID：{row.original.seller_id}</p>
+            )}
+          </div>
         )
       },
       {
@@ -696,9 +711,9 @@ export default function ScreeningPage() {
                     aria-busy={products.isFetching}
                     className='bg-card max-h-[65vh] overflow-auto rounded-lg border'
                   >
-                    <table className='w-full min-w-[1050px] text-left text-sm'>
+                    <table className='w-full min-w-[1450px] text-left text-sm'>
                       <caption className='sr-only'>
-                        商品列表：商品信息、价格销量、筛选与复核结果
+                        商品列表：商品信息、价格销量、尺寸重量、卖家、筛选与复核结果
                       </caption>
                       <thead className='bg-muted sticky top-0 z-10 [&_th]:bg-muted'>
                         {table.getHeaderGroups().map((g) => (
@@ -1066,7 +1081,68 @@ function PriceHistoryCard({
   );
 }
 
-function SingleReview({
+const measurementNumber = (value: string | number | null | undefined) =>
+  value == null || value === '' || !Number.isFinite(Number(value))
+    ? '—'
+    : Number(value).toLocaleString('zh-CN', { maximumFractionDigits: 2 });
+const measurementDimensions = (
+  length: Product['weight_g'],
+  width: Product['weight_g'],
+  height: Product['weight_g'],
+  original?: string | null
+) =>
+  [length, width, height].every((v) => v != null && v !== '')
+    ? [length, width, height].map(measurementNumber).join(' × ') + ' cm'
+    : original || '—';
+function ProductMeasurements({ product }: { product: Product }) {
+  return (
+    <div className='min-w-56 space-y-1 text-xs leading-5 tabular-nums'>
+      <p>
+        <span className='text-muted-foreground'>商品：</span>
+        {measurementDimensions(
+          product.product_length_cm,
+          product.product_width_cm,
+          product.product_height_cm,
+          product.product_dimensions || product.product_dimensions_original
+        )}
+      </p>
+      <p>
+        <span className='text-muted-foreground'>净重：</span>
+        {measurementNumber(product.weight_g)}
+        {product.weight_g != null && ' g'}
+      </p>
+      <p>
+        <span className='text-muted-foreground'>包装：</span>
+        {measurementDimensions(
+          product.package_length_cm,
+          product.package_width_cm,
+          product.package_height_cm,
+          product.package_dimensions || product.package_dimensions_original
+        )}
+      </p>
+      <p>
+        <span className='text-muted-foreground'>毛重：</span>
+        {measurementNumber(product.package_weight_g)}
+        {product.package_weight_g != null && ' g'}
+      </p>
+    </div>
+  );
+}
+
+function SingleReview(props: Parameters<typeof SingleReviewContent>[0]) {
+  const detail = useScreeningQuery<Product>(`/products/` + props.product.id);
+  if (detail.isError) return <p role='alert'>{detail.error.message}</p>;
+  if (!detail.data) return <p role='status'>正在加载商品详情…</p>;
+  return (
+    <SingleReviewContent
+      {...props}
+      product={detail.data}
+      key={detail.data.id + ':' + detail.data.data_revision + ':' + detail.data.review_revision}
+    />
+  );
+}
+
+function SingleReviewContent({
   product,
   act,
   busy,
@@ -1159,6 +1235,7 @@ function SingleReview({
       >
         保存复核结论
       </Button>
+      <DataBlock title='商品完整资料（主表）' value={product} />
       <DataBlock title='操作历史' value={history.data} />
       <DataBlock title='来源历史' value={observations.data} />
     </section>
