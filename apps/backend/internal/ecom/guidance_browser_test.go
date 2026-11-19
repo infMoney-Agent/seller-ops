@@ -33,6 +33,7 @@ func checkBrowserGuidance(t *testing.T, ctx context.Context, base string) {
 		chromedp.Evaluate("(()=>{const popup=document.querySelector('[data-slot=popover-content]');if(popup)[...popup.querySelectorAll('button')].find(b=>b.textContent.trim()==='关闭').click();const area=document.querySelector('[data-screening-table]');if(area.tabIndex!==0||area.getAttribute('role')!=='region'||!area.getAttribute('aria-label')||!area.querySelector('caption'))throw Error('Named keyboard table region missing');const row=[...document.querySelectorAll('tbody tr')].find(r=>r.textContent.includes('BROWSER001'));[...row.querySelectorAll('button')].find(b=>b.textContent.trim()==='测算').click()})()", nil),
 		chromedp.WaitVisible("form[aria-label='利润测算方案']", chromedp.ByQuery),
 	)
+	run(chromedp.Poll("(async()=>{const r=await fetch('/api/ecom/screening/products?show_merged=false&page=1');if(r.headers.get('content-encoding')!=='gzip'||!r.headers.get('server-timing')?.includes('auth;dur='))throw Error('Compressed list or server timing missing');const data=await r.json();return data.items.length>0})()", nil))
 	fill("sale_price_usd", "19.99")
 	fill("fx_cny_per_usd", "0")
 	run(chromedp.Evaluate("window.__profitRequests=performance.getEntriesByType('resource').filter(x=>x.name.includes('/profit/calculate')).length;document.querySelector('button[value=compare]').click()", nil),
@@ -66,6 +67,11 @@ func checkBrowserGuidance(t *testing.T, ctx context.Context, base string) {
  Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async()=>{if(window.__clipboardMode==='denied')throw new DOMException('Denied','NotAllowedError')}}});
  window.fetch=async(input,init)=>{
   const url=new URL(typeof input==='string'?input:input.url,location.href);
+  if(url.pathname==='/api/ecom/screening/products' && url.searchParams.get('q')==='slow-list')await new Promise(resolve=>setTimeout(resolve,650));
+  if(url.pathname==='/api/ecom/screening/products' && url.searchParams.get('q')==='prefetch'){
+    const page=Number(url.searchParams.get('page')||1);window.__pageReads=window.__pageReads||[];window.__pageReads.push(page);
+    const response=await original('/api/ecom/screening/products?show_merged=false&page=1');const data=await response.json();data.total=100;data.page=page;data.items=data.items.map(item=>({...item,title:'prefetch-page-'+page,title_zh:'prefetch-page-'+page}));return Response.json(data);
+  }
   if(url.pathname==='/api/ecom/monitor/list')return Response.json({monitors:[{asin:'MONITOR001',label:'监控测试'}]});
   if(url.pathname.startsWith('/api/ecom/monitor/snapshots/'))return Response.json({snapshots:[3,2,1].map(day=>({timestamp:'2026-08-0'+day+'T00:00:00Z',price:10+day,bsr_rank:100*day,alert_triggered:false}))});
   if(url.pathname==='/api/ecom/listing/generate')return Response.json({title:'测试商品标题',bullet_points:['one','two','three','four','five'],description:'测试商品描述',search_terms:['tool'],a_plus_draft:'草稿',seo_score:8,character_counts:{title:6,description:6,search_terms:4}});
@@ -106,6 +112,16 @@ func checkBrowserGuidance(t *testing.T, ctx context.Context, base string) {
 		chromedp.Focus("[data-screening-table]", chromedp.ByQuery), chromedp.KeyEvent(kb.ArrowRight),
 		chromedp.Poll("document.querySelector('[data-screening-table]').scrollLeft>0", nil),
 	)
+
+	run(chromedp.Focus("input[placeholder='搜索 ASIN 或商品标题']", chromedp.ByQuery), chromedp.ActionFunc(func(ctx context.Context) error { return input.InsertText("slow-list").Do(ctx) }),
+		chromedp.Poll("!!document.querySelector('[data-screening-table][aria-busy=true]') && document.querySelector('[data-screening-table]').closest('fieldset').disabled && document.querySelector('[data-screening-table]').textContent.includes('BROWSER001')", nil),
+		chromedp.Poll("document.body.innerText.includes('没有符合筛选条件的商品') && !document.querySelector('[data-screening-table]').closest('fieldset').disabled", nil),
+		chromedp.Focus("input[placeholder='搜索 ASIN 或商品标题']", chromedp.ByQuery), chromedp.KeyEvent("a", chromedp.KeyModifiers(input.ModifierCtrl)), chromedp.KeyEvent(kb.Backspace),
+		chromedp.ActionFunc(func(ctx context.Context) error { return input.InsertText("prefetch").Do(ctx) }),
+		chromedp.Poll("window.__pageReads?.includes(2) && document.body.innerText.includes('prefetch-page-1')", nil),
+		chromedp.Sleep(150*time.Millisecond),
+		chromedp.Evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='下一页').click()", nil),
+		chromedp.Poll("document.body.innerText.includes('prefetch-page-2') && window.__pageReads.filter(page=>page===2).length===1", nil))
 	var shot []byte
 	run(chromedp.FullScreenshot(&shot, 80))
 	dir := env("SCREENING_QA_DIR", os.TempDir()+"/screening-go-qa")

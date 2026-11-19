@@ -5,12 +5,17 @@ import type { Job } from './types';
 
 export function useScreeningQuery<T>(
   path: string | null,
-  poll: boolean | ((data: T | undefined) => boolean) = false
+  poll: boolean | ((data: T | undefined) => boolean) = false,
+  retainProducts = false
 ) {
   const session = useSellerSession();
   return useQuery({
     queryKey: ['screening', session.workspaceId, path],
-    queryFn: () => request<T>(path!),
+    queryFn: ({ signal }) => request<T>(path!, 'GET', undefined, signal),
+    placeholderData: retainProducts
+      ? (previous, previousQuery) =>
+          previousQuery?.queryKey[1] === session.workspaceId ? previous : undefined
+      : undefined,
     enabled: Boolean(path),
     refetchInterval: (query) => {
       const running = typeof poll === 'function' ? poll(query.state.data) : poll;

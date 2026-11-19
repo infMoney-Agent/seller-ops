@@ -114,6 +114,12 @@ func (s *service) products(r *http.Request) (any, error) {
 	q.args = append(q.args, n, (p-1)*n)
 	sql += fmt.Sprintf(" ORDER BY sort_value %s NULLS LAST,id LIMIT $%d OFFSET $%d) SELECT ", direction, len(q.args)-1, len(q.args)) + productProjection + "||jsonb_build_object('family_count',CASE WHEN NULLIF(p.parent_asin,'') IS NULL THEN 1 ELSE (SELECT count(*) FROM ps_products sibling WHERE sibling.tenant_id=p.tenant_id AND sibling.marketplace=p.marketplace AND sibling.parent_asin=p.parent_asin) END,'family_sales_pending',EXISTS(SELECT 1 FROM ps_products sibling LEFT JOIN ps_product_monthly sm ON sm.tenant_id=sibling.tenant_id AND sm.id=sibling.current_monthly_id WHERE sibling.tenant_id=p.tenant_id AND sibling.marketplace=p.marketplace AND sibling.parent_asin=p.parent_asin AND (sm.sales_scope IS DISTINCT FROM 'child' OR sm.monthly_sales IS NULL)))" + " FROM selected JOIN ps_products p ON p.tenant_id=$1 AND p.id=selected.id " + q.joins + " ORDER BY selected.sort_value " + direction + " NULLS LAST,p.id"
 	items, e := s.query(r.Context(), sql, q.args...)
+	// List clients use the public aliases. Keep full machine evidence on detail responses.
+	for _, item := range items {
+		for _, key := range []string{"machine_evidence", "machine_direction", "machine_group_key", "machine_decision", "machine_recommendation", "machine_reasons"} {
+			delete(item, key)
+		}
+	}
 	return Object{"items": items, "page": p, "page_size": n, "total": total}, e
 }
 func (s *service) summary(r *http.Request) (any, error) {

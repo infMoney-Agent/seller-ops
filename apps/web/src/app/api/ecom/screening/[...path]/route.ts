@@ -1,11 +1,15 @@
 import { createHmac } from 'node:crypto';
+import { acceptsGzip, serverTiming } from '@/lib/http-performance';
 import { backendURL } from '@/lib/backend';
 import type { SellerSession } from '@/features/auth/session';
 
 export const runtime = 'nodejs';
 const uuid = '[0-9a-fA-F-]{36}';
 const routes = [
-  ['GET', 'parents/monthly|summary|months|products|imports|policies|review-batches|profit/templates'],
+  [
+    'GET',
+    'parents/monthly|summary|months|products|imports|policies|review-batches|profit/templates'
+  ],
   [
     'POST',
     'imports|policies|screen-runs|review-batches/preview|profit/calculate|profit/templates|profit/batches|exports'
@@ -25,6 +29,7 @@ const routes = [
 ] as const;
 
 async function proxy(request: Request, { params }: { params: Promise<{ path: string[] }> }) {
+  const started = performance.now();
   const path = (await params).path.join('/');
   if (
     !routes.some(
@@ -42,6 +47,7 @@ async function proxy(request: Request, { params }: { params: Promise<{ path: str
   if (secret.length < 32) return Response.json({ message: '初筛服务尚未配置。' }, { status: 503 });
   let oversized = false;
   try {
+    const authStarted = performance.now();
     const auth = await fetch(backendURL('/api/auth/session'), {
       headers: { cookie: request.headers.get('cookie') || '' },
       cache: 'no-store',
@@ -54,6 +60,7 @@ async function proxy(request: Request, { params }: { params: Promise<{ path: str
         { status: auth.status === 401 ? 401 : 502 }
       );
     const session: SellerSession = await auth.json();
+    const authDuration = performance.now() - authStarted;
     if (
       !Number.isSafeInteger(session.id) ||
       session.id <= 0 ||
@@ -63,7 +70,10 @@ async function proxy(request: Request, { params }: { params: Promise<{ path: str
     ) {
       return Response.json({ message: '账号尚未绑定租户，请联系管理员。' }, { status: 403 });
     }
-    if (request.headers.has('x-seller-workspace') && request.headers.get('x-seller-workspace') !== String(session.workspaceId)) {
+    if (
+      request.headers.has('x-seller-workspace') &&
+      request.headers.get('x-seller-workspace') !== String(session.workspaceId)
+    ) {
       return Response.json({ message: '工作区已切换，请刷新页面。' }, { status: 409 });
     }
     const stamp = String(Math.floor(Date.now() / 1000));
@@ -115,18 +125,40 @@ async function proxy(request: Request, { params }: { params: Promise<{ path: str
       duplex: 'half',
       cache: 'no-store',
       redirect: 'error',
-      signal: AbortSignal.timeout(upload ? 180000 : 120000)
+      signal: write
+        ? AbortSignal.timeout(upload ? 180000 : 120000)
+        : AbortSignal.any([request.signal, AbortSignal.timeout(120000)])
     };
+    const apiStarted = performance.now();
     const response = await fetch(
       new URL(targetPath, process.env.SCREENING_API_URL || 'http://127.0.0.1:18090'),
       init
     );
-    const responseHeaders = new Headers({ 'Cache-Control': 'no-store' });
+    const apiDuration = performance.now() - apiStarted;
+    const responseHeaders = new Headers({
+      'Cache-Control': 'no-store',
+      'Server-Timing': serverTiming(authDuration, apiDuration, performance.now() - started)
+    });
     for (const name of ['content-type', 'content-disposition']) {
       const value = response.headers.get(name);
       if (value) responseHeaders.set(name, value);
     }
-    return new Response(response.body, { status: response.status, headers: responseHeaders });
+    let responseBody = response.body;
+    const productList = path === 'products' || /^products\/[^/]+\/family$/.test(path);
+    if (
+      !write &&
+      productList &&
+      response.ok &&
+      responseBody &&
+      response.headers.get('content-type')?.includes('application/json')
+    ) {
+      responseHeaders.set('Vary', 'Accept-Encoding');
+      if (acceptsGzip(request.headers.get('accept-encoding'))) {
+        responseHeaders.set('Content-Encoding', 'gzip');
+        responseBody = responseBody.pipeThrough(new CompressionStream('gzip'));
+      }
+    }
+    return new Response(responseBody, { status: response.status, headers: responseHeaders });
   } catch (error) {
     console.error(
       'Screening proxy failed',

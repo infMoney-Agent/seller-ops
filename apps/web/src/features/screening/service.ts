@@ -4,10 +4,18 @@ export function workspaceHeader(): Record<string, string> {
     document.querySelector<HTMLElement>('[data-seller-workspace]')?.dataset.sellerWorkspace;
   return workspace ? { 'X-Seller-Workspace': workspace } : {};
 }
-export async function request<T>(path: string, method = 'GET', body?: unknown): Promise<T> {
+export async function request<T>(
+  path: string,
+  method = 'GET',
+  body?: unknown,
+  signal?: AbortSignal,
+  priority: RequestPriority = 'auto'
+): Promise<T> {
   const upload = body instanceof FormData;
   const options: RequestInit = {
     method,
+    signal,
+    priority,
     cache: 'no-store',
     headers: {
       ...workspaceHeader(),

@@ -18,3 +18,12 @@ const missing={...base,purchase_cny:null,fba_fee_usd:null,sale_price_usd:null};
 assert.equal(Object.keys(validate(missing)).length,0,'missing costs or batch prices must stay incomplete, not become zero');
 assert.equal(missing.purchase_cny,null);
 console.log('Profit form boundary checks passed (rates, zero/negative costs, positive FX, integer units, missing costs).');
+
+const httpSource=readFileSync(new URL('../apps/web/src/lib/http-performance.ts',import.meta.url),'utf8');
+const httpCode=ts.transpileModule(httpSource,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2023}}).outputText;
+const httpExports={};vm.runInNewContext(httpCode,{exports:httpExports});
+for(const [header,expected] of [[null,false],['br, gzip, deflate',true],['gzip;q=0',false],['*;q=1, gzip;q=0',false],['*;q=0.5',true],['gzip;q=invalid',false],['gzip;q=2',false]]) {
+ assert.equal(httpExports.acceptsGzip(header),expected,'gzip negotiation: '+header);
+}
+assert.match(httpExports.serverTiming(2.3,20,25),/auth;dur=2.3, api;dur=20.0, proxy;dur=25.0/);
+console.log('Compression negotiation and server timing checks passed.');

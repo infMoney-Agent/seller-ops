@@ -70,7 +70,37 @@ export default function ScreeningPage() {
   const [jobs, setJobs] = useState<string[]>([]);
   const [activeJob, setActiveJob] = useState<string | null>(null);
   const query = new URLSearchParams({ ...filters, page: String(page) }).toString();
-  const products = useScreeningQuery<PageResult<Product>>('/products?' + query);
+  const products = useScreeningQuery<PageResult<Product>>('/products?' + query, false, true);
+  useEffect(() => {
+    if (
+      !products.data ||
+      products.isPlaceholderData ||
+      products.isFetching ||
+      page * products.data.page_size >= products.data.total
+    )
+      return;
+    const params = new URLSearchParams({ ...filters, page: String(page + 1) });
+    const path = '/products?' + params;
+    const timer = setTimeout(
+      () =>
+        void client.prefetchQuery({
+          queryKey: ['screening', session.workspaceId, path],
+          queryFn: ({ signal }) =>
+            request<PageResult<Product>>(path, 'GET', undefined, signal, 'low'),
+          staleTime: 60000
+        }),
+      300
+    );
+    return () => clearTimeout(timer);
+  }, [
+    client,
+    filters,
+    page,
+    products.data,
+    products.isPlaceholderData,
+    products.isFetching,
+    session.workspaceId
+  ]);
   const counts = useScreeningQuery<Record<string, number>>(
     '/summary?' + new URLSearchParams(filters)
   );
@@ -645,6 +675,11 @@ export default function ScreeningPage() {
                 </Button>
               </div>
               {products.isError && <p role='alert'>{products.error.message}</p>}
+              {products.isFetching && products.data && (
+                <p role='status' className='text-muted-foreground text-xs'>
+                  正在更新列表，暂时保留上次结果…
+                </p>
+              )}
               {products.isLoading ? (
                 <div
                   role='status'
@@ -653,76 +688,80 @@ export default function ScreeningPage() {
                   正在加载商品…
                 </div>
               ) : (
-                <TableScroll
-                  label='商品列表，可横向和纵向滚动'
-                  data-screening-table
-                  className='bg-card max-h-[65vh] overflow-auto rounded-lg border'
-                >
-                  <table className='w-full min-w-[1050px] text-left text-sm'>
-                    <caption className='sr-only'>
-                      商品列表：商品信息、价格销量、筛选与复核结果
-                    </caption>
-                    <thead className='bg-muted sticky top-0 z-10 [&_th]:bg-muted'>
-                      {table.getHeaderGroups().map((g) => (
-                        <tr key={g.id}>
-                          {g.headers.map((h) => (
-                            <th scope='col' key={h.id} className='whitespace-nowrap p-3'>
-                              {flexRender(h.column.columnDef.header, h.getContext())}
-                            </th>
-                          ))}
-                        </tr>
-                      ))}
-                    </thead>
-                    <tbody>
-                      {table.getRowModel().rows.map((row) => (
-                        <Fragment key={row.id}>
-                          <tr
-                            className={cn(
-                              'border-t',
-                              familyRows[row.original.id] && 'bg-primary/[0.035]',
-                              row.getIsSelected() && 'bg-muted/50'
-                            )}
-                          >
-                            {row.getVisibleCells().map((cell) => (
-                              <td key={cell.id} className='px-3 py-2.5 align-top'>
-                                {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                              </td>
+                <fieldset disabled={products.isPlaceholderData} className='min-w-0'>
+                  <legend className='sr-only'>商品列表操作</legend>
+                  <TableScroll
+                    label='商品列表，可横向和纵向滚动'
+                    data-screening-table
+                    aria-busy={products.isFetching}
+                    className='bg-card max-h-[65vh] overflow-auto rounded-lg border'
+                  >
+                    <table className='w-full min-w-[1050px] text-left text-sm'>
+                      <caption className='sr-only'>
+                        商品列表：商品信息、价格销量、筛选与复核结果
+                      </caption>
+                      <thead className='bg-muted sticky top-0 z-10 [&_th]:bg-muted'>
+                        {table.getHeaderGroups().map((g) => (
+                          <tr key={g.id}>
+                            {g.headers.map((h) => (
+                              <th scope='col' key={h.id} className='whitespace-nowrap p-3'>
+                                {flexRender(h.column.columnDef.header, h.getContext())}
+                              </th>
                             ))}
                           </tr>
-                          {familyRows[row.original.id] && (
-                            <FamilyChildren
-                              product={row.original}
-                              columns={columns}
-                              selected={selected}
-                              onSelectionChange={setSelected}
-                            />
-                          )}
-                        </Fragment>
-                      ))}
-                    </tbody>
-                  </table>
-                  {!products.isError && !products.data?.items.length && (
-                    <div className='p-10 text-center'>
-                      <p className='font-medium'>
-                        {filterCount ? '没有符合筛选条件的商品' : '还没有商品'}
-                      </p>
-                      <p className='text-muted-foreground mt-1 text-sm'>
-                        {filterCount ? '调整筛选条件后重试。' : '导入商品文件，开始初筛与复核。'}
-                      </p>
-                      <Button
-                        variant='link'
-                        onClick={() => (filterCount ? resetFilters() : setTab(1))}
-                      >
-                        {filterCount ? '重置筛选' : '导入商品文件'}
-                      </Button>
-                    </div>
-                  )}
-                </TableScroll>
+                        ))}
+                      </thead>
+                      <tbody>
+                        {table.getRowModel().rows.map((row) => (
+                          <Fragment key={row.id}>
+                            <tr
+                              className={cn(
+                                'border-t',
+                                familyRows[row.original.id] && 'bg-primary/[0.035]',
+                                row.getIsSelected() && 'bg-muted/50'
+                              )}
+                            >
+                              {row.getVisibleCells().map((cell) => (
+                                <td key={cell.id} className='px-3 py-2.5 align-top'>
+                                  {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                                </td>
+                              ))}
+                            </tr>
+                            {familyRows[row.original.id] && (
+                              <FamilyChildren
+                                product={row.original}
+                                columns={columns}
+                                selected={selected}
+                                onSelectionChange={setSelected}
+                              />
+                            )}
+                          </Fragment>
+                        ))}
+                      </tbody>
+                    </table>
+                    {!products.isError && !products.data?.items.length && (
+                      <div className='p-10 text-center'>
+                        <p className='font-medium'>
+                          {filterCount ? '没有符合筛选条件的商品' : '还没有商品'}
+                        </p>
+                        <p className='text-muted-foreground mt-1 text-sm'>
+                          {filterCount ? '调整筛选条件后重试。' : '导入商品文件，开始初筛与复核。'}
+                        </p>
+                        <Button
+                          variant='link'
+                          onClick={() => (filterCount ? resetFilters() : setTab(1))}
+                        >
+                          {filterCount ? '重置筛选' : '导入商品文件'}
+                        </Button>
+                      </div>
+                    )}
+                  </TableScroll>
+                </fieldset>
               )}
               <div className='flex items-center gap-3'>
                 <Button
                   variant='outline'
-                  disabled={page === 1}
+                  disabled={products.isPlaceholderData || page === 1}
                   onClick={() => setPage((v) => v - 1)}
                 >
                   上一页
@@ -732,7 +771,7 @@ export default function ScreeningPage() {
                 </span>
                 <Button
                   variant='outline'
-                  disabled={page * 50 >= (products.data?.total || 0)}
+                  disabled={products.isPlaceholderData || page * 50 >= (products.data?.total || 0)}
                   onClick={() => setPage((v) => v + 1)}
                 >
                   下一页
