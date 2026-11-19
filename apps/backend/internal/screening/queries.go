@@ -122,13 +122,21 @@ func (s *service) summary(r *http.Request) (any, error) {
 	return s.one(r.Context(), "SELECT jsonb_build_object('products',count(*),'displayed',count(DISTINCT COALESCE(CASE WHEN p.machine_decision IS NOT NULL THEN p.machine_group_key END,p.id::text)),'pending',count(*) FILTER(WHERE p.review_status='pending'),'kept',count(*) FILTER(WHERE p.review_status='kept'),'excluded',count(*) FILTER(WHERE p.review_status='excluded'),'source_rows',COALESCE(sum((SELECT count(*) FROM ps_import_rows ir WHERE ir.tenant_id=p.tenant_id AND ir.product_id=p.id)),0)) FROM ps_products p "+filterJoins(q, false)+" WHERE "+q.where, q.args...)
 }
 func (s *service) monthlyList(r *http.Request, id string) (any, error) {
+	window := r.URL.Query().Get("recent_months")
+	if window != "" && window != "12" {
+		return nil, fail(422, "recent_months 只支持 12")
+	}
+	extra := ""
+	if window == "12" {
+		extra = " AND stat_month >= (SELECT max(stat_month) - interval '11 months' FROM ps_product_monthly WHERE tenant_id=$1 AND product_id=$2::uuid)"
+	}
 	a := actor(r)
 	p, n := page(r)
 	var count int
-	if e := s.db.QueryRow(r.Context(), "SELECT count(*) FROM ps_product_monthly WHERE tenant_id=$1 AND product_id=$2::uuid", a.Tenant, id).Scan(&count); e != nil {
+	if e := s.db.QueryRow(r.Context(), "SELECT count(*) FROM ps_product_monthly WHERE tenant_id=$1 AND product_id=$2::uuid"+extra, a.Tenant, id).Scan(&count); e != nil {
 		return nil, e
 	}
-	items, e := s.query(r.Context(), "SELECT to_jsonb(m)||jsonb_build_object('file_name',i.file_name,'member_path',r.member_path,'sheet_name',r.sheet_name,'row_no',r.row_no,'price_usd',m.price_usd::text) FROM ps_product_monthly m JOIN ps_import_rows r ON r.tenant_id=m.tenant_id AND r.id=m.source_row_id JOIN ps_imports i ON i.tenant_id=r.tenant_id AND i.id=r.import_id WHERE m.tenant_id=$1 AND m.product_id=$2::uuid ORDER BY m.stat_month DESC,m.period_end DESC,m.observed_on DESC,m.id LIMIT $3 OFFSET $4", a.Tenant, id, n, (p-1)*n)
+	items, e := s.query(r.Context(), "SELECT to_jsonb(m)||jsonb_build_object('file_name',i.file_name,'member_path',r.member_path,'sheet_name',r.sheet_name,'row_no',r.row_no,'price_usd',m.price_usd::text) FROM ps_product_monthly m JOIN ps_import_rows r ON r.tenant_id=m.tenant_id AND r.id=m.source_row_id JOIN ps_imports i ON i.tenant_id=r.tenant_id AND i.id=r.import_id WHERE m.tenant_id=$1 AND m.product_id=$2::uuid"+extra+" ORDER BY m.stat_month DESC,m.period_end DESC,m.observed_on DESC,m.id LIMIT $3 OFFSET $4", a.Tenant, id, n, (p-1)*n)
 	return Object{"items": items, "total": count, "page": p, "page_size": n}, e
 }
 func (s *service) profitScenarios(r *http.Request, id string) (any, error) {

@@ -297,6 +297,17 @@ func TestImportHTTPWorkflow(t *testing.T) {
 		t.Fatal(summary)
 	}
 
+	upload("2024-01", "2024-02-01", "8.00")
+	allHistory := call("GET", "products/"+str(first["id"])+"/monthly", "", nil)
+	recentHistory := call("GET", "products/"+str(first["id"])+"/monthly?recent_months=12", "", nil)
+	if integer(allHistory["total"]) != 3 || integer(recentHistory["total"]) != 2 {
+		t.Fatal("annual history filter", allHistory, recentHistory)
+	}
+	for _, item := range recentHistory["items"].([]any) {
+		if str(item.(map[string]any)["stat_month"]) < "2025-12-01" {
+			t.Fatal("old month leaked", item)
+		}
+	}
 }
 
 func TestExplanatorySheets(t *testing.T) {

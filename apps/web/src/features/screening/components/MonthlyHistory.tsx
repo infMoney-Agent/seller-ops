@@ -19,21 +19,26 @@ export const periodLabels: Record<string, string> = {
 
 export default function MonthlyHistory({
   product,
-  onCalculate
+  onCalculate,
+  recentYear = false
 }: {
   product: Product;
+  recentYear?: boolean;
   onCalculate: (product: Product) => void;
 }) {
   const [page, setPage] = useState(1);
   const history = useScreeningQuery<PageResult<MonthlyRecord>>(
-    `/products/${product.id}/monthly?page=${page}`
+    `/products/${product.id}/monthly?page=${page}${recentYear ? '&recent_months=12' : ''}`
   );
   return (
     <section className='space-y-3 rounded border p-3'>
-      <h4 className='font-semibold'>月度经营数据</h4>
+      <h4 className='font-semibold'>{recentYear ? '近一年经营数据' : '月度经营数据'}</h4>
       <p className='text-muted-foreground text-xs'>
-        同一商品按来源和统计周期保存多期数据。修改经营数据不会覆盖人工结论。
+        {recentYear
+          ? '截至该商品最新数据月份，展示近 12 个月已导入的数据；缺失月份不补零，不同来源与统计口径分别展示。'
+          : '同一商品按来源和统计周期保存多期数据。修改经营数据不会覆盖人工结论。'}
       </p>
+      {history.isLoading && <p role='status'>正在加载经营数据…</p>}
       {history.isError && <p role='alert'>{history.error.message}</p>}
       <div className='overflow-auto'>
         <table className='w-full text-left text-sm'>
@@ -65,7 +70,13 @@ export default function MonthlyHistory({
                   </p>
                 </td>
                 <td>{formatMoney(row.price_usd)}</td>
-                <td>{row.sales_scope==='child' ? row.monthly_sales ?? '—' : row.sales_scope==='parent' ? '父体汇总见父体数据' : `${row.monthly_sales ?? '—'}（未知，不参与合计）`}</td>
+                <td>
+                  {row.sales_scope === 'child'
+                    ? (row.monthly_sales ?? '—')
+                    : row.sales_scope === 'parent'
+                      ? '父体汇总见父体数据'
+                      : `${row.monthly_sales ?? '—'}（未知，不参与合计）`}
+                </td>
                 <td>{formatMoney(row.monthly_revenue)}</td>
                 <td>
                   {row.rating ?? '—'} / {row.review_count ?? '—'}
@@ -107,7 +118,9 @@ export default function MonthlyHistory({
           </tbody>
         </table>
       </div>
-      {!history.data?.total && !history.isLoading && <p className='text-sm'>暂无月度数据</p>}
+      {!history.data?.total && !history.isLoading && !history.isError && (
+        <p className='text-sm'>暂无月度数据</p>
+      )}
       <div className='flex items-center gap-2'>
         <Button
           size='sm'

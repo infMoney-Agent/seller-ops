@@ -745,6 +745,18 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "recent_months",
+            "in": "query",
+            "required": false,
+            "description": "以商品最新数据月份为截止月份（含），按需返回近12个月已导入数据；省略时返回全部历史。",
+            "schema": {
+              "type": "integer",
+              "enum": [
+                12
+              ]
+            }
           }
         ],
         "responses": {
