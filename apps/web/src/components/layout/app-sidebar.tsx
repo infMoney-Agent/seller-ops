@@ -12,6 +12,7 @@ import {
 import {
   Sidebar,
   SidebarContent,
+  SidebarHeader,
   SidebarFooter,
   SidebarGroup,
   SidebarGroupLabel,
@@ -39,6 +40,21 @@ export default function AppSidebar() {
 
   return (
     <Sidebar collapsible='icon'>
+      <SidebarHeader className='border-b px-3 py-4'>
+        <Link
+          href='/dashboard'
+          aria-label='Seller Ops 电商运营工作台'
+          className='flex items-center gap-2.5 group-data-[collapsible=icon]:justify-center'
+        >
+          <span className='bg-primary text-primary-foreground flex size-8 shrink-0 items-center justify-center rounded-lg text-xs font-bold'>
+            SO
+          </span>
+          <div className='min-w-0 group-data-[collapsible=icon]:hidden'>
+            <p className='text-sm font-semibold tracking-tight'>Seller Ops</p>
+            <p className='text-muted-foreground text-xs'>电商运营工作台</p>
+          </div>
+        </Link>
+      </SidebarHeader>
       <SidebarContent className='overflow-x-hidden'>
         {filteredGroups.map((group) => (
           <SidebarGroup key={group.label || 'ungrouped'} className='py-0'>

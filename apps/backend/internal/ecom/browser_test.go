@@ -34,6 +34,19 @@ func TestBrowserScreening(t *testing.T) {
 	if !strings.Contains(text, "产品初筛") {
 		t.Fatal("screening page did not render", text)
 	}
+	if strings.Contains(text, "Vercel") {
+		t.Fatal("template theme selector still visible")
+	}
+	if e := chromedp.Run(ctx,
+		chromedp.Evaluate(`(()=>{const b=[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='更多筛选');if(!b||b.getAttribute('aria-expanded')!=='false'||document.getElementById('screening-advanced-filters'))throw Error('Advanced filters must start collapsed');b.click()})()`, nil),
+		chromedp.Poll(`!!document.getElementById('screening-advanced-filters')`, nil),
+		chromedp.Evaluate(`(()=>{const label=[...document.querySelectorAll('#screening-advanced-filters label')].find(l=>l.textContent.includes('推荐类型'));const select=label.querySelector('select');select.value='exploration';select.dispatchEvent(new Event('change',{bubbles:true}));})()`, nil),
+		chromedp.Poll(`[...document.querySelectorAll('button')].some(b=>b.textContent.includes('重置筛选（1）'))`, nil),
+		chromedp.Evaluate(`[...document.querySelectorAll('button')].find(b=>b.textContent.includes('重置筛选')).click()`, nil),
+		chromedp.Poll(`!document.getElementById('screening-advanced-filters') && [...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='重置筛选'&&b.disabled)`, nil),
+	); e != nil {
+		t.Fatalf("compact filters failed: %v", e)
+	}
 	// Exercise actual import controls as well as the HTTP workflow below.
 	fixturePath := filepath.Join(t.TempDir(), "Product-Tools-US-2026.08-ui.csv")
 	if e := os.WriteFile(fixturePath, []byte("ASIN,商品标题,月销量,价格($),销量口径,父ASIN\nGUI0000001,manual storage tool,100,19.99,child,PARENT0001\n"), 0600); e != nil {
@@ -78,6 +91,9 @@ func TestBrowserScreening(t *testing.T) {
 		chromedp.Poll(`document.body.innerText.includes('近一年经营数据') && performance.getEntriesByType('resource').some(x=>x.name.includes('recent_months=12'))`, nil),
 	); e != nil {
 		t.Fatalf("annual data popover failed: %v", e)
+	}
+	if e := chromedp.Run(ctx, chromedp.Evaluate(`(()=>{if(!document.querySelector('button[aria-label="复制 ASIN BROWSER001"]'))throw Error('ASIN copy action missing');const t=document.querySelector('[data-screening-table]');if(!t||getComputedStyle(t.querySelector('thead')).position!=='sticky')throw Error('Product header must remain sticky');if(document.body.innerText.includes('Vercel'))throw Error('Template entry remains')})()`, nil)); e != nil {
+		t.Fatal(e)
 	}
 	var screenshot []byte
 	if e := chromedp.Run(ctx, chromedp.FullScreenshot(&screenshot, 80)); e != nil {

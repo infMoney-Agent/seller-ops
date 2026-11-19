@@ -12,6 +12,7 @@ import {
   type RowSelectionState
 } from '@tanstack/react-table';
 import PageContainer from '@/components/layout/page-container';
+import { Icons } from '@/components/icons';
 import {
   Popover,
   PopoverTrigger,
@@ -47,6 +48,7 @@ export default function ScreeningPage() {
   const session = useSellerSession();
   const client = useQueryClient();
   const [tab, setTab] = useState(0);
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [page, setPage] = useState(1);
   const [filters, setFilters] = useState<Record<string, string>>({ show_merged: 'false' });
   const [selected, setSelected] = useState<RowSelectionState>({});
@@ -70,6 +72,29 @@ export default function ScreeningPage() {
     group ? `/groups/${group}/products?page=${groupPage}&${new URLSearchParams(filters)}` : null
   );
   const job = useJob(activeJob);
+  const advancedKeys = [
+    'recommendation',
+    'category',
+    'seller_region',
+    'direction',
+    'profit_min',
+    'profit_max',
+    'import_id',
+    'has_reference'
+  ];
+  const advancedCount = advancedKeys.filter((key) => Boolean(filters[key])).length;
+  const filterCount = Object.entries(filters).filter(
+    ([key, value]) => value && (key !== 'show_merged' || value === 'true')
+  ).length;
+  function resetFilters() {
+    setFilters({ show_merged: 'false' });
+    setPage(1);
+    setSelected({});
+    setFamilyRows({});
+    setGroup(null);
+    setFocus(null);
+    setShowAdvanced(false);
+  }
   const selectedIds = Object.keys(selected).filter((id) => selected[id]);
   const refresh = async () => {
     await Promise.all([
@@ -150,7 +175,7 @@ export default function ScreeningPage() {
         accessorKey: 'asin',
         header: '商品',
         cell: ({ row }) => (
-          <div className='flex max-w-md gap-3'>
+          <div className='flex min-w-64 max-w-md gap-2.5'>
             {row.original.image_url && (
               <Image
                 unoptimized
@@ -158,32 +183,42 @@ export default function ScreeningPage() {
                 height={64}
                 src={row.original.image_url}
                 alt=''
-                className='h-16 w-16 rounded bg-white object-contain'
+                className='h-14 w-14 shrink-0 rounded-md border bg-white object-contain'
                 loading='lazy'
                 referrerPolicy='no-referrer'
               />
             )}
             <div>
-              <button
-                className='font-medium underline underline-offset-4'
-                onClick={() => setFocus(row.original)}
-              >
-                {row.original.asin}
-              </button>
-              {(row.original.family_count || 1) > 1 && (
-                <Button
-                  size='sm'
-                  variant='ghost'
-                  aria-label={`展开 ${row.original.parent_asin} 的子体`}
-                  aria-expanded={Boolean(familyRows[row.original.id])}
-                  aria-controls={`family-${row.original.id}`}
-                  onClick={() =>
-                    setFamilyRows((old) => ({ ...old, [row.original.id]: !old[row.original.id] }))
-                  }
+              <div className='flex flex-wrap items-center gap-1'>
+                <button
+                  className='font-semibold underline-offset-4 hover:underline'
+                  title='打开商品复核'
+                  onClick={() => setFocus(row.original)}
                 >
-                  {familyRows[row.original.id] ? '▾' : '▸'} {row.original.family_count} 个子体
-                </Button>
-              )}
+                  {row.original.asin}
+                </button>
+                <AsinTools asin={row.original.asin} />
+                {(row.original.family_count || 1) > 1 && (
+                  <Button
+                    size='sm'
+                    variant='ghost'
+                    className='h-7 px-2 text-xs'
+                    aria-label={`${familyRows[row.original.id] ? '收起' : '展开'} ${row.original.parent_asin} 的子体`}
+                    aria-expanded={Boolean(familyRows[row.original.id])}
+                    aria-controls={`family-${row.original.id}`}
+                    onClick={() =>
+                      setFamilyRows((old) => ({ ...old, [row.original.id]: !old[row.original.id] }))
+                    }
+                  >
+                    {familyRows[row.original.id] ? (
+                      <Icons.chevronDown className='size-3' />
+                    ) : (
+                      <Icons.chevronRight className='size-3' />
+                    )}
+                    {row.original.family_count} 个子体
+                  </Button>
+                )}
+              </div>
               {(row.original.family_count || 1) > 1 && (
                 <p className='text-muted-foreground text-xs'>
                   {row.original.sales_scope === 'child' && row.original.monthly_sales !== null
@@ -193,7 +228,12 @@ export default function ScreeningPage() {
                     : '代表商品 · 销量待确认'}
                 </p>
               )}
-              <p className='line-clamp-2'>{row.original.title_zh || row.original.title}</p>
+              <p
+                className='line-clamp-2 leading-5'
+                title={row.original.title_zh || row.original.title}
+              >
+                {row.original.title_zh || row.original.title}
+              </p>
               <p className='text-xs'>
                 父体：{row.original.parent_asin || '未知'}{' '}
                 {row.original.manual_category && `· 人工分类：${row.original.manual_category}`}
@@ -314,8 +354,13 @@ export default function ScreeningPage() {
         pageTitle='产品初筛'
         pageDescription='导入、筛选、人工复核与利润测算，保留每次判断的来源。'
         pageHeaderAction={
-          <Button variant='outline' onClick={() => void refresh()}>
-            刷新
+          <Button
+            size='sm'
+            variant='outline'
+            disabled={products.isFetching}
+            onClick={() => void refresh()}
+          >
+            {products.isFetching ? '刷新中…' : '刷新'}
           </Button>
         }
       >
@@ -393,138 +438,179 @@ export default function ScreeningPage() {
           )}
           {tab === 0 && (
             <>
-              <div className='grid grid-cols-2 gap-3 md:grid-cols-4'>
+              <div className='grid grid-cols-2 gap-2 md:grid-cols-4'>
                 {[
                   ['source_rows', '子体来源行数'],
                   ['products', '去重商品'],
                   ['displayed', '父体折叠展示'],
                   ['pending', '待复核']
                 ].map(([key, title]) => (
-                  <div key={key} className='rounded-lg border p-4'>
-                    <span className='text-muted-foreground text-sm'>{title}</span>
-                    <p className='mt-1 text-2xl font-semibold'>{counts.data?.[key] ?? '—'}</p>
+                  <div
+                    key={key}
+                    className='bg-card flex items-center justify-between gap-2 rounded-lg border px-3 py-3'
+                  >
+                    <span className='text-muted-foreground text-xs'>{title}</span>
+                    <p className='text-xl font-semibold tabular-nums'>
+                      {counts.data?.[key]?.toLocaleString('zh-CN') ?? '—'}
+                    </p>
                   </div>
                 ))}
               </div>
-              <div className='grid gap-3 rounded border p-3 md:grid-cols-4'>
-                <p className='text-muted-foreground text-xs md:col-span-4'>
-                  默认展示各商品最新一期经营数据，点击价格 /
-                  月销量列的“查看详细数据”可查看近一年历史；人工结论为商品级，机器结果依据最新商品资料计算。
-                </p>
-                <Field label='经营数据来源'>
-                  <select
-                    className='rounded border bg-transparent p-2'
-                    value={filters.source_type || ''}
-                    onChange={(e) => {
-                      filter('source_type', e.target.value);
-                      setFocus(null);
-                      setSelected({});
-                    }}
-                  >
-                    <option value=''>全部来源（采用所选周期最新观察值）</option>
-                    {[...new Set((months.data?.items || []).map((m) => m.source_type))].map(
-                      (source) => (
-                        <option key={source} value={source}>
-                          {sourceLabels[source] || source}
-                        </option>
-                      )
-                    )}
-                  </select>
-                </Field>
-
-                <Field label='关键词 / ASIN'>
-                  <Input value={filters.q || ''} onChange={(e) => filter('q', e.target.value)} />
-                </Field>
-                <Field label='人工结论'>
-                  <select
-                    className='rounded border bg-transparent p-2'
-                    value={filters.review_status || ''}
-                    onChange={(e) => filter('review_status', e.target.value)}
-                  >
-                    <option value=''>全部</option>
-                    {(['pending', 'kept', 'excluded', 'unsure'] as const).map((v, i) => (
-                      <option key={v} value={v}>
-                        {['待复核', '保留', '排除', '待确认'][i]}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-                <Field label='机器结果'>
-                  <select
-                    className='rounded border bg-transparent p-2'
-                    value={filters.machine || ''}
-                    onChange={(e) => filter('machine', e.target.value)}
-                  >
-                    <option value=''>全部</option>
-                    <option value='passed'>通过</option>
-                    <option value='excluded'>排除</option>
-                    <option value='insufficient'>信息不足</option>
-                    <option value='unscreened'>未初筛</option>
-                  </select>
-                </Field>
-                <Field label='推荐类型'>
-                  <select
-                    className='rounded border bg-transparent p-2'
-                    value={filters.recommendation || ''}
-                    onChange={(e) => filter('recommendation', e.target.value)}
-                  >
-                    <option value=''>全部</option>
-                    <option value='regular'>常规</option>
-                    <option value='exploration'>探索</option>
-                  </select>
-                </Field>
-                {(
-                  [
-                    ['category', '类目'],
-                    ['seller_region', '卖家地区'],
-                    ['direction', '产品方向'],
-                    ['profit_min', '最低利润 USD'],
-                    ['profit_max', '最高利润 USD']
-                  ] as const
-                ).map(([key, title]) => (
-                  <Field key={key} label={title}>
+              <section aria-label='商品筛选' className='bg-card space-y-3 rounded-lg border p-3'>
+                <div className='flex items-center justify-between gap-3'>
+                  <p className='text-muted-foreground text-xs'>
+                    默认最新一期 · 同父体折叠展示 · 点击价格销量查看历史
+                  </p>
+                  <Button size='sm' variant='ghost' disabled={!filterCount} onClick={resetFilters}>
+                    重置筛选{filterCount ? `（${filterCount}）` : ''}
+                  </Button>
+                </div>
+                <div className='grid gap-3 sm:grid-cols-2 xl:grid-cols-4'>
+                  <Field label='关键词 / ASIN'>
                     <Input
-                      value={filters[key] || ''}
-                      onChange={(e) => filter(key, e.target.value)}
+                      placeholder='搜索 ASIN 或商品标题'
+                      value={filters.q || ''}
+                      onChange={(e) => filter('q', e.target.value)}
                     />
                   </Field>
-                ))}
-                <Field label='来源批次'>
-                  <select
-                    className='rounded border bg-transparent p-2'
-                    value={filters.import_id || ''}
-                    onChange={(e) => filter('import_id', e.target.value)}
+                  <Field label='人工结论'>
+                    <select
+                      className='h-9 w-full min-w-0 rounded-md border bg-background px-2 text-sm'
+                      value={filters.review_status || ''}
+                      onChange={(e) => filter('review_status', e.target.value)}
+                    >
+                      <option value=''>全部</option>
+                      {(['pending', 'kept', 'excluded', 'unsure'] as const).map((v, i) => (
+                        <option key={v} value={v}>
+                          {['待复核', '保留', '排除', '待确认'][i]}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field label='机器结果'>
+                    <select
+                      className='rounded border bg-transparent p-2'
+                      value={filters.machine || ''}
+                      onChange={(e) => filter('machine', e.target.value)}
+                    >
+                      <option value=''>全部</option>
+                      <option value='passed'>通过</option>
+                      <option value='excluded'>排除</option>
+                      <option value='insufficient'>信息不足</option>
+                      <option value='unscreened'>未初筛</option>
+                    </select>
+                  </Field>
+                  <Field label='经营数据来源'>
+                    <select
+                      className='rounded border bg-transparent p-2'
+                      value={filters.source_type || ''}
+                      onChange={(e) => {
+                        filter('source_type', e.target.value);
+                        setFocus(null);
+                        setSelected({});
+                      }}
+                    >
+                      <option value=''>全部来源 · 最新一期</option>
+                      {[...new Set((months.data?.items || []).map((m) => m.source_type))].map(
+                        (source) => (
+                          <option key={source} value={source}>
+                            {sourceLabels[source] || source}
+                          </option>
+                        )
+                      )}
+                    </select>
+                  </Field>
+                </div>
+                <div className='flex items-center justify-between gap-3'>
+                  <label className='flex items-center gap-2 text-xs'>
+                    <input
+                      type='checkbox'
+                      aria-label='展示全部子体'
+                      checked={filters.show_merged === 'true'}
+                      onChange={(e) => filter('show_merged', String(e.target.checked))}
+                    />
+                    展示全部子体
+                  </label>
+                  <Button
+                    size='sm'
+                    variant='ghost'
+                    aria-expanded={showAdvanced}
+                    aria-controls='screening-advanced-filters'
+                    onClick={() => setShowAdvanced((v) => !v)}
                   >
-                    <option value=''>全部批次</option>
-                    {imports.data?.items.map((item) => (
-                      <option key={item.id} value={item.id}>
-                        {item.file_name} · {item.source_period}
-                      </option>
+                    {showAdvanced ? '收起筛选' : '更多筛选'}
+                    {advancedCount > 0 && (
+                      <span className='bg-primary/10 text-primary rounded px-1.5 text-xs'>
+                        {advancedCount}
+                      </span>
+                    )}
+                    <Icons.chevronDown
+                      className={cn('size-4 transition-transform', showAdvanced && 'rotate-180')}
+                    />
+                  </Button>
+                </div>
+                {showAdvanced && (
+                  <div
+                    id='screening-advanced-filters'
+                    className='grid gap-3 border-t pt-3 sm:grid-cols-2 xl:grid-cols-4'
+                  >
+                    {' '}
+                    <Field label='推荐类型'>
+                      <select
+                        className='rounded border bg-transparent p-2'
+                        value={filters.recommendation || ''}
+                        onChange={(e) => filter('recommendation', e.target.value)}
+                      >
+                        <option value=''>全部</option>
+                        <option value='regular'>常规</option>
+                        <option value='exploration'>探索</option>
+                      </select>
+                    </Field>
+                    {(
+                      [
+                        ['category', '类目'],
+                        ['seller_region', '卖家地区'],
+                        ['direction', '产品方向'],
+                        ['profit_min', '最低利润 USD'],
+                        ['profit_max', '最高利润 USD']
+                      ] as const
+                    ).map(([key, title]) => (
+                      <Field key={key} label={title}>
+                        <Input
+                          value={filters[key] || ''}
+                          onChange={(e) => filter(key, e.target.value)}
+                        />
+                      </Field>
                     ))}
-                  </select>
-                </Field>
-                <Field label='人工样本'>
-                  <select
-                    className='rounded border bg-transparent p-2'
-                    value={filters.has_reference || ''}
-                    onChange={(e) => filter('has_reference', e.target.value)}
-                  >
-                    <option value=''>全部</option>
-                    <option value='true'>有样本</option>
-                    <option value='false'>无样本</option>
-                  </select>
-                </Field>
-                <label className='flex items-center gap-2 text-sm'>
-                  <input
-                    type='checkbox'
-                    aria-label='展示全部子体'
-                    checked={filters.show_merged === 'true'}
-                    onChange={(e) => filter('show_merged', String(e.target.checked))}
-                  />{' '}
-                  展示全部归并商品
-                </label>
-              </div>
-              <div className='flex flex-wrap items-center gap-2'>
+                    <Field label='来源批次'>
+                      <select
+                        className='rounded border bg-transparent p-2'
+                        value={filters.import_id || ''}
+                        onChange={(e) => filter('import_id', e.target.value)}
+                      >
+                        <option value=''>全部批次</option>
+                        {imports.data?.items.map((item) => (
+                          <option key={item.id} value={item.id}>
+                            {item.file_name} · {item.source_period}
+                          </option>
+                        ))}
+                      </select>
+                    </Field>
+                    <Field label='人工样本'>
+                      <select
+                        className='rounded border bg-transparent p-2'
+                        value={filters.has_reference || ''}
+                        onChange={(e) => filter('has_reference', e.target.value)}
+                      >
+                        <option value=''>全部</option>
+                        <option value='true'>有样本</option>
+                        <option value='false'>无样本</option>
+                      </select>
+                    </Field>
+                  </div>
+                )}
+              </section>
+              <div className='bg-card flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2'>
                 <span className='text-sm'>跨页已选 {selectedIds.length} 个</span>
                 <Button variant='outline' onClick={() => setSelected({})}>
                   清空
@@ -551,11 +637,19 @@ export default function ScreeningPage() {
               </div>
               {products.isError && <p role='alert'>{products.error.message}</p>}
               {products.isLoading ? (
-                <p role='status'>正在加载商品…</p>
+                <div
+                  role='status'
+                  className='text-muted-foreground animate-pulse rounded-lg border p-8 text-center text-sm'
+                >
+                  正在加载商品…
+                </div>
               ) : (
-                <div className='overflow-auto rounded border'>
-                  <table className='w-full text-left text-sm'>
-                    <thead className='bg-muted'>
+                <div
+                  data-screening-table
+                  className='bg-card max-h-[65vh] overflow-auto rounded-lg border'
+                >
+                  <table className='w-full min-w-[1050px] text-left text-sm'>
+                    <thead className='bg-muted sticky top-0 z-10 [&_th]:bg-muted'>
                       {table.getHeaderGroups().map((g) => (
                         <tr key={g.id}>
                           {g.headers.map((h) => (
@@ -577,7 +671,7 @@ export default function ScreeningPage() {
                             )}
                           >
                             {row.getVisibleCells().map((cell) => (
-                              <td key={cell.id} className='p-3 align-top'>
+                              <td key={cell.id} className='px-3 py-2.5 align-top'>
                                 {flexRender(cell.column.columnDef.cell, cell.getContext())}
                               </td>
                             ))}
@@ -594,11 +688,19 @@ export default function ScreeningPage() {
                       ))}
                     </tbody>
                   </table>
-                  {!products.data?.items.length && (
+                  {!products.isError && !products.data?.items.length && (
                     <div className='p-10 text-center'>
-                      <p>还没有符合条件的商品</p>
-                      <Button variant='link' onClick={() => setTab(1)}>
-                        导入商品文件
+                      <p className='font-medium'>
+                        {filterCount ? '没有符合筛选条件的商品' : '还没有商品'}
+                      </p>
+                      <p className='text-muted-foreground mt-1 text-sm'>
+                        {filterCount ? '调整筛选条件后重试。' : '导入商品文件，开始初筛与复核。'}
+                      </p>
+                      <Button
+                        variant='link'
+                        onClick={() => (filterCount ? resetFilters() : setTab(1))}
+                      >
+                        {filterCount ? '重置筛选' : '导入商品文件'}
                       </Button>
                     </div>
                   )}
@@ -715,6 +817,62 @@ export default function ScreeningPage() {
   );
 }
 
+function AsinTools({ asin }: { asin: string }) {
+  const [copied, setCopied] = useState(false);
+  const [error, setError] = useState(false);
+  useEffect(() => {
+    if (!copied) return;
+    const timer = setTimeout(() => setCopied(false), 1800);
+    return () => clearTimeout(timer);
+  }, [copied]);
+  return (
+    <>
+      <Button
+        size='sm'
+        variant='ghost'
+        className='h-7 w-7 p-0'
+        aria-label={`复制 ASIN ${asin}`}
+        title={copied ? '已复制 ASIN' : '复制 ASIN'}
+        onClick={async () => {
+          setError(false);
+          try {
+            await navigator.clipboard.writeText(asin);
+            setCopied(true);
+          } catch {
+            setError(true);
+          }
+        }}
+      >
+        {copied ? (
+          <Icons.check className='size-3.5 text-emerald-600' />
+        ) : (
+          <Icons.ecomCopy className='size-3.5 text-muted-foreground' />
+        )}
+      </Button>
+      <a
+        href={`https://www.amazon.com/dp/${asin}`}
+        target='_blank'
+        rel='noopener noreferrer'
+        aria-label={`在 Amazon 查看 ${asin}`}
+        title='在 Amazon 查看'
+        className='text-muted-foreground hover:bg-muted inline-flex size-7 items-center justify-center rounded-md'
+      >
+        <Icons.externalLink className='size-3.5' />
+      </a>
+      {copied && (
+        <span role='status' className='sr-only'>
+          ASIN 已复制
+        </span>
+      )}
+      {error && (
+        <span role='alert' className='text-destructive text-xs'>
+          复制失败，请手动选择 ASIN
+        </span>
+      )}
+    </>
+  );
+}
+
 function FamilyChildren({
   product,
   columns,
@@ -752,7 +910,7 @@ function FamilyChildren({
           className={cn('border-t bg-primary/[0.035]', row.getIsSelected() && 'bg-muted/50')}
         >
           {row.getVisibleCells().map((cell) => (
-            <td key={cell.id} className='p-3 align-top'>
+            <td key={cell.id} className='px-3 py-2.5 align-top'>
               {flexRender(cell.column.columnDef.cell, cell.getContext())}
             </td>
           ))}

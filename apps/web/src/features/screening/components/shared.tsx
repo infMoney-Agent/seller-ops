@@ -1,5 +1,6 @@
 'use client';
 import type { ReactNode } from 'react';
+import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 export { Button, Input };
@@ -27,15 +28,28 @@ export const labels: Record<string, string> = {
 };
 export function Badge({ value }: { value: string | null }) {
   return (
-    <span className='bg-muted rounded px-2 py-1 text-xs'>
+    <span
+      className={cn(
+        'inline-flex items-center whitespace-nowrap rounded-md px-2 py-0.5 text-xs font-medium ring-1 ring-inset',
+        value && ['kept', 'passed', 'succeeded', 'completed', 'applied'].includes(value)
+          ? 'bg-emerald-50 text-emerald-700 ring-emerald-600/15 dark:bg-emerald-500/10 dark:text-emerald-300'
+          : value && ['excluded', 'failed'].includes(value)
+            ? 'bg-red-50 text-red-700 ring-red-600/15 dark:bg-red-500/10 dark:text-red-300'
+            : value && ['pending', 'unsure', 'insufficient', 'partial'].includes(value)
+              ? 'bg-amber-50 text-amber-700 ring-amber-600/15 dark:bg-amber-500/10 dark:text-amber-300'
+              : value && ['queued', 'running', 'parsing', 'importing', 'preview'].includes(value)
+                ? 'bg-blue-50 text-blue-700 ring-blue-600/15 dark:bg-blue-500/10 dark:text-blue-300'
+                : 'bg-muted text-muted-foreground ring-border'
+      )}
+    >
       {value ? labels[value] || value : '未初筛'}
     </span>
   );
 }
 export function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <label className='flex min-w-0 flex-col gap-1 text-sm'>
-      <span className='text-muted-foreground'>{label}</span>
+    <label className='flex min-w-0 flex-col gap-1.5 text-sm'>
+      <span className='text-muted-foreground text-xs font-medium'>{label}</span>
       {children}
     </label>
   );
