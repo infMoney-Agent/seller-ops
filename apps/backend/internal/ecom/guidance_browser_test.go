@@ -2,6 +2,7 @@ package ecom
 
 import (
 	"context"
+	"github.com/chromedp/cdproto/input"
 	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/chromedp"
 	"github.com/chromedp/chromedp/kb"
@@ -13,16 +14,20 @@ import (
 
 func checkBrowserGuidance(t *testing.T, ctx context.Context, base string) {
 	t.Helper()
+	step := 0
 	run := func(actions ...chromedp.Action) {
+		step++
 		t.Helper()
 		if err := chromedp.Run(ctx, actions...); err != nil {
-			t.Fatal(err)
+			var body string
+			chromedp.Run(ctx, chromedp.Evaluate("JSON.stringify([...document.querySelectorAll(\"form input[name]\")].map(x=>[x.name,x.value]))+document.body.innerText", &body))
+			t.Fatalf("Guidance step %d: %v; page: %s", step, err, body)
 		}
 	}
 	fill := func(name, value string) {
 		t.Helper()
 		selector := "form[aria-label='利润测算方案'] input[name='" + name + "']"
-		run(chromedp.Focus(selector, chromedp.ByQuery), chromedp.KeyEvent(kb.Control+"a"), chromedp.KeyEvent(kb.Backspace), chromedp.SendKeys(selector, value, chromedp.ByQuery))
+		run(chromedp.Focus(selector, chromedp.ByQuery), chromedp.KeyEvent("a", chromedp.KeyModifiers(input.ModifierCtrl)), chromedp.KeyEvent(kb.Backspace), chromedp.SendKeys(selector, value, chromedp.ByQuery))
 	}
 	run(
 		chromedp.Evaluate("(()=>{const popup=document.querySelector('[data-slot=popover-content]');if(popup)[...popup.querySelectorAll('button')].find(b=>b.textContent.trim()==='关闭').click();const area=document.querySelector('[data-screening-table]');if(area.tabIndex!==0||area.getAttribute('role')!=='region'||!area.getAttribute('aria-label')||!area.querySelector('caption'))throw Error('Named keyboard table region missing');const row=[...document.querySelectorAll('tbody tr')].find(r=>r.textContent.includes('BROWSER001'));[...row.querySelectorAll('button')].find(b=>b.textContent.trim()==='测算').click()})()", nil),
@@ -36,10 +41,12 @@ func checkBrowserGuidance(t *testing.T, ctx context.Context, base string) {
 	for name, value := range map[string]string{"fx_cny_per_usd": "7.20", "discount_usd": "0", "purchase_cny": "18", "packaging_cny": "2", "freight_cny": "8", "other_landed_cny": "0", "commission_rate": "0.15", "fba_fee_usd": "4", "storage_usd": "0.10", "ad_rate": "0.10", "return_rate": "0.03", "loss_per_return_usd": "12", "other_usd": "0", "monthly_units": "100"} {
 		fill(name, value)
 	}
-	run(chromedp.Evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='复制为新方案').click()", nil))
+	run(chromedp.Evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='复制为新方案').click()", nil), chromedp.Poll("document.querySelector('form input[name=name]').value==='方案2'", nil))
 	fill("commission_rate", "1.5")
-	run(chromedp.Evaluate("[...document.querySelectorAll('form button')].find(b=>b.textContent.trim()==='基准').click();document.querySelector('button[value=compare]').click()", nil),
-		chromedp.Poll("document.activeElement?.name==='commission_rate' && document.activeElement.value==='1.5' && document.activeElement.getAttribute('aria-invalid')==='true'", nil))
+	run(chromedp.Evaluate("[...document.querySelectorAll('form button')].find(b=>b.textContent.trim()==='基准').click()", nil),
+		chromedp.Poll("document.querySelector('form input[name=name]').value==='基准'", nil),
+		chromedp.Evaluate("document.querySelector('button[value=compare]').click()", nil),
+		chromedp.Poll("document.querySelector('form input[name=name]').value==='方案2' && document.activeElement?.name==='commission_rate' && document.activeElement.value==='1.5' && document.activeElement.getAttribute('aria-invalid')==='true'", nil))
 	fill("commission_rate", "0.15")
 	run(chromedp.Click("button[value=compare]", chromedp.ByQuery),
 		chromedp.Poll("[...document.querySelectorAll('form tbody tr')].filter(row=>row.textContent.includes('6.64')).length===2 && !document.querySelector('form fieldset').disabled", nil),
@@ -72,10 +79,10 @@ func checkBrowserGuidance(t *testing.T, ctx context.Context, base string) {
 		chromedp.Navigate(base+"/dashboard/ecom/monitor"),
 		chromedp.WaitVisible("button[aria-label='查看监控 MONITOR001']", chromedp.ByQuery),
 		chromedp.Focus("button[aria-label='查看监控 MONITOR001']", chromedp.ByQuery), chromedp.KeyEvent(kb.Enter),
-		chromedp.Poll("document.querySelector('button[aria-label=\"查看监控 MONITOR001\"]')?.getAttribute('aria-pressed')==='true' && document.querySelectorAll('.recharts-xAxis text').length>0", nil),
-		chromedp.Evaluate("window.__axis=[...document.querySelectorAll('.recharts-xAxis text')].map(x=>x.textContent).join('|');if(!document.querySelector('button[aria-label=\"删除监控 MONITOR001\"]'))throw Error('Delete name missing');for(const input of document.querySelectorAll('input'))if(!input.labels?.length)throw Error('Unlabelled monitor input')", nil),
+		chromedp.Poll("document.querySelector('button[aria-label=\"查看监控 MONITOR001\"]')?.getAttribute('aria-pressed')==='true' && document.querySelectorAll('.recharts-xAxis-tick-labels text').length>0", nil),
+		chromedp.Evaluate("window.__axis=[...document.querySelectorAll('.recharts-xAxis-tick-labels text')].map(x=>x.textContent).join('|');if(!document.querySelector('button[aria-label=\"删除监控 MONITOR001\"]'))throw Error('Delete name missing');for(const input of document.querySelectorAll('input'))if(!input.labels?.length)throw Error('Unlabelled monitor input')", nil),
 		chromedp.SendKeys("input[aria-labelledby$='-note-label']", "x", chromedp.ByQuery),
-		chromedp.Evaluate("if([...document.querySelectorAll('.recharts-xAxis text')].map(x=>x.textContent).join('|')!==window.__axis)throw Error('Cached snapshot order changed on rerender')", nil),
+		chromedp.Evaluate("if([...document.querySelectorAll('.recharts-xAxis-tick-labels text')].map(x=>x.textContent).join('|')!==window.__axis)throw Error('Cached snapshot order changed on rerender')", nil),
 		chromedp.Navigate(base+"/dashboard/ecom/listing"),
 		chromedp.WaitVisible("input[placeholder^='例如：32']", chromedp.ByQuery),
 		chromedp.Evaluate("for(const input of document.querySelectorAll('input,textarea,select'))if(!input.labels?.length)throw Error('Unlabelled listing field')", nil),
