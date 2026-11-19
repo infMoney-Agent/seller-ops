@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { Icons } from '@/components/icons';
 import { listingApi } from '../api';
@@ -24,22 +24,55 @@ const LANGUAGES = [
   { code: 'jp', name: '日语' }
 ];
 
-function CopyButton({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false);
-  const copy = async () => {
-    await navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
+function CopyButton({ text, label }: { text: string; label: string }) {
+  const statusId = useId();
+  const [feedback, setFeedback] = useState('');
+  const lastMessage = useRef('');
+  const sequence = useRef(0);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      sequence.current += 1;
+      if (timer.current) clearTimeout(timer.current);
+    },
+    []
+  );
+  async function copy() {
+    const attempt = ++sequence.current;
+    if (timer.current) clearTimeout(timer.current);
+    let message: string;
+    try {
+      await navigator.clipboard.writeText(text);
+      message = '已复制';
+    } catch {
+      message = '复制失败，请重试或手动复制';
+    }
+    if (attempt !== sequence.current) return;
+    // Alternate repeated live-region messages so VoiceOver can announce retries.
+    if (message === lastMessage.current) message += '\u00a0';
+    lastMessage.current = message;
+    setFeedback(message);
+    timer.current = setTimeout(() => setFeedback(''), 4000);
+  }
   return (
-    <button
-      aria-label={copied ? '已复制' : '复制'}
-      title={copied ? '已复制' : '复制'}
-      onClick={copy}
-      className='text-slate-500 hover:text-white transition-colors'
-    >
-      {copied ? <Check className='w-4 h-4 text-emerald-400' /> : <Copy className='w-4 h-4' />}
-    </button>
+    <span className='inline-flex items-center gap-2'>
+      <button
+        type='button'
+        aria-label={'复制' + label}
+        aria-describedby={statusId}
+        onClick={() => void copy()}
+        className='inline-flex min-h-6 min-w-6 items-center justify-center rounded text-slate-400 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-purple-400'
+      >
+        {feedback.startsWith('已复制') ? (
+          <Check aria-hidden='true' className='h-4 w-4 text-emerald-400' />
+        ) : (
+          <Copy aria-hidden='true' className='h-4 w-4' />
+        )}
+      </button>
+      <span id={statusId} role='status' aria-atomic='true' className='text-xs text-slate-300'>
+        {feedback}
+      </span>
+    </span>
   );
 }
 
@@ -54,6 +87,7 @@ function CharCount({ count, max }: { count: number; max: number }) {
 }
 
 export default function ListingGeneratorPage() {
+  const fieldId = useId();
   const [mode, setMode] = useState<'generate' | 'optimize'>('generate');
   const [keyword, setKeyword] = useState('');
   const [asin, setAsin] = useState('');
@@ -116,10 +150,16 @@ export default function ListingGeneratorPage() {
         {mode === 'generate' ? (
           <>
             <div>
-              <label className='text-xs text-slate-400 font-medium mb-1 block'>
+              <label
+                id={fieldId + '-ecom-field-1-label'}
+                htmlFor={fieldId + '-ecom-field-1'}
+                className='text-xs text-slate-400 font-medium mb-1 block'
+              >
                 主要关键词或商品描述 *
               </label>
               <input
+                aria-labelledby={fieldId + '-ecom-field-1-label'}
+                id={fieldId + '-ecom-field-1'}
                 value={keyword}
                 onChange={(e) => setKeyword(e.target.value)}
                 placeholder='例如：32 盎司不锈钢保温水壶'
@@ -127,10 +167,16 @@ export default function ListingGeneratorPage() {
               />
             </div>
             <div>
-              <label className='text-xs text-slate-400 font-medium mb-1 block'>
+              <label
+                id={fieldId + '-ecom-field-2-label'}
+                htmlFor={fieldId + '-ecom-field-2'}
+                className='text-xs text-slate-400 font-medium mb-1 block'
+              >
                 补充商品信息（可选，JSON 格式）
               </label>
               <textarea
+                aria-labelledby={fieldId + '-ecom-field-2-label'}
+                id={fieldId + '-ecom-field-2'}
                 value={productDetails}
                 onChange={(e) => setProductDetails(e.target.value)}
                 placeholder='{"price": 24.99, "material": "不锈钢", "capacity": "32oz"}'
@@ -141,8 +187,16 @@ export default function ListingGeneratorPage() {
           </>
         ) : (
           <div>
-            <label className='text-xs text-slate-400 font-medium mb-1 block'>待优化的 ASIN *</label>
+            <label
+              id={fieldId + '-ecom-field-3-label'}
+              htmlFor={fieldId + '-ecom-field-3'}
+              className='text-xs text-slate-400 font-medium mb-1 block'
+            >
+              待优化的 ASIN *
+            </label>
             <input
+              aria-labelledby={fieldId + '-ecom-field-3-label'}
+              id={fieldId + '-ecom-field-3'}
               value={asin}
               onChange={(e) => setAsin(e.target.value.toUpperCase())}
               placeholder='B01MFCXDYG'
@@ -154,8 +208,16 @@ export default function ListingGeneratorPage() {
 
         <div className='flex items-end gap-4'>
           <div>
-            <label className='text-xs text-slate-400 font-medium mb-1 block'>文案语言</label>
+            <label
+              id={fieldId + '-ecom-field-4-label'}
+              htmlFor={fieldId + '-ecom-field-4'}
+              className='text-xs text-slate-400 font-medium mb-1 block'
+            >
+              文案语言
+            </label>
             <select
+              aria-labelledby={fieldId + '-ecom-field-4-label'}
+              id={fieldId + '-ecom-field-4'}
               value={language}
               onChange={(e) => setLanguage(e.target.value)}
               className='bg-slate-800 border border-slate-700 text-white text-sm rounded-lg px-3 py-2 focus:ring-1 focus:ring-purple-500 outline-none'
@@ -222,7 +284,7 @@ export default function ListingGeneratorPage() {
               <h3 className='text-white font-semibold text-sm'>商品标题</h3>
               <div className='flex items-center gap-2'>
                 <CharCount count={listing.character_counts.title} max={200} />
-                <CopyButton text={listing.title} />
+                <CopyButton label='商品标题' text={listing.title} />
               </div>
             </div>
             <p className='text-slate-300 text-sm leading-relaxed'>{listing.title}</p>
@@ -232,7 +294,7 @@ export default function ListingGeneratorPage() {
           <div className='p-5 bg-slate-900 rounded-xl border border-slate-800'>
             <div className='flex items-center justify-between mb-3'>
               <h3 className='text-white font-semibold text-sm'>五点描述</h3>
-              <CopyButton text={listing.bullet_points.join('\n')} />
+              <CopyButton label='五点描述' text={listing.bullet_points.join('\n')} />
             </div>
             <ul className='space-y-2'>
               {listing.bullet_points.map((bp, i) => (
@@ -250,7 +312,7 @@ export default function ListingGeneratorPage() {
               <h3 className='text-white font-semibold text-sm'>商品描述</h3>
               <div className='flex items-center gap-2'>
                 <CharCount count={listing.character_counts.description} max={2000} />
-                <CopyButton text={listing.description} />
+                <CopyButton label='商品描述' text={listing.description} />
               </div>
             </div>
             <p className='text-slate-300 text-sm leading-relaxed whitespace-pre-wrap'>
@@ -264,7 +326,7 @@ export default function ListingGeneratorPage() {
               <h3 className='text-white font-semibold text-sm'>后台搜索词</h3>
               <div className='flex items-center gap-2'>
                 <CharCount count={listing.character_counts.search_terms} max={250} />
-                <CopyButton text={listing.search_terms.join(' ')} />
+                <CopyButton label='后台搜索词' text={listing.search_terms.join(' ')} />
               </div>
             </div>
             <div className='flex flex-wrap gap-2'>
@@ -281,7 +343,7 @@ export default function ListingGeneratorPage() {
             <div className='p-5 bg-slate-900 rounded-xl border border-slate-800'>
               <div className='flex items-center justify-between mb-3'>
                 <h3 className='text-white font-semibold text-sm'>A+ 内容草稿</h3>
-                <CopyButton text={listing.a_plus_draft} />
+                <CopyButton label='A+ 内容草稿' text={listing.a_plus_draft} />
               </div>
               <p className='text-slate-300 text-sm leading-relaxed'>{listing.a_plus_draft}</p>
             </div>

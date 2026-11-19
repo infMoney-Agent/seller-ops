@@ -1,5 +1,5 @@
 'use client';
-import type { ReactNode } from 'react';
+import type { ComponentProps, ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -73,3 +73,28 @@ export function formatMoney(value: string | null | undefined) {
     ? number.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
     : '—';
 }
+
+/* oxlint-disable jsx-a11y/no-noninteractive-tabindex -- A named overflow region needs a keyboard scroll target (Modern Web Guidance responsive-table). */
+export function TableScroll({
+  label,
+  className,
+  children,
+  ...props
+}: ComponentProps<'div'> & { label: string }) {
+  return (
+    <div
+      {...props}
+      role='region'
+      aria-label={label}
+      tabIndex={0}
+      className={cn(
+        'overflow-auto rounded border focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
+        className
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
+/* oxlint-enable jsx-a11y/no-noninteractive-tabindex */

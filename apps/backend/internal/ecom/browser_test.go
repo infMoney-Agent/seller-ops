@@ -114,4 +114,5 @@ func TestBrowserScreening(t *testing.T) {
 	if e := os.WriteFile(filepath.Join(dir, "screening-desktop.png"), screenshot, 0640); e != nil {
 		t.Fatal(e)
 	}
+	checkBrowserGuidance(t, ctx, base)
 }

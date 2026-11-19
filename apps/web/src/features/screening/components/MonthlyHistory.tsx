@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { useScreeningQuery } from '../queries';
 import type { MonthlyRecord, PageResult, Product } from '../types';
-import { Button, formatMoney } from './shared';
+import { Button, TableScroll, formatMoney } from './shared';
 import OperatingTrends from './OperatingTrends';
 
 export const sourceLabels: Record<string, string> = {
@@ -44,8 +44,9 @@ export default function MonthlyHistory({
       {history.data && history.data.items.length > 0 && (
         <OperatingTrends rows={history.data.items} total={history.data.total} />
       )}
-      <div className='overflow-auto'>
+      <TableScroll label='月度经营数据，可横向滚动'>
         <table className='w-full text-left text-sm'>
+          <caption className='sr-only'>商品各月价格、销量及来源明细</caption>
           <thead>
             <tr>
               {[
@@ -58,7 +59,7 @@ export default function MonthlyHistory({
                 '来源 / 观察日期',
                 '操作'
               ].map((x) => (
-                <th key={x} className='whitespace-nowrap p-2'>
+                <th scope='col' key={x} className='whitespace-nowrap p-2'>
                   {x}
                 </th>
               ))}
@@ -124,7 +125,7 @@ export default function MonthlyHistory({
             ))}
           </tbody>
         </table>
-      </div>
+      </TableScroll>
       {!history.data?.total && !history.isLoading && !history.isError && (
         <p className='text-sm'>暂无月度数据</p>
       )}

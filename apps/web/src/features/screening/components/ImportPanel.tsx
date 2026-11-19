@@ -1,11 +1,11 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useScreeningQuery } from '../queries';
 import { download, request } from '../service';
 import { importFields } from '../import-fields';
 import { defaultObservationDate, sourcePeriodFromFilename } from '../import-dates';
 import type { ImportRecord, ImportRow, JobCreated, PageResult } from '../types';
-import { Badge, Button, DataBlock, Field, Input, type Action } from './shared';
+import { Badge, Button, DataBlock, Field, Input, TableScroll, type Action } from './shared';
 
 export default function ImportPanel({
   act,
@@ -27,12 +27,20 @@ export default function ImportPanel({
   const [selected, setSelected] = useState<string | null>(null);
   const [mapping, setMapping] = useState<Record<string, string>>({});
   const [page, setPage] = useState(1);
-  const imports = useScreeningQuery<PageResult<ImportRecord>>('/imports', true);
+  const imports = useScreeningQuery<PageResult<ImportRecord>>('/imports', (data) =>
+    Boolean(data?.items.some((item) => ['uploaded', 'parsing', 'importing'].includes(item.state)))
+  );
   const preview = useScreeningQuery<PageResult<ImportRow>>(
     selected ? `/imports/${selected}/preview?page=${page}` : null,
-    true
+    false
   );
   const active = imports.data?.items.find((item) => item.id === selected);
+  const { refetch: refreshPreview } = preview;
+  useEffect(() => {
+    if (selected && active?.state && !['uploaded', 'parsing'].includes(active.state)) {
+      void refreshPreview();
+    }
+  }, [selected, active?.state, refreshPreview]);
   const headers = [
     ...new Set([
       ...Object.values(mapping),
@@ -200,15 +208,18 @@ export default function ImportPanel({
         <summary className='cursor-pointer text-sm font-medium'>
           导入记录（{imports.data?.total || 0}）
         </summary>
-        <div className='mt-3 overflow-auto rounded border'>
+        <TableScroll label='导入记录，可横向滚动' className='mt-3'>
           <table className='w-full text-left text-sm'>
+            <caption className='sr-only'>导入文件或商品预览明细</caption>
             <thead>
               <tr className='bg-muted'>
-                <th className='p-3'>文件</th>
-                <th>来源期 / 日期</th>
-                <th>状态</th>
-                <th>行数</th>
-                <th>操作</th>
+                <th scope='col' className='p-3'>
+                  文件
+                </th>
+                <th scope='col'>来源期 / 日期</th>
+                <th scope='col'>状态</th>
+                <th scope='col'>行数</th>
+                <th scope='col'>操作</th>
               </tr>
             </thead>
             <tbody>
@@ -261,7 +272,7 @@ export default function ImportPanel({
               ))}
             </tbody>
           </table>
-        </div>
+        </TableScroll>
       </details>
       {active && (
         <section className='space-y-3 rounded border p-4'>
@@ -414,12 +425,12 @@ export default function ImportPanel({
             </p>
           )}
           {preview.isError && <p role='alert'>{preview.error.message}</p>}
-          <div className='overflow-auto rounded border'>
+          <TableScroll label='导入预览，可横向滚动'>
             <table className='w-full text-left text-sm'>
               <thead className='bg-muted'>
                 <tr>
                   {['来源行', 'ASIN / 标题', '价格 USD', '月销量', '检查结果'].map((label) => (
-                    <th className='p-2' key={label}>
+                    <th scope='col' className='p-2' key={label}>
                       {label}
                     </th>
                   ))}
@@ -454,7 +465,7 @@ export default function ImportPanel({
                 ))}
               </tbody>
             </table>
-          </div>
+          </TableScroll>
           <div className='flex items-center gap-3'>
             <Button variant='outline' disabled={page === 1} onClick={() => setPage((v) => v - 1)}>
               上一页

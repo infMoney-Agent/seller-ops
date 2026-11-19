@@ -15,7 +15,8 @@
     "format:check": "npm --prefix apps/web run format:check",
     "prepare": "husky",
     "guidance": "npx --yes modern-web-guidance@1.0.1",
-    "guidance:check": "node scripts/check-web-guidance.mjs"
+    "guidance:check": "node scripts/check-web-guidance.mjs",
+    "test:web-guidance": "node scripts/test-web-guidance.mjs"
   },
   "devDependencies": {
     "husky": "^9.1.7",

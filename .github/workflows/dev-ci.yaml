@@ -42,6 +42,9 @@ jobs:
       - name: Check shared web guidance
         working-directory: .
         run: npm run guidance:check
+      - name: Profit form boundary checks
+        working-directory: .
+        run: npm run test:web-guidance
       - run: npm run typecheck
       - run: ./node_modules/.bin/oxlint src/features/screening "src/app/api/ecom/[...path]/route.ts" "src/app/api/ecom/screening/[...path]/route.ts"
       - run: npm run build

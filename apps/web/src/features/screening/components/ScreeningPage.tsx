@@ -41,7 +41,16 @@ import FamilyPanel from './FamilyPanel';
 import ParentMonthlyPanel from './ParentMonthlyPanel';
 import MonthlyHistory, { periodLabels, sourceLabels } from './MonthlyHistory';
 import type { MonthOption } from '../types';
-import { Badge, Button, DataBlock, Field, Input, formatMoney, type Action } from './shared';
+import {
+  Badge,
+  Button,
+  DataBlock,
+  Field,
+  Input,
+  TableScroll,
+  formatMoney,
+  type Action
+} from './shared';
 
 const tabs = ['商品库', '导入记录', '批量复核', '利润测算', '规则与历史', '父体数据'];
 export default function ScreeningPage() {
@@ -644,16 +653,20 @@ export default function ScreeningPage() {
                   正在加载商品…
                 </div>
               ) : (
-                <div
+                <TableScroll
+                  label='商品列表，可横向和纵向滚动'
                   data-screening-table
                   className='bg-card max-h-[65vh] overflow-auto rounded-lg border'
                 >
                   <table className='w-full min-w-[1050px] text-left text-sm'>
+                    <caption className='sr-only'>
+                      商品列表：商品信息、价格销量、筛选与复核结果
+                    </caption>
                     <thead className='bg-muted sticky top-0 z-10 [&_th]:bg-muted'>
                       {table.getHeaderGroups().map((g) => (
                         <tr key={g.id}>
                           {g.headers.map((h) => (
-                            <th key={h.id} className='whitespace-nowrap p-3'>
+                            <th scope='col' key={h.id} className='whitespace-nowrap p-3'>
                               {flexRender(h.column.columnDef.header, h.getContext())}
                             </th>
                           ))}
@@ -704,7 +717,7 @@ export default function ScreeningPage() {
                       </Button>
                     </div>
                   )}
-                </div>
+                </TableScroll>
               )}
               <div className='flex items-center gap-3'>
                 <Button
