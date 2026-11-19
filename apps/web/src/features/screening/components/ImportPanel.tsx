@@ -299,14 +299,15 @@ export default function ImportPanel({
                       disabled={!editable || busy}
                       className='w-full min-w-0 rounded border bg-transparent p-2 text-sm'
                       value={mapping[field.key] || ''}
-                      onChange={(event) =>
+                      onChange={(event) => {
+                        const value = event.target.value;
                         setMapping((current) => {
                           const next = { ...current };
-                          if (event.target.value) next[field.key] = event.target.value;
+                          if (value) next[field.key] = value;
                           else delete next[field.key];
                           return next;
-                        })
-                      }
+                        });
+                      }}
                     >
                       <option value=''>
                         {auto ? '自动识别：' + auto : '自动识别（当前页未匹配）'}

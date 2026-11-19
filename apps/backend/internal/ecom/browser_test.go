@@ -66,7 +66,9 @@ func TestBrowserScreening(t *testing.T) {
 		chromedp.Evaluate(`[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='确认导入').click()`, nil),
 		chromedp.Poll(`(async()=>{const r=await fetch('/api/ecom/screening/products?q=GUI0000001&show_merged=true');const v=await r.json();return r.ok&&v.total===1})()`, nil),
 	); e != nil {
-		t.Fatalf("import controls failed: %v", e)
+		var body string
+        chromedp.Run(ctx, chromedp.Text(`body`, &body, chromedp.ByQuery))
+        t.Fatalf("import controls failed: %v; page: %s", e, body)
 	}
 	// Exercise the same-origin proxy in the browser, including Origin, real session
 	// lookup and HMAC forwarding, using a file whose only contents are fixtures.
