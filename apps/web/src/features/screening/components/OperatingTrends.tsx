@@ -15,9 +15,9 @@ const periods: Record<string, string> = {
   custom: '自定义周期'
 };
 const scopes: Record<string, string> = {
-  child: '子体销量',
+  child: '',
   parent: '父体汇总',
-  unknown: '未知销量口径'
+  unknown: '销量归属待确认'
 };
 const groupKey = (row: MonthlyRecord) =>
   [row.source_type, row.period_type, row.sales_scope].join('|');
@@ -127,27 +127,36 @@ export default function OperatingTrends({ rows, total }: { rows: MonthlyRecord[]
   );
   return (
     <div className='space-y-3' data-operating-trends>
-      <select
-        aria-label='趋势数据口径'
-        className='w-full rounded border bg-transparent p-2 text-xs'
-        value={key}
-        onChange={(event) => setSelected(event.target.value)}
-      >
-        {groups.map((group) => {
-          const [source, period, scope] = group.split('|');
-          return (
-            <option key={group} value={group}>
-              {sources[source] || source} · {periods[period] || period} · {scopes[scope] || scope}
-            </option>
-          );
-        })}
-      </select>
+      {groups.length > 1 ? (
+        <select
+          aria-label='选择趋势数据'
+          className='w-full rounded border bg-transparent p-2 text-xs'
+          value={key}
+          onChange={(event) => setSelected(event.target.value)}
+        >
+          {groups.map((group) => {
+            const [source, period, scope] = group.split('|');
+            return (
+              <option key={group} value={group}>
+                {[sources[source] || source, periods[period] || period, scopes[scope]]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </option>
+            );
+          })}
+        </select>
+      ) : (
+        <p className='text-muted-foreground text-xs'>
+          {sources[latest.source_type] || latest.source_type} ·{' '}
+          {periods[latest.period_type] || latest.period_type}
+        </p>
+      )}
       <div className='grid grid-cols-3 gap-2'>
         {[
           ['最新数据', latest.stat_month.slice(0, 7)],
           ['最新价格 USD', formatMoney(latest.price_usd)],
           [
-            '最新子体销量',
+            '最新销量',
             latest.sales_scope === 'child'
               ? (latest.monthly_sales?.toLocaleString() ?? '—')
               : '待核实'
@@ -162,14 +171,17 @@ export default function OperatingTrends({ rows, total }: { rows: MonthlyRecord[]
       {latest.period_type !== 'custom' && (
         <div className='grid gap-2 sm:grid-cols-2'>
           <Trend months={months} values={prices} label='价格 USD' money />
-          <Trend months={months} values={sales} label='子体销量（件）' />
+          <Trend months={months} values={sales} label='销量（件）' />
         </div>
       )}
       <p className='text-muted-foreground text-xs'>
         {latest.period_type === 'custom'
           ? '自定义周期长短可能不同，请以明细起止日期逐条比较。'
-          : '按相同来源、统计及销量口径比较；同月多次观察采用最近记录。缺失月份断线，悬停圆点查看数值。'}
-        {latest.sales_scope !== 'child' && ' 父体或未知口径不绘制子体销量趋势。'}
+          : '同月多次观察采用最近记录；缺失月份断线，悬停圆点查看数值。'}
+        {latest.sales_scope !== 'child' &&
+          (latest.sales_scope === 'parent'
+            ? ' 该数据为父体汇总，请在父体数据中查看销量。'
+            : ' 销量归属待确认，确认前暂不显示销量趋势。')}
         {total > rows.length && ' 趋势仅基于当前页数据，可翻页查看更多记录。'}
       </p>
     </div>

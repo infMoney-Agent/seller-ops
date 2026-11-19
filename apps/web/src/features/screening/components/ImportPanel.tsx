@@ -92,17 +92,6 @@ export default function ImportPanel({
             }}
           />
         </Field>
-        <Field label='缺省销量口径'>
-          <select
-            className='rounded border bg-transparent p-2'
-            value={salesScope}
-            onChange={(e) => setSalesScope(e.target.value)}
-          >
-            <option value='unknown'>未知（不当作子体销量）</option>
-            <option value='child'>已确认子体销量</option>
-            <option value='parent'>已确认父体汇总（必须有父ASIN）</option>
-          </select>
-        </Field>
         <Field label='数据来源'>
           <select
             className='rounded border bg-transparent p-2'
@@ -114,7 +103,7 @@ export default function ImportPanel({
             <option value='other'>其他来源</option>
           </select>
         </Field>
-        <Field label='统计口径'>
+        <Field label='统计周期'>
           <select
             className='rounded border bg-transparent p-2'
             value={periodType}
@@ -182,6 +171,26 @@ export default function ImportPanel({
           上传并预览
         </Button>
       </div>
+      <details className='rounded-lg border p-3'>
+        <summary className='cursor-pointer text-sm font-medium'>高级导入设置</summary>
+        <div className='mt-3 max-w-md'>
+          {' '}
+          <Field label='文件未注明时，销量属于'>
+            <select
+              className='rounded border bg-transparent p-2'
+              value={salesScope}
+              onChange={(e) => setSalesScope(e.target.value)}
+            >
+              <option value='unknown'>自动识别，无法确定时待确认</option>
+              <option value='child'>当前子 ASIN</option>
+              <option value='parent'>整个父体（需提供父 ASIN）</option>
+            </select>
+          </Field>
+        </div>
+        <p className='text-muted-foreground mt-2 text-xs'>
+          优先使用文件中明确的子体或父体销量字段，仅在文件没有注明时使用此设置。
+        </p>
+      </details>
       <p className='text-muted-foreground text-sm'>
         站点：美国。重复 ASIN
         保留各月经营数据、来源历史和人工结论。自然月与滚动30天独立保存；更改月份或观察日期时，请先保存日期与映射。

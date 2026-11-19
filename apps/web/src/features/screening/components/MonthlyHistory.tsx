@@ -36,7 +36,7 @@ export default function MonthlyHistory({
       <h4 className='font-semibold'>{recentYear ? '近一年经营数据' : '月度经营数据'}</h4>
       <p className='text-muted-foreground text-xs'>
         {recentYear
-          ? '截至该商品最新数据月份，展示近 12 个月已导入的数据；缺失月份不补零，不同来源与统计口径分别展示。'
+          ? '截至该商品最新数据月份，展示近 12 个月已导入的数据；缺失月份不补零，不同来源和统计周期分别展示。'
           : '同一商品按来源和统计周期保存多期数据。修改经营数据不会覆盖人工结论。'}
       </p>
       {history.isLoading && <p role='status'>正在加载经营数据…</p>}
@@ -49,9 +49,9 @@ export default function MonthlyHistory({
           <thead>
             <tr>
               {[
-                '月份 / 口径',
+                '月份 / 周期',
                 '价格 USD',
-                '销量 / 口径',
+                '销量',
                 '销售额 USD',
                 '评分 / 数量',
                 'BSR',
@@ -79,7 +79,7 @@ export default function MonthlyHistory({
                     ? (row.monthly_sales ?? '—')
                     : row.sales_scope === 'parent'
                       ? '父体汇总见父体数据'
-                      : `${row.monthly_sales ?? '—'}（未知，不参与合计）`}
+                      : `${row.monthly_sales ?? '—'}（归属待确认）`}
                 </td>
                 <td>{formatMoney(row.monthly_revenue)}</td>
                 <td>

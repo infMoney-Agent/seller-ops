@@ -974,6 +974,11 @@ function PriceHistoryCard({
       <p className='whitespace-nowrap'>
         ${formatMoney(product.price_usd)} / {product.monthly_sales ?? '—'}
       </p>
+      {product.sales_scope && product.sales_scope !== 'child' && (
+        <p className='text-muted-foreground text-xs'>
+          {product.sales_scope === 'parent' ? '父体汇总见父体数据' : '销量归属待确认'}
+        </p>
+      )}
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger className='text-primary text-xs underline underline-offset-2'>
           查看详细数据
