@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useScreeningQuery } from '../queries';
 import type { MonthlyRecord, PageResult, Product } from '../types';
 import { Button, formatMoney } from './shared';
+import OperatingTrends from './OperatingTrends';
 
 export const sourceLabels: Record<string, string> = {
   sellersprite: '卖家精灵',
@@ -40,6 +41,9 @@ export default function MonthlyHistory({
       </p>
       {history.isLoading && <p role='status'>正在加载经营数据…</p>}
       {history.isError && <p role='alert'>{history.error.message}</p>}
+      {history.data && history.data.items.length > 0 && (
+        <OperatingTrends rows={history.data.items} total={history.data.total} />
+      )}
       <div className='overflow-auto'>
         <table className='w-full text-left text-sm'>
           <thead>
@@ -85,7 +89,10 @@ export default function MonthlyHistory({
                 <td className='text-xs'>
                   {sourceLabels[row.source_type] || row.source_type}
                   <p>{row.observed_on}</p>
-                  <p>{row.file_name}</p>
+                  <details>
+                    <summary className='cursor-pointer'>查看来源文件</summary>
+                    <p className='max-w-48 break-words'>{row.file_name}</p>
+                  </details>
                 </td>
                 <td>
                   <Button

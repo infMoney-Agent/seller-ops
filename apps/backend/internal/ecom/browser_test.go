@@ -59,6 +59,10 @@ func TestBrowserScreening(t *testing.T) {
 		chromedp.Poll(`[...document.querySelectorAll('input')].some(x=>x.value==='2026-08') && !!document.querySelector('input[type=date]')?.value`, nil),
 		chromedp.Evaluate(`[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='上传并预览').click()`, nil),
 		chromedp.Poll(`[...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='确认导入'&&!b.disabled)`, nil),
+		chromedp.Evaluate(`(()=>{if(!document.querySelector('[aria-label="导入步骤"]'))throw Error('import steps missing');if(document.querySelector('textarea[aria-label="字段映射"]'))throw Error('raw JSON mapping remains');const select=document.querySelector('select[aria-label="映射 ASIN"]');if(!select)throw Error('field dropdown missing');select.closest('details').open=true;select.value='ASIN';select.dispatchEvent(new Event('change',{bubbles:true}));})()`, nil),
+		chromedp.Poll(`[...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='确认导入'&&b.disabled)`, nil),
+		chromedp.Evaluate(`[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='保存日期与映射，重新解析').click()`, nil),
+		chromedp.Poll(`[...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='确认导入'&&!b.disabled)`, nil),
 		chromedp.Evaluate(`[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='确认导入').click()`, nil),
 		chromedp.Poll(`(async()=>{const r=await fetch('/api/ecom/screening/products?q=GUI0000001&show_merged=true');const v=await r.json();return r.ok&&v.total===1})()`, nil),
 	); e != nil {
@@ -88,7 +92,7 @@ func TestBrowserScreening(t *testing.T) {
 	}
 	if e := chromedp.Run(ctx,
 		chromedp.Evaluate(`(()=>{if(performance.getEntriesByType('resource').some(x=>x.name.includes('/monthly?')))throw Error('history fetched before expansion');const row=[...document.querySelectorAll('tbody tr')].find(r=>r.textContent.includes('BROWSER001'));[...row.querySelectorAll('button')].find(b=>b.textContent.trim()==='查看详细数据').click()})()`, nil),
-		chromedp.Poll(`document.body.innerText.includes('近一年经营数据') && performance.getEntriesByType('resource').some(x=>x.name.includes('recent_months=12'))`, nil),
+		chromedp.Poll(`!!document.querySelector('[data-operating-trends] svg') && document.body.innerText.includes('近一年经营数据') && performance.getEntriesByType('resource').some(x=>x.name.includes('recent_months=12'))`, nil),
 	); e != nil {
 		t.Fatalf("annual data popover failed: %v", e)
 	}
