@@ -1,0 +1,7 @@
+---
+description: Seller Ops 前端开发与 Modern Web Guidance
+globs: apps/web/**/*.{ts,tsx,js,jsx,css,scss}
+alwaysApply: false
+---
+
+先遵循根目录 AGENTS.md 和 CONTRIBUTING.md。HTML、CSS 和浏览器交互改动先读取 .agents/skills/modern-web-guidance/SKILL.md，通过根目录 npm run guidance 搜索并获取相关规则，再实施和验证。沿用共享组件及 SSR 边界，保留必要浏览器回退，在 PR 记录实际指南 ID、代码与验证结果；纯 API 或类型改动无需无关检索。

@@ -1,0 +1,3 @@
+
+# Keep the vendored guidance SHA-256 snapshot identical on Windows and Linux.
+.agents/skills/modern-web-guidance/** text eol=lf
