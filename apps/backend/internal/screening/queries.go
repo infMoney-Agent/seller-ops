@@ -12,6 +12,8 @@ var uuidPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]
 
 const referenceSQL = "EXISTS(SELECT 1 FROM ps_products ref WHERE ref.tenant_id=p.tenant_id AND ref.id<>p.id AND ref.machine_direction=p.machine_direction AND ref.review_status<>'pending')"
 const productProjection = "to_jsonb(p)||jsonb_build_object('monthly_id',m.id,'monthly_revision',m.revision,'stat_month',m.stat_month,'period_type',m.period_type,'period_start',m.period_start,'period_end',m.period_end,'source_type',m.source_type,'sales_scope',m.sales_scope,'price_usd',m.price_usd::text,'reported_monthly_sales',m.monthly_sales,'monthly_sales',CASE WHEN m.sales_scope='child' THEN m.monthly_sales END,'monthly_revenue',CASE WHEN m.sales_scope='child' THEN m.monthly_revenue::text END,'review_count',m.review_count,'rating',m.rating::text,'bsr_rank',m.bsr_rank,'decision',p.machine_decision,'recommendation',p.machine_recommendation,'direction',p.machine_direction,'group_key',p.machine_group_key,'reasons',p.machine_reasons,'profit_output',q.output,'profit_data_revision',q.product_data_revision,'profit_monthly_revision',q.monthly_revision,'has_reference'," + referenceSQL + ")"
+const parentFamilySQL = "COALESCE('parent:'||p.marketplace||':'||NULLIF(p.parent_asin,''),'product:'||p.id::text)"
+const familyRankSQL = "m.stat_month DESC NULLS LAST,m.period_end DESC NULLS LAST,m.period_type,m.source_type,CASE WHEN m.sales_scope='child' THEN m.monthly_sales END DESC NULLS LAST,p.updated_at DESC,p.id"
 const profitJoin = " LEFT JOIN LATERAL(SELECT output,product_data_revision,monthly_revision FROM ps_profit_scenarios q WHERE q.tenant_id=p.tenant_id AND q.product_id=p.id AND q.monthly_id IS NOT DISTINCT FROM m.id ORDER BY created_at DESC,id DESC LIMIT 1) q ON true "
 
 type productQuery struct {
@@ -81,7 +83,7 @@ func (s *service) products(r *http.Request) (any, error) {
 		q.where += fmt.Sprintf(" AND p.machine_group_key=$%d", len(q.args))
 	}
 	collapse := !expand && r.URL.Query().Get("show_merged") != "true"
-	group := "COALESCE(CASE WHEN p.machine_decision IS NOT NULL THEN p.machine_group_key END,p.id::text)"
+	group := parentFamilySQL
 	counter := "count(*)"
 	if collapse {
 		counter = "count(DISTINCT " + group + ")"
@@ -105,12 +107,12 @@ func (s *service) products(r *http.Request) (any, error) {
 	if column == "" {
 		return nil, fail(422, "不支持的排序字段")
 	}
-	sql := "WITH candidates AS (SELECT " + column + " AS sort_value,p.id,row_number() OVER(PARTITION BY " + group + " ORDER BY " + column + " " + direction + " NULLS LAST,p.id) AS group_rank FROM ps_products p " + filterJoins(q, strings.Contains(column, "m.")) + " WHERE " + q.where + "), selected AS (SELECT id,sort_value FROM candidates"
+	sql := "WITH candidates AS (SELECT " + column + " AS sort_value,p.id,row_number() OVER(PARTITION BY " + group + " ORDER BY " + familyRankSQL + ") AS group_rank FROM ps_products p " + filterJoins(q, true) + " WHERE " + q.where + "), selected AS (SELECT id,sort_value FROM candidates"
 	if collapse {
 		sql += " WHERE group_rank=1"
 	}
 	q.args = append(q.args, n, (p-1)*n)
-	sql += fmt.Sprintf(" ORDER BY sort_value %s NULLS LAST,id LIMIT $%d OFFSET $%d) SELECT ", direction, len(q.args)-1, len(q.args)) + productProjection + " FROM selected JOIN ps_products p ON p.tenant_id=$1 AND p.id=selected.id " + q.joins + " ORDER BY selected.sort_value " + direction + " NULLS LAST,p.id"
+	sql += fmt.Sprintf(" ORDER BY sort_value %s NULLS LAST,id LIMIT $%d OFFSET $%d) SELECT ", direction, len(q.args)-1, len(q.args)) + productProjection + "||jsonb_build_object('family_count',CASE WHEN NULLIF(p.parent_asin,'') IS NULL THEN 1 ELSE (SELECT count(*) FROM ps_products sibling WHERE sibling.tenant_id=p.tenant_id AND sibling.marketplace=p.marketplace AND sibling.parent_asin=p.parent_asin) END,'family_sales_pending',EXISTS(SELECT 1 FROM ps_products sibling LEFT JOIN ps_product_monthly sm ON sm.tenant_id=sibling.tenant_id AND sm.id=sibling.current_monthly_id WHERE sibling.tenant_id=p.tenant_id AND sibling.marketplace=p.marketplace AND sibling.parent_asin=p.parent_asin AND (sm.sales_scope IS DISTINCT FROM 'child' OR sm.monthly_sales IS NULL)))" + " FROM selected JOIN ps_products p ON p.tenant_id=$1 AND p.id=selected.id " + q.joins + " ORDER BY selected.sort_value " + direction + " NULLS LAST,p.id"
 	items, e := s.query(r.Context(), sql, q.args...)
 	return Object{"items": items, "page": p, "page_size": n, "total": total}, e
 }
@@ -119,7 +121,7 @@ func (s *service) summary(r *http.Request) (any, error) {
 		return nil, e
 	}
 	q := newProductQuery(actor(r), r.URL.Query())
-	return s.one(r.Context(), "SELECT jsonb_build_object('products',count(*),'displayed',count(DISTINCT COALESCE(CASE WHEN p.machine_decision IS NOT NULL THEN p.machine_group_key END,p.id::text)),'pending',count(*) FILTER(WHERE p.review_status='pending'),'kept',count(*) FILTER(WHERE p.review_status='kept'),'excluded',count(*) FILTER(WHERE p.review_status='excluded'),'source_rows',COALESCE(sum((SELECT count(*) FROM ps_import_rows ir WHERE ir.tenant_id=p.tenant_id AND ir.product_id=p.id)),0)) FROM ps_products p "+filterJoins(q, false)+" WHERE "+q.where, q.args...)
+	return s.one(r.Context(), "SELECT jsonb_build_object('products',count(*),'displayed',count(DISTINCT COALESCE('parent:'||p.marketplace||':'||NULLIF(p.parent_asin,''),'product:'||p.id::text)),'pending',count(*) FILTER(WHERE p.review_status='pending'),'kept',count(*) FILTER(WHERE p.review_status='kept'),'excluded',count(*) FILTER(WHERE p.review_status='excluded'),'source_rows',COALESCE(sum((SELECT count(*) FROM ps_import_rows ir WHERE ir.tenant_id=p.tenant_id AND ir.product_id=p.id)),0)) FROM ps_products p "+filterJoins(q, false)+" WHERE "+q.where, q.args...)
 }
 func (s *service) monthlyList(r *http.Request, id string) (any, error) {
 	window := r.URL.Query().Get("recent_months")
@@ -163,7 +165,15 @@ func (s *service) family(r *http.Request, id string) (any, error) {
 	q := newProductQuery(a, r.URL.Query())
 	q.args = append(q.args, parent)
 	q.where += fmt.Sprintf(" AND p.parent_asin=$%d", len(q.args))
-	items, e := s.query(r.Context(), "SELECT "+productProjection+" FROM ps_products p "+q.joins+" WHERE "+q.where+" ORDER BY p.asin LIMIT 100", q.args...)
+	q.args = append(q.args, p["marketplace"])
+	q.where += fmt.Sprintf(" AND p.marketplace=$%d", len(q.args))
+	pageIndex, pageSize := page(r)
+	var total int64
+	if e = s.db.QueryRow(r.Context(), "SELECT count(*) FROM ps_products p "+filterJoins(q, false)+" WHERE "+q.where, q.args...).Scan(&total); e != nil {
+		return nil, e
+	}
+	q.args = append(q.args, pageSize, (pageIndex-1)*pageSize)
+	items, e := s.query(r.Context(), "SELECT "+productProjection+" FROM ps_products p "+q.joins+" WHERE "+q.where+fmt.Sprintf(" ORDER BY "+familyRankSQL+" LIMIT $%d OFFSET $%d", len(q.args)-1, len(q.args)), q.args...)
 	if e != nil {
 		return nil, e
 	}
@@ -172,7 +182,9 @@ func (s *service) family(r *http.Request, id string) (any, error) {
 		return nil, e
 	}
 	out["items"] = items
-	out["total"] = len(items)
+	out["total"] = total
+	out["page"] = pageIndex
+	out["page_size"] = pageSize
 	out["parent_monthly"] = parents
 	anchor, e := s.productView(r.Context(), a, id)
 	if e != nil {

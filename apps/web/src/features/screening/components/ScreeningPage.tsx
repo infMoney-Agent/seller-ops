@@ -1,6 +1,6 @@
 'use client';
 /* oxlint-disable react/no-unstable-nested-components -- TanStack column renderers are stable useMemo callbacks. */
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import Image from 'next/image';
 import { useQueryClient } from '@tanstack/react-query';
 import {
@@ -22,7 +22,14 @@ import { useSellerSession } from '@/features/auth/session';
 import { cn } from '@/lib/utils';
 import { useJob, useScreeningQuery } from '../queries';
 import { download, request } from '../service';
-import type { ImportRecord, JobCreated, PageResult, Product, ReviewStatus } from '../types';
+import type {
+  ImportRecord,
+  JobCreated,
+  PageResult,
+  Product,
+  ReviewStatus,
+  FamilyResult
+} from '../types';
 import ImportPanel from './ImportPanel';
 import ReviewPanel from './ReviewPanel';
 import ProfitPanel from './ProfitPanel';
@@ -42,6 +49,7 @@ export default function ScreeningPage() {
   const [page, setPage] = useState(1);
   const [filters, setFilters] = useState<Record<string, string>>({ show_merged: 'false' });
   const [selected, setSelected] = useState<RowSelectionState>({});
+  const [familyRows, setFamilyRows] = useState<Record<string, boolean>>({});
   const [focus, setFocus] = useState<Product | null>(null);
   const [group, setGroup] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -90,6 +98,7 @@ export default function ScreeningPage() {
   }
   useEffect(() => {
     setSelected({});
+    setFamilyRows({});
     setFocus(null);
     setGroup(null);
     setJobs([]);
@@ -121,7 +130,7 @@ export default function ScreeningPage() {
         id: 'selection',
         header: ({ table }) => (
           <input
-            aria-label='选择当前页'
+            aria-label='选择当前页代表商品'
             type='checkbox'
             checked={table.getIsAllPageRowsSelected()}
             onChange={table.getToggleAllPageRowsSelectedHandler()}
@@ -160,6 +169,29 @@ export default function ScreeningPage() {
               >
                 {row.original.asin}
               </button>
+              {(row.original.family_count || 1) > 1 && (
+                <Button
+                  size='sm'
+                  variant='ghost'
+                  aria-label={`展开 ${row.original.parent_asin} 的子体`}
+                  aria-expanded={Boolean(familyRows[row.original.id])}
+                  aria-controls={`family-${row.original.id}`}
+                  onClick={() =>
+                    setFamilyRows((old) => ({ ...old, [row.original.id]: !old[row.original.id] }))
+                  }
+                >
+                  {familyRows[row.original.id] ? '▾' : '▸'} {row.original.family_count} 个子体
+                </Button>
+              )}
+              {(row.original.family_count || 1) > 1 && (
+                <p className='text-muted-foreground text-xs'>
+                  {row.original.sales_scope === 'child' && row.original.monthly_sales !== null
+                    ? row.original.family_sales_pending
+                      ? '已知销量代表 · 部分待确认'
+                      : '最新一期销量代表'
+                    : '代表商品 · 销量待确认'}
+                </p>
+              )}
               <p className='line-clamp-2'>{row.original.title_zh || row.original.title}</p>
               <p className='text-xs'>
                 父体：{row.original.parent_asin || '未知'}{' '}
@@ -263,7 +295,7 @@ export default function ScreeningPage() {
         )
       }
     ],
-    []
+    [familyRows]
   );
   // oxlint-disable-next-line react/incompatible-library -- TanStack Table is intentionally kept outside React Compiler memoization.
   const table = useReactTable({
@@ -364,7 +396,7 @@ export default function ScreeningPage() {
                 {[
                   ['source_rows', '子体来源行数'],
                   ['products', '去重商品'],
-                  ['displayed', '折叠展示'],
+                  ['displayed', '父体折叠展示'],
                   ['pending', '待复核']
                 ].map(([key, title]) => (
                   <div key={key} className='rounded-lg border p-4'>
@@ -391,10 +423,7 @@ export default function ScreeningPage() {
                     <option value=''>全部来源（采用所选周期最新观察值）</option>
                     {[...new Set((months.data?.items || []).map((m) => m.source_type))].map(
                       (source) => (
-                        <option
-                          key={sourceLabels[source] || source}
-                          value={sourceLabels[source] || source}
-                        >
+                        <option key={source} value={source}>
                           {sourceLabels[source] || source}
                         </option>
                       )
@@ -487,7 +516,7 @@ export default function ScreeningPage() {
                 <label className='flex items-center gap-2 text-sm'>
                   <input
                     type='checkbox'
-                    aria-label='展示全部归并商品'
+                    aria-label='展示全部子体'
                     checked={filters.show_merged === 'true'}
                     onChange={(e) => filter('show_merged', String(e.target.checked))}
                   />{' '}
@@ -538,16 +567,33 @@ export default function ScreeningPage() {
                     </thead>
                     <tbody>
                       {table.getRowModel().rows.map((row) => (
-                        <tr
-                          key={row.id}
-                          className={cn('border-t', row.getIsSelected() && 'bg-muted/50')}
-                        >
-                          {row.getVisibleCells().map((cell) => (
-                            <td key={cell.id} className='p-3 align-top'>
-                              {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                            </td>
-                          ))}
-                        </tr>
+                        <Fragment key={row.id}>
+                          <tr className={cn('border-t', row.getIsSelected() && 'bg-muted/50')}>
+                            {row.getVisibleCells().map((cell) => (
+                              <td key={cell.id} className='p-3 align-top'>
+                                {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                              </td>
+                            ))}
+                          </tr>
+                          {familyRows[row.original.id] && (
+                            <tr id={`family-${row.original.id}`} className='border-t bg-muted/20'>
+                              <td colSpan={row.getVisibleCells().length} className='p-3'>
+                                <FamilyChildren
+                                  product={row.original}
+                                  selected={selected}
+                                  choose={(id, value) =>
+                                    setSelected((old) => ({ ...old, [id]: value }))
+                                  }
+                                  review={setFocus}
+                                  calculate={(p) => {
+                                    setFocus(p);
+                                    setTab(3);
+                                  }}
+                                />
+                              </td>
+                            </tr>
+                          )}
+                        </Fragment>
                       ))}
                     </tbody>
                   </table>
@@ -669,6 +715,110 @@ export default function ScreeningPage() {
         </div>
       </PageContainer>
     </div>
+  );
+}
+
+function FamilyChildren({
+  product,
+  selected,
+  choose,
+  review,
+  calculate
+}: {
+  product: Product;
+  selected: RowSelectionState;
+  choose: (id: string, value: boolean) => void;
+  review: (p: Product) => void;
+  calculate: (p: Product) => void;
+}) {
+  const [page, setPage] = useState(1);
+  const family = useScreeningQuery<FamilyResult>(`/products/${product.id}/family?page=${page}`);
+  return (
+    <section className='space-y-3'>
+      <p className='text-sm font-medium'>
+        父体 {product.parent_asin} · 共 {family.data?.total ?? product.family_count}{' '}
+        个子体（下方展示其他子体，各自取最新一期）
+      </p>
+      {family.isLoading && <p role='status'>正在加载子体…</p>}
+      {family.isError && <p role='alert'>{family.error.message}</p>}
+      <div className='overflow-auto'>
+        <table className='w-full text-left text-sm'>
+          <thead>
+            <tr>
+              {['选择', '子 ASIN / 商品', '价格 / 月销量', '机器 / 人工结论', '操作'].map((x) => (
+                <th key={x} className='p-2'>
+                  {x}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {family.data?.items
+              .filter((p) => p.id !== product.id)
+              .map((p) => (
+                <tr key={p.id} className='border-t'>
+                  <td className='p-2'>
+                    <input
+                      type='checkbox'
+                      aria-label={`选择子体 ${p.asin}`}
+                      checked={Boolean(selected[p.id])}
+                      onChange={(e) => choose(p.id, e.target.checked)}
+                    />
+                  </td>
+                  <td className='p-2'>
+                    <button className='font-medium underline' onClick={() => review(p)}>
+                      {p.asin}
+                    </button>
+                    <p className='line-clamp-2'>{p.title_zh || p.title}</p>
+                    <p className='text-muted-foreground text-xs'>
+                      {p.stat_month?.slice(0, 7)} ·{' '}
+                      {sourceLabels[p.source_type || ''] || p.source_type} ·{' '}
+                      {periodLabels[p.period_type || '']}
+                    </p>
+                  </td>
+                  <td className='p-2'>
+                    <PriceHistoryCard product={p} onCalculate={calculate} />
+                    {(p.sales_scope !== 'child' || p.monthly_sales === null) && (
+                      <p className='text-muted-foreground text-xs'>子体销量待确认</p>
+                    )}
+                  </td>
+                  <td className='p-2'>
+                    <Badge value={p.decision} />
+                    <Badge value={p.review_status} />
+                  </td>
+                  <td className='p-2'>
+                    <Button size='sm' variant='ghost' onClick={() => review(p)}>
+                      复核
+                    </Button>
+                    <Button size='sm' variant='ghost' onClick={() => calculate(p)}>
+                      测算
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+          </tbody>
+        </table>
+      </div>
+      <div className='flex items-center gap-2'>
+        <Button
+          size='sm'
+          variant='outline'
+          disabled={page === 1}
+          onClick={() => setPage((p) => p - 1)}
+        >
+          上一页子体
+        </Button>
+        <span>第 {page} 页</span>
+        <Button
+          size='sm'
+          variant='outline'
+          disabled={page * 50 >= (family.data?.total || 0)}
+          onClick={() => setPage((p) => p + 1)}
+        >
+          下一页子体
+        </Button>
+      </div>
+    </section>
   );
 }
 

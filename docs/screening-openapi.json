@@ -203,7 +203,8 @@
               }
             }
           }
-        }
+        },
+        "description": "默认按明确父ASIN折叠，代表按最新统计期、同来源/口径的子体销量选择；show_merged=true返回全部子体。商品额外返回family_count和family_sales_pending；缺少父ASIN不合并。"
       }
     },
     "/api/v1/screening/summary": {
@@ -6000,7 +6001,8 @@
               "format": "uuid"
             }
           }
-        ]
+        ],
+        "description": "按工作区、站点和父ASIN分页返回全部子体，各自取最新一期；支持page/page_size。"
       }
     },
     "/api/v1/screening/products/{id}/category": {
