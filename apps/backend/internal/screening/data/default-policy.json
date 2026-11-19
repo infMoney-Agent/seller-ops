@@ -1,0 +1,161 @@
+{
+  "schema_version": 1,
+  "strategy_name": "低价、长期日用品（不限消耗品）",
+  "price": {
+    "use_source_filter": true,
+    "min": null,
+    "max": null
+  },
+  "minimum_occurrences": 1,
+  "exclude": {
+    "电器或电池": true,
+    "化学制剂或含配方套装": true,
+    "儿童定位": true,
+    "季节或节庆定位": true,
+    "专业医疗或烟草": true
+  },
+  "exclusion_patterns": {
+    "电器或电池": "\\belectric\\b|\\bbatter(?:y|ies)\\b|rechargeable|ultrasonic|\\busb\\b|\\bled\\b|cordless|hair dryer|straighten.*iron|curing lamp|nail drill|with lights|with light|heated|massager|digital.*scale|sonic toothbrush|water flosser|automatic.*timer",
+    "化学制剂或含配方套装": "\\bglue\\b|\\bgel\\b|\\bpolish\\b|toothpaste|whitening|serum|\\bcream\\b|bleach|detergent|disinfect|antibacterial|antimicrobial|pesticide|repellent|cleaning solution|cleaner tablets|cleaning tablets|acid|remover|bath bomb|cleansing wipe|body wipe|mouthwash|breath spray|nail treatment|supplement|\\bclorox\\b|adhesive putty|disclosing tablet",
+    "儿童定位": "\\bkids\\b|\\bchildren|toddler|\\binfant|\\bbaby\\b|\\bbabies\\b|\\bteens\\b|ages\\s*[0-9]",
+    "季节或节庆定位": "christmas|\\bxmas\\b|halloween|valentine|easter|thanksgiving|summer vacation|birthday|\\bbride\\b|\\bbridal\\b|bachelorette|\\bbeach\\b|wedding|\\bholiday\\b",
+    "专业医疗或烟草": "denture|orthodont|medical|microneedle|tattoo|tobacco|bunion|fungus|first aid|cigarette|pre[- ]rolled|RAW Cones"
+  },
+  "extra_exclusions": [
+    [
+      "凝胶",
+      "\\bgels?\\b|\\bhydrogel\\b|凝胶|甲油胶|水凝胶"
+    ],
+    [
+      "清洁皂及制剂",
+      "\\bsoap\\b|\\bcleanser\\b|blendercleanser|cleansing bar|solid cleanser|cleaning bar|cleaning liquid|cleaning fluid|pre.?moistened|pre.?treated|pre.?soaked|soap.?filled|infused with"
+    ],
+    [
+      "香精",
+      "(?<!un)\\bscented\\b|gardenia scent|lavender scent"
+    ],
+    [
+      "季节主题",
+      "4th of july|july 4th|independence day|patriotic|\\bpumpkin\\b|\\bautumn\\b|\\bfall\\b.*(towel|decor)|teacher desk skirt"
+    ],
+    [
+      "配方不明或专业用途",
+      "liquid cleaner|pre.?pasted|preloaded|toilet brush|piercing|ice pop"
+    ],
+    [
+      "清洁膏及制剂",
+      "cleaning paste|powerpaste|cleaning cream|fresh scent|fragranced|with fragrance"
+    ],
+    [
+      "赛事主题",
+      "world cup|international flags|soccer party|football party"
+    ],
+    [
+      "本批电器功能线索",
+      "bluetooth|infrared sensing|digital.*thermometer|curling (?:iron|wand)|lighted.*mirror"
+    ],
+    [
+      "本批清洁护理配方线索",
+      "bath oil|body wash|foaming formula|glass cleaner|dishwasher cleaner|disposal cleaner|sealer.*protector|furniture repair salve|conditioning balm|deodorant|oral probiotics|shower steamers?|foot peeling mask|body buffer|buffing bar|body exfoliating scrub|nail tek therapy|brush cleaner|drain pan tablets|oil solidifier|bond and seal"
+    ],
+    [
+      "本批季节图案线索",
+      "pumpkins? fall|phantom dreams ghost|boo pals"
+    ],
+    [
+      "本批追加明确配方/电动线索",
+      "drill.*light|moisturizing foot mask|hydrating foot mask|dead sea salt for bath|pheromone lure|wifi.*thermometer"
+    ]
+  ],
+  "consumable_only": false,
+  "consumable_pattern": "disposable|\\bsponges\\b|cheese\\s?cloth|dishcloth|dish cloth|cleaning cloth|trash bags|garbage bags|food storage bags|freezer.*bags|vacuum seal.*bags|blotting (sheets|paper)|cotton (pads|swabs)|paper towels|toilet paper|parchment|baking paper|baking cups|cupcake liners|cling wrap|plastic wrap|aluminum foil|mop.*(refill|replacement)|refill.*mop|lint roller.*refill|refill.*lint roller|mascara wands|eyelash spoolies",
+  "durable_categories": [
+    "Toilet Paper Storage",
+    "Cosmetic Display Cases",
+    "Bathroom Canisters",
+    "Shelf Baskets",
+    "In-Home Recycling Bins",
+    "Space Saver Bags",
+    "Kitchen Storage Accessories",
+    "Hair Brushes"
+  ],
+  "durable_title_pattern": "\\b(holder|dispenser|organizer|storage basket)\\b",
+  "vacuum_bags": {
+    "retain_manual_or_no_electric_pump": true,
+    "unknown_pump": "hold"
+  },
+  "grouping": {
+    "enabled": true,
+    "custom_rules": [
+      {
+        "pattern": "titanium.*(?:cutting|chopping).*boards?|(?:cutting|chopping).*boards?.*titanium",
+        "group": "钛材质厨房砧板（结构材质待人工复核）"
+      },
+      {
+        "pattern": "clear hard shell zipper case",
+        "group": "透明硬壳拉链收纳包"
+      },
+      {
+        "pattern": "broom and dustpan set",
+        "group": "家用扫帚簸箕套装"
+      },
+      {
+        "pattern": "magic sponge.*eraser|melamine.*sponge|magic sponges.*cleaning eraser",
+        "group": "三聚氰胺清洁海绵"
+      },
+      {
+        "pattern": "drink pouches|juice pouch",
+        "group": "带吸管饮料分装袋"
+      },
+      {
+        "pattern": "compostable (kitchen )?(trash|drawstring|food scrap)|disposable compost bags|compostable bags",
+        "group": "可堆肥垃圾袋"
+      },
+      {
+        "pattern": "disposable.*(shower caps|hair caps)|disposable.*processing hair caps",
+        "group": "一次性浴帽"
+      },
+      {
+        "pattern": "blending foam|beautyblender original.*sponges",
+        "group": "可洗美妆海绵"
+      },
+      {
+        "pattern": "white plastic sporks|plastic sporks",
+        "group": "一次性塑料叉勺一体餐具"
+      },
+      {
+        "pattern": "disposable wooden forks",
+        "group": "一次性木质餐叉"
+      }
+    ],
+    "require_same_seller": true,
+    "ruleset": "2026-10-26-purpose-material-structure-v1"
+  },
+  "rank": [
+    "occurrences",
+    "latest_period",
+    "monthly_sales"
+  ],
+  "output": {
+    "sheet_name": "需人工复核",
+    "chinese_header": "商品标题中文（机器翻译）"
+  },
+  "mandatory_exclusions": [
+    [
+      "电器补漏：电压或功率主体",
+      "^(?!.*(?:(?:replacement|spare|compatible|for\\b).*(?:gasket|lens|cover|case|seal|o.?ring|brush|filter|bag|cord|cable)|(?:gasket|lens|cover|case|seal|o.?ring|brush|filter|bag|cord|cable).*(?:replacement|compatible|\\bfor\\b)))(?=.*\\b(?:[1-9]\\d{0,2}\\s*(?:v(?:olts?)?|watts?)|[1-9]\\d{0,2}\\s*[-–]\\s*\\d{2,3}\\s*v)\\b).*(?:pump|blower|fan|motor|heater|light|lamp|vacuum|compressor|inflator|cleaner|generator)"
+    ],
+    [
+      "电器补漏：植物生长灯",
+      "^(?!.*(?:straps?|tie.down|ratchet|rope|cover|stand|holder|bracket|hanger|socket|gasket|lens|replacement cord|power cord only))(?!(?:.*\\b(?:no|without)\\s+(?:led|light))).*\\b(?:grow(?:ing)?\\s+light(?:s|\\s+bulbs?)?|plant\\s+(?:grow(?:ing)?\\s+)?(?:lights?|lamps?))\\b"
+    ],
+    [
+      "电器补漏：电动主体",
+      "^(?!.*(?:(?:replacement|spare|compatible|for\\b).*(?:gasket|lens|cover|case|seal|o.?ring|brush|filter|bag|cord|cable)|(?:gasket|lens|cover|case|seal|o.?ring|brush|filter|bag|cord|cable).*(?:replacement|compatible|\\bfor\\b))).*\\b(?:solar[- ]powered\\s+(?:pump|fan|light|lamp)|solar\\s+.*thermometer|robotic\\s+(?:pool\\s+)?cleaner|motorized\\s+\\w+|air\\s+blower|air\\s+compressor|electric\\s+pump)\\b"
+    ],
+    [
+      "泳池化学品补漏",
+      "^(?!.*\\b(?:(?:hose|water)\\s+filters?|filter\\s+(?:cartridge|bag|housing)|test\\s+(?:strips?|kits?|reagents?)|(?:tablet|chlorine|bromine)\\s+(?:dispenser|floater|feeder|holder)|(?:dispenser|floater|feeder)\\s+(?:for|with)|chlorinator\\s+(?:lid|cover|o.?ring|seal)|empty\\s+(?:bottle|container))\\b).*\\b(?:chlorine|non[- ]chlorine|bromine|algaecides?|polyquat|smartchlor|dichlor|trichlor|calcium\\s+hypochlorite|sodium\\s+(?:hypochlorite|bisulfate)|cyanuric\\s+acid|(?:pool|spa|hot\\s+tub|cold\\s+plunge)\\s+(?:water\\s+)?(?:shock|chemicals?|treatment|sanitizer|clarifier|flocculant|stabilizer)|(?:ph|alkalinity|calcium\\s+hardness)\\s+(?:up|down|increaser|decreaser|reducer)|phosphate\\s+remover|pool\\s+salt|oxidiz(?:er|ing))\\b"
+    ]
+  ]
+}

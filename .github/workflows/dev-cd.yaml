@@ -1,0 +1,79 @@
+name: dev-cd
+on:
+  push:
+    branches: [dev]
+permissions:
+  contents: read
+concurrency:
+  group: seller-ops-dev-deploy
+  cancel-in-progress: false
+jobs:
+  verify:
+    uses: ./.github/workflows/dev-ci.yaml
+  images:
+    name: Build and publish ${{ matrix.image }}
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: web
+            context: .
+            dockerfile: apps/web/Web.Dockerfile
+          - image: auth
+            context: apps/auth
+            dockerfile: apps/auth/Dockerfile
+          - image: backend
+            context: apps/backend
+            dockerfile: apps/backend/Dockerfile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/amd64
+          push: true
+          tags: ghcr.io/infmoney-agent/seller-ops-${{ matrix.image }}:${{ github.sha }}
+          labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
+  deploy:
+    name: Update server
+    needs: images
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: dev-server
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Deploy verified revision over SSH
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+          DEPLOY_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_HOST_KEY: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          : "${DEPLOY_HOST:?Missing deploy host}" "${DEPLOY_USER:?Missing deploy user}"
+          : "${DEPLOY_KEY:?Missing deploy key}" "${DEPLOY_HOST_KEY:?Missing SSH host key}"
+          umask 077
+          ssh_dir=$(mktemp -d)
+          trap 'rm -f "$ssh_dir/key" "$ssh_dir/known_hosts"; rmdir "$ssh_dir"' EXIT
+          printf '%s\n' "$DEPLOY_KEY" > "$ssh_dir/key"
+          printf '%s\n' "$DEPLOY_HOST_KEY" > "$ssh_dir/known_hosts"
+          printf '%s\n%s\n' "$GITHUB_ACTOR" "$REGISTRY_TOKEN" |
+            ssh -T -o BatchMode=yes -o ConnectTimeout=15 -o IdentitiesOnly=yes \
+              -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$ssh_dir/known_hosts" \
+              -i "$ssh_dir/key" "$DEPLOY_USER@$DEPLOY_HOST" "deploy $GITHUB_SHA"

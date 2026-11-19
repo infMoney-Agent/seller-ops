@@ -1,0 +1,7 @@
+http://localhost:18443 {
+    reverse_proxy web:3000
+}
+
+http://localhost:18444 {
+    reverse_proxy casdoor:8000
+}
