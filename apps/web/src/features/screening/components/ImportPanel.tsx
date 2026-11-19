@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { useScreeningQuery } from '../queries';
 import { download, request } from '../service';
 import { importFields } from '../import-fields';
+import { sourceLabels } from './MonthlyHistory';
 import { defaultObservationDate, sourcePeriodFromFilename } from '../import-dates';
 import type { ImportRecord, ImportRow, JobCreated, PageResult } from '../types';
 import { Badge, Button, DataBlock, Field, Input, TableScroll, type Action } from './shared';
@@ -93,6 +94,7 @@ export default function ImportPanel({
             onChange={(e) => {
               const selectedFile = e.target.files?.[0] || null;
               setFile(selectedFile);
+              setSourceType('sellersprite');
               setSelected(null);
               setMapping({});
               setDate(defaultObservationDate());
@@ -101,15 +103,7 @@ export default function ImportPanel({
           />
         </Field>
         <Field label='数据来源'>
-          <select
-            className='rounded border bg-transparent p-2'
-            value={sourceType}
-            onChange={(e) => setSourceType(e.target.value)}
-          >
-            <option value='sellersprite'>卖家精灵</option>
-            <option value='manual'>人工表格</option>
-            <option value='other'>其他来源</option>
-          </select>
+          <Input readOnly value={sourceLabels[sourceType] || sourceType} className='bg-muted/50' />
         </Field>
         <Field label='统计周期'>
           <select
@@ -160,7 +154,7 @@ export default function ImportPanel({
               data.set('source_period', period);
               data.set('observed_on', date);
               data.set('default_sales_scope', salesScope);
-              data.set('source_type', sourceType);
+              data.set('source_type', 'sellersprite');
               data.set('period_type', periodType);
               data.set('period_start', periodType === 'custom' ? periodStart : '');
               data.set('period_end', periodType === 'custom' ? periodEnd : '');
