@@ -383,7 +383,7 @@ export default function ScreeningPage() {
               </div>
               <div className='grid gap-3 rounded border p-3 md:grid-cols-4'>
                 <p className='text-muted-foreground text-xs md:col-span-4'>
-                  月份筛选切换经营数据；人工结论为商品级，机器结果依据最新商品资料计算。
+                  默认展示各商品最新一期经营数据，点击商品行可展开近一年历史；人工结论为商品级，机器结果依据最新商品资料计算。
                 </p>
                 <Field label='经营数据来源'>
                   <select
@@ -408,45 +408,7 @@ export default function ScreeningPage() {
                     )}
                   </select>
                 </Field>
-                <Field label='经营数据月份'>
-                  <select
-                    aria-label='经营数据月份'
-                    className='rounded border bg-transparent p-2'
-                    value={
-                      filters.stat_month
-                        ? `${filters.stat_month}|${filters.period_type || 'calendar_month'}`
-                        : ''
-                    }
-                    onChange={(e) => {
-                      const [month = '', kind = 'calendar_month'] = e.target.value.split('|');
-                      setFilters((old) => ({
-                        ...old,
-                        stat_month: month,
-                        period_type: month ? kind : ''
-                      }));
-                      setPage(1);
-                      setSelected({});
-                      setFocus(null);
-                    }}
-                  >
-                    <option value=''>各商品最新一期</option>
-                    {[
-                      ...new Map(
-                        (months.data?.items || []).map((m) => [
-                          `${m.stat_month.slice(0, 7)}|${m.period_type}`,
-                          m
-                        ])
-                      ).values()
-                    ].map((m) => (
-                      <option
-                        key={`${m.stat_month}|${m.period_type}`}
-                        value={`${m.stat_month.slice(0, 7)}|${m.period_type}`}
-                      >
-                        {m.stat_month.slice(0, 7)} · {periodLabels[m.period_type]}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
+
                 <Field label='关键词 / ASIN'>
                   <Input value={filters.q || ''} onChange={(e) => filter('q', e.target.value)} />
                 </Field>
