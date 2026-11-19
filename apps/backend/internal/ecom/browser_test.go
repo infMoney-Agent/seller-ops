@@ -60,7 +60,15 @@ func TestBrowserScreening(t *testing.T) {
 		chromedp.Poll(`[...document.querySelectorAll('input')].some(x=>x.value==='2026-08') && !!document.querySelector('input[type=date]')?.value`, nil),
 		chromedp.Evaluate(`[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='上传并预览').click()`, nil),
 		chromedp.Poll(`[...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='确认导入'&&!b.disabled)`, nil),
+		chromedp.ActionFunc(func(ctx context.Context) error {
+			var shot []byte
+			if err := chromedp.Run(ctx, chromedp.FullScreenshot(&shot, 80)); err != nil {
+				return err
+			}
+			return os.WriteFile(filepath.Join(os.Getenv("SCREENING_QA_DIR"), "import-preview.png"), shot, 0640)
+		}),
 		chromedp.Evaluate(`(()=>{if(!document.querySelector('[aria-label="导入步骤"]'))throw Error('import steps missing');if(document.querySelector('textarea[aria-label="字段映射"]'))throw Error('raw JSON mapping remains');const select=document.querySelector('select[aria-label="映射 ASIN"]');if(!select)throw Error('field dropdown missing');select.closest('details').open=true;if(select.disabled)throw Error('mapping disabled');})()`, nil),
+		chromedp.Evaluate(`(()=>{if(document.body.innerText.includes('高级导入设置'))throw Error('manual sales scope control remains');const current=document.querySelector('[aria-label="当前导入批次"]');if(!current||!current.innerText.includes('可导入数据')||!current.innerText.includes('异常数据'))throw Error('batch summary missing');const history=document.querySelector('[aria-label="导入记录，可横向滚动"]');if(!(current.compareDocumentPosition(history)&Node.DOCUMENT_POSITION_FOLLOWING))throw Error('history precedes current batch');const heading=current.querySelector('h2');if(document.activeElement!==heading)throw Error('batch heading not focused');})()`, nil),
 		chromedp.Focus(`select[aria-label="映射 ASIN"]`, chromedp.ByQuery),
 		chromedp.KeyEvent(kb.ArrowDown),
 		chromedp.KeyEvent(kb.Enter),
