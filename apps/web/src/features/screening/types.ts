@@ -1,6 +1,8 @@
 export type Json = string | number | boolean | null | Json[] | { [key: string]: Json };
 export type ReviewStatus = 'pending' | 'kept' | 'excluded' | 'unsure';
 export interface Product {
+  family_count?: number;
+  family_sales_pending?: boolean;
   id: string;
   asin: string;
   parent_asin: string | null;
@@ -73,7 +75,12 @@ export interface ImportRecord {
   period_end: string | null;
   default_sales_scope: string;
   mapping: Record<string, string>;
-  counts: { total?: number; valid?: number; invalid?: number; skipped_sheets?: {member_path: string; sheet_name: string; reason: string}[] };
+  counts: {
+    total?: number;
+    valid?: number;
+    invalid?: number;
+    skipped_sheets?: { member_path: string; sheet_name: string; reason: string }[];
+  };
 }
 export interface ImportRow {
   id: string;
@@ -211,5 +218,22 @@ export interface MonthOption {
   products: number;
 }
 
-export interface ParentMonthly { id:string;parent_asin:string;stat_month:string;period_type:string;period_start:string;period_end:string;observed_on:string;source_type:string;monthly_sales:number|null;monthly_revenue:string|null }
-export interface FamilyResult extends PageResult<Product> {parent_asin:string|null;known_child_sales_total:number|null;unknown_child_count:number;aggregate_label:string;parent_monthly:ParentMonthly[]}
+export interface ParentMonthly {
+  id: string;
+  parent_asin: string;
+  stat_month: string;
+  period_type: string;
+  period_start: string;
+  period_end: string;
+  observed_on: string;
+  source_type: string;
+  monthly_sales: number | null;
+  monthly_revenue: string | null;
+}
+export interface FamilyResult extends PageResult<Product> {
+  parent_asin: string | null;
+  known_child_sales_total: number | null;
+  unknown_child_count: number;
+  aggregate_label: string;
+  parent_monthly: ParentMonthly[];
+}

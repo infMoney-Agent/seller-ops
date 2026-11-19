@@ -203,7 +203,8 @@
               }
             }
           }
-        }
+        },
+        "description": "默认按明确父ASIN折叠，代表按最新统计期、同来源/口径的子体销量选择；show_merged=true返回全部子体。商品额外返回family_count和family_sales_pending；缺少父ASIN不合并。"
       }
     },
     "/api/v1/screening/summary": {
@@ -744,6 +745,18 @@
             "description": "SHA256 HMAC，签名由Next.js代理生成",
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "recent_months",
+            "in": "query",
+            "required": false,
+            "description": "以商品最新数据月份为截止月份（含），按需返回近12个月已导入数据；省略时返回全部历史。",
+            "schema": {
+              "type": "integer",
+              "enum": [
+                12
+              ]
             }
           }
         ],
@@ -5988,7 +6001,8 @@
               "format": "uuid"
             }
           }
-        ]
+        ],
+        "description": "按工作区、站点和父ASIN分页返回全部子体，各自取最新一期；支持page/page_size。"
       }
     },
     "/api/v1/screening/products/{id}/category": {

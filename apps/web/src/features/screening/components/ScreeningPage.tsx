@@ -1,6 +1,6 @@
 'use client';
 /* oxlint-disable react/no-unstable-nested-components -- TanStack column renderers are stable useMemo callbacks. */
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import Image from 'next/image';
 import { useQueryClient } from '@tanstack/react-query';
 import {
@@ -8,14 +8,29 @@ import {
   getCoreRowModel,
   useReactTable,
   type ColumnDef,
+  type OnChangeFn,
   type RowSelectionState
 } from '@tanstack/react-table';
 import PageContainer from '@/components/layout/page-container';
+import {
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+  PopoverTitle,
+  PopoverDescription
+} from '@/components/ui/popover';
 import { useSellerSession } from '@/features/auth/session';
 import { cn } from '@/lib/utils';
 import { useJob, useScreeningQuery } from '../queries';
 import { download, request } from '../service';
-import type { ImportRecord, JobCreated, PageResult, Product, ReviewStatus } from '../types';
+import type {
+  ImportRecord,
+  JobCreated,
+  PageResult,
+  Product,
+  ReviewStatus,
+  FamilyResult
+} from '../types';
 import ImportPanel from './ImportPanel';
 import ReviewPanel from './ReviewPanel';
 import ProfitPanel from './ProfitPanel';
@@ -35,6 +50,7 @@ export default function ScreeningPage() {
   const [page, setPage] = useState(1);
   const [filters, setFilters] = useState<Record<string, string>>({ show_merged: 'false' });
   const [selected, setSelected] = useState<RowSelectionState>({});
+  const [familyRows, setFamilyRows] = useState<Record<string, boolean>>({});
   const [focus, setFocus] = useState<Product | null>(null);
   const [group, setGroup] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -83,6 +99,7 @@ export default function ScreeningPage() {
   }
   useEffect(() => {
     setSelected({});
+    setFamilyRows({});
     setFocus(null);
     setGroup(null);
     setJobs([]);
@@ -114,7 +131,7 @@ export default function ScreeningPage() {
         id: 'selection',
         header: ({ table }) => (
           <input
-            aria-label='选择当前页'
+            aria-label='选择当前页代表商品'
             type='checkbox'
             checked={table.getIsAllPageRowsSelected()}
             onChange={table.getToggleAllPageRowsSelectedHandler()}
@@ -153,7 +170,34 @@ export default function ScreeningPage() {
               >
                 {row.original.asin}
               </button>
-              <p className='line-clamp-2'>{row.original.title_zh || row.original.title}</p><p className='text-xs'>父体：{row.original.parent_asin || '未知'} {row.original.manual_category && `· 人工分类：${row.original.manual_category}`}</p>
+              {(row.original.family_count || 1) > 1 && (
+                <Button
+                  size='sm'
+                  variant='ghost'
+                  aria-label={`展开 ${row.original.parent_asin} 的子体`}
+                  aria-expanded={Boolean(familyRows[row.original.id])}
+                  aria-controls={`family-${row.original.id}`}
+                  onClick={() =>
+                    setFamilyRows((old) => ({ ...old, [row.original.id]: !old[row.original.id] }))
+                  }
+                >
+                  {familyRows[row.original.id] ? '▾' : '▸'} {row.original.family_count} 个子体
+                </Button>
+              )}
+              {(row.original.family_count || 1) > 1 && (
+                <p className='text-muted-foreground text-xs'>
+                  {row.original.sales_scope === 'child' && row.original.monthly_sales !== null
+                    ? row.original.family_sales_pending
+                      ? '已知销量代表 · 部分待确认'
+                      : '最新一期销量代表'
+                    : '代表商品 · 销量待确认'}
+                </p>
+              )}
+              <p className='line-clamp-2'>{row.original.title_zh || row.original.title}</p>
+              <p className='text-xs'>
+                父体：{row.original.parent_asin || '未知'}{' '}
+                {row.original.manual_category && `· 人工分类：${row.original.manual_category}`}
+              </p>
               <p className='text-muted-foreground text-xs'>
                 {row.original.stat_month?.slice(0, 7)} ·{' '}
                 {periodLabels[row.original.period_type || ''] || '暂无分期数据'}
@@ -169,9 +213,13 @@ export default function ScreeningPage() {
         accessorKey: 'price_usd',
         header: '价格 / 月销量',
         cell: ({ row }) => (
-          <span>
-            ${formatMoney(row.original.price_usd)} / {row.original.monthly_sales ?? '—'}
-          </span>
+          <PriceHistoryCard
+            product={row.original}
+            onCalculate={(product) => {
+              setFocus(product);
+              setTab(3);
+            }}
+          />
         )
       },
       {
@@ -248,7 +296,7 @@ export default function ScreeningPage() {
         )
       }
     ],
-    []
+    [familyRows]
   );
   // oxlint-disable-next-line react/incompatible-library -- TanStack Table is intentionally kept outside React Compiler memoization.
   const table = useReactTable({
@@ -349,7 +397,7 @@ export default function ScreeningPage() {
                 {[
                   ['source_rows', '子体来源行数'],
                   ['products', '去重商品'],
-                  ['displayed', '折叠展示'],
+                  ['displayed', '父体折叠展示'],
                   ['pending', '待复核']
                 ].map(([key, title]) => (
                   <div key={key} className='rounded-lg border p-4'>
@@ -360,7 +408,8 @@ export default function ScreeningPage() {
               </div>
               <div className='grid gap-3 rounded border p-3 md:grid-cols-4'>
                 <p className='text-muted-foreground text-xs md:col-span-4'>
-                  月份筛选切换经营数据；人工结论为商品级，机器结果依据最新商品资料计算。
+                  默认展示各商品最新一期经营数据，点击价格 /
+                  月销量列的“查看详细数据”可查看近一年历史；人工结论为商品级，机器结果依据最新商品资料计算。
                 </p>
                 <Field label='经营数据来源'>
                   <select
@@ -375,55 +424,14 @@ export default function ScreeningPage() {
                     <option value=''>全部来源（采用所选周期最新观察值）</option>
                     {[...new Set((months.data?.items || []).map((m) => m.source_type))].map(
                       (source) => (
-                        <option
-                          key={sourceLabels[source] || source}
-                          value={sourceLabels[source] || source}
-                        >
+                        <option key={source} value={source}>
                           {sourceLabels[source] || source}
                         </option>
                       )
                     )}
                   </select>
                 </Field>
-                <Field label='经营数据月份'>
-                  <select
-                    aria-label='经营数据月份'
-                    className='rounded border bg-transparent p-2'
-                    value={
-                      filters.stat_month
-                        ? `${filters.stat_month}|${filters.period_type || 'calendar_month'}`
-                        : ''
-                    }
-                    onChange={(e) => {
-                      const [month = '', kind = 'calendar_month'] = e.target.value.split('|');
-                      setFilters((old) => ({
-                        ...old,
-                        stat_month: month,
-                        period_type: month ? kind : ''
-                      }));
-                      setPage(1);
-                      setSelected({});
-                      setFocus(null);
-                    }}
-                  >
-                    <option value=''>各商品最新一期</option>
-                    {[
-                      ...new Map(
-                        (months.data?.items || []).map((m) => [
-                          `${m.stat_month.slice(0, 7)}|${m.period_type}`,
-                          m
-                        ])
-                      ).values()
-                    ].map((m) => (
-                      <option
-                        key={`${m.stat_month}|${m.period_type}`}
-                        value={`${m.stat_month.slice(0, 7)}|${m.period_type}`}
-                      >
-                        {m.stat_month.slice(0, 7)} · {periodLabels[m.period_type]}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
+
                 <Field label='关键词 / ASIN'>
                   <Input value={filters.q || ''} onChange={(e) => filter('q', e.target.value)} />
                 </Field>
@@ -509,7 +517,7 @@ export default function ScreeningPage() {
                 <label className='flex items-center gap-2 text-sm'>
                   <input
                     type='checkbox'
-                    aria-label='展示全部归并商品'
+                    aria-label='展示全部子体'
                     checked={filters.show_merged === 'true'}
                     onChange={(e) => filter('show_merged', String(e.target.checked))}
                   />{' '}
@@ -560,16 +568,29 @@ export default function ScreeningPage() {
                     </thead>
                     <tbody>
                       {table.getRowModel().rows.map((row) => (
-                        <tr
-                          key={row.id}
-                          className={cn('border-t', row.getIsSelected() && 'bg-muted/50')}
-                        >
-                          {row.getVisibleCells().map((cell) => (
-                            <td key={cell.id} className='p-3 align-top'>
-                              {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                            </td>
-                          ))}
-                        </tr>
+                        <Fragment key={row.id}>
+                          <tr
+                            className={cn(
+                              'border-t',
+                              familyRows[row.original.id] && 'bg-primary/[0.035]',
+                              row.getIsSelected() && 'bg-muted/50'
+                            )}
+                          >
+                            {row.getVisibleCells().map((cell) => (
+                              <td key={cell.id} className='p-3 align-top'>
+                                {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                              </td>
+                            ))}
+                          </tr>
+                          {familyRows[row.original.id] && (
+                            <FamilyChildren
+                              product={row.original}
+                              columns={columns}
+                              selected={selected}
+                              onSelectionChange={setSelected}
+                            />
+                          )}
+                        </Fragment>
                       ))}
                     </tbody>
                   </table>
@@ -661,7 +682,10 @@ export default function ScreeningPage() {
                   act={act}
                   busy={busy}
                   close={() => setFocus(null)}
-                  onChooseFamily={(ids)=>{setSelected(Object.fromEntries(ids.map(id=>[id,true])));setTab(2);}}
+                  onChooseFamily={(ids) => {
+                    setSelected(Object.fromEntries(ids.map((id) => [id, true])));
+                    setTab(2);
+                  }}
                   onCalculate={(p) => {
                     setFocus(p);
                     setTab(3);
@@ -691,6 +715,142 @@ export default function ScreeningPage() {
   );
 }
 
+function FamilyChildren({
+  product,
+  columns,
+  selected,
+  onSelectionChange
+}: {
+  product: Product;
+  columns: ColumnDef<Product>[];
+  selected: RowSelectionState;
+  onSelectionChange: OnChangeFn<RowSelectionState>;
+}) {
+  const [page, setPage] = useState(1);
+  const family = useScreeningQuery<FamilyResult>(`/products/${product.id}/family?page=${page}`);
+  const children = useMemo(
+    () => family.data?.items.filter((p) => p.id !== product.id) || [],
+    [family.data?.items, product.id]
+  );
+  // Child products share the exact column renderers and selection behavior of the main table.
+  // oxlint-disable-next-line react/incompatible-library -- TanStack renders the shared product columns.
+  const table = useReactTable({
+    data: children,
+    columns,
+    state: { rowSelection: selected },
+    onRowSelectionChange: onSelectionChange,
+    getRowId: (p) => p.id,
+    getCoreRowModel: getCoreRowModel(),
+    enableRowSelection: true
+  });
+  return (
+    <>
+      {table.getRowModel().rows.map((row) => (
+        <tr
+          key={row.id}
+          data-family={product.id}
+          className={cn('border-t bg-primary/[0.035]', row.getIsSelected() && 'bg-muted/50')}
+        >
+          {row.getVisibleCells().map((cell) => (
+            <td key={cell.id} className='p-3 align-top'>
+              {flexRender(cell.column.columnDef.cell, cell.getContext())}
+            </td>
+          ))}
+        </tr>
+      ))}
+      <tr id={`family-${product.id}`} className='border-b-2 border-primary/20 bg-primary/[0.035]'>
+        <td colSpan={columns.length} className='p-3'>
+          {family.isLoading && <p role='status'>正在加载同父体商品…</p>}
+          {family.isError && (
+            <div role='alert'>
+              {family.error.message}
+              <Button size='sm' variant='outline' onClick={() => void family.refetch()}>
+                重试
+              </Button>
+            </div>
+          )}
+          {family.data && (
+            <div className='flex flex-wrap items-center gap-2 text-xs text-muted-foreground'>
+              <span>
+                同父体 {product.parent_asin} · 共 {family.data.total} 个商品，各自展示最新一期
+              </span>
+              {family.data.total > 50 && (
+                <>
+                  <Button
+                    size='sm'
+                    variant='outline'
+                    disabled={page === 1}
+                    onClick={() => setPage((p) => p - 1)}
+                  >
+                    上一页同父体商品
+                  </Button>
+                  <span>第 {page} 页</span>
+                  <Button
+                    size='sm'
+                    variant='outline'
+                    disabled={page * 50 >= family.data.total}
+                    onClick={() => setPage((p) => p + 1)}
+                  >
+                    下一页同父体商品
+                  </Button>
+                </>
+              )}
+            </div>
+          )}
+        </td>
+      </tr>
+    </>
+  );
+}
+
+function PriceHistoryCard({
+  product,
+  onCalculate
+}: {
+  product: Product;
+  onCalculate: (product: Product) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className='space-y-1'>
+      <p className='whitespace-nowrap'>
+        ${formatMoney(product.price_usd)} / {product.monthly_sales ?? '—'}
+      </p>
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger className='text-primary text-xs underline underline-offset-2'>
+          查看详细数据
+        </PopoverTrigger>
+        <PopoverContent
+          align='start'
+          className='max-h-[65vh] w-[min(46rem,calc(100vw-2rem))] overflow-y-auto p-3'
+        >
+          <div className='flex items-start justify-between gap-3'>
+            <div className='min-w-0'>
+              <PopoverTitle>经营数据 · {product.asin}</PopoverTitle>
+              <PopoverDescription className='line-clamp-2'>
+                {product.title_zh || product.title}
+              </PopoverDescription>
+            </div>
+            <Button size='sm' variant='ghost' onClick={() => setOpen(false)}>
+              关闭
+            </Button>
+          </div>
+          {open && (
+            <MonthlyHistory
+              product={product}
+              recentYear
+              onCalculate={(p) => {
+                setOpen(false);
+                onCalculate(p);
+              }}
+            />
+          )}
+        </PopoverContent>
+      </Popover>
+    </div>
+  );
+}
+
 function SingleReview({
   product,
   act,
@@ -704,13 +864,13 @@ function SingleReview({
   busy: boolean;
   close: () => void;
   onCalculate: (product: Product) => void;
-  onChooseFamily: (ids:string[])=>void;
+  onChooseFamily: (ids: string[]) => void;
 }) {
   const [status, setStatus] = useState<ReviewStatus>(
     product.review_status === 'pending' ? 'kept' : product.review_status
   );
   const [reason, setReason] = useState(product.review_reason);
-  const [manualCategory,setManualCategory]=useState(product.manual_category || '');
+  const [manualCategory, setManualCategory] = useState(product.manual_category || '');
   const [note, setNote] = useState(product.review_note);
   const history = useScreeningQuery<unknown>(`/products/${product.id}/history`);
   const observations = useScreeningQuery<unknown>(`/products/${product.id}/observations`);
@@ -723,7 +883,27 @@ function SingleReview({
         </Button>
       </div>
       <p>{product.title}</p>
-      <div className='flex flex-wrap items-end gap-2'><Field label='人工分类'><Input value={manualCategory} onChange={e=>setManualCategory(e.target.value)} /></Field><Button variant='outline' disabled={busy || !manualCategory.trim()} onClick={()=>void act(async()=>{await request(`/products/${product.id}/category`,'PATCH',{expected_data_revision:product.data_revision,expected_review_revision:product.review_revision,category:manualCategory});close();},'人工分类已保存')}>保存人工分类</Button></div>
+      <div className='flex flex-wrap items-end gap-2'>
+        <Field label='人工分类'>
+          <Input value={manualCategory} onChange={(e) => setManualCategory(e.target.value)} />
+        </Field>
+        <Button
+          variant='outline'
+          disabled={busy || !manualCategory.trim()}
+          onClick={() =>
+            void act(async () => {
+              await request(`/products/${product.id}/category`, 'PATCH', {
+                expected_data_revision: product.data_revision,
+                expected_review_revision: product.review_revision,
+                category: manualCategory
+              });
+              close();
+            }, '人工分类已保存')
+          }
+        >
+          保存人工分类
+        </Button>
+      </div>
       <DataBlock title='商品规格' value={product.specs} />
       <ProductParameters product={product} act={act} busy={busy} close={close} />
       <FamilyPanel product={product} choose={onChooseFamily} />

@@ -180,6 +180,31 @@ func TestImportHTTPWorkflow(t *testing.T) {
 	if first == nil || str(first["price_usd"]) != "19.990000" || integer(first["monthly_sales"]) != 120 {
 		t.Fatal(first)
 	}
+	folded := call("GET", "products?sort=-price_usd", "", nil)
+	if integer(folded["total"]) != 1 {
+		t.Fatal("parent family not folded", folded)
+	}
+	representative := folded["items"].([]any)[0].(map[string]any)
+	if str(representative["asin"]) != "CHILD00001" || integer(representative["family_count"]) != 2 || representative["family_sales_pending"] != true {
+		t.Fatal("unknown or parent sales used for ranking", representative)
+	}
+	page1 := call("GET", "products/"+str(first["id"])+"/family?page_size=1&page=1", "", nil)
+	page2 := call("GET", "products/"+str(first["id"])+"/family?page_size=1&page=2", "", nil)
+	if integer(page1["total"]) != 2 || len(page1["items"].([]any)) != 1 || len(page2["items"].([]any)) != 1 || page1["items"].([]any)[0].(map[string]any)["id"] == page2["items"].([]any)[0].(map[string]any)["id"] {
+		t.Fatal("family pagination", page1, page2)
+	}
+	_, e = pool.Exec(ctx, "UPDATE ps_product_monthly m SET sales_scope='child',monthly_sales=240 FROM ps_products p WHERE p.tenant_id=m.tenant_id AND p.id=m.product_id AND p.tenant_id=$1 AND p.asin='CHILD00002'", a.Tenant)
+	if e != nil {
+		t.Fatal(e)
+	}
+	best := call("GET", "products?sort=asin", "", nil)
+	if str(best["items"].([]any)[0].(map[string]any)["asin"]) != "CHILD00002" {
+		t.Fatal("representative depends on list sort rather than sales", best)
+	}
+	_, e = pool.Exec(ctx, "UPDATE ps_product_monthly m SET sales_scope='unknown',monthly_sales=900 FROM ps_products p WHERE p.tenant_id=m.tenant_id AND p.id=m.product_id AND p.tenant_id=$1 AND p.asin='CHILD00002'", a.Tenant)
+	if e != nil {
+		t.Fatal(e)
+	}
 	family := call("GET", "products/"+str(first["id"])+"/family", "", nil)
 	if integer(family["known_child_sales_total"]) != 120 || integer(family["unknown_child_count"]) != 1 || len(family["parent_monthly"].([]any)) != 1 {
 		t.Fatal(family)
@@ -297,6 +322,17 @@ func TestImportHTTPWorkflow(t *testing.T) {
 		t.Fatal(summary)
 	}
 
+	upload("2024-01", "2024-02-01", "8.00")
+	allHistory := call("GET", "products/"+str(first["id"])+"/monthly", "", nil)
+	recentHistory := call("GET", "products/"+str(first["id"])+"/monthly?recent_months=12", "", nil)
+	if integer(allHistory["total"]) != 3 || integer(recentHistory["total"]) != 2 {
+		t.Fatal("annual history filter", allHistory, recentHistory)
+	}
+	for _, item := range recentHistory["items"].([]any) {
+		if str(item.(map[string]any)["stat_month"]) < "2025-12-01" {
+			t.Fatal("old month leaked", item)
+		}
+	}
 }
 
 func TestExplanatorySheets(t *testing.T) {
