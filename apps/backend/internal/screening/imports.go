@@ -88,7 +88,7 @@ func normalizeRow(raw Object, mapping Object) (Object, []string) {
 					errs = append(errs, "评分超出范围")
 				}
 			}
-		case "monthly_sales", "review_count", "bsr_rank", "units_per_pack", "carton_units", "parent_monthly_sales", "child_monthly_sales":
+		case "monthly_sales", "review_count", "bsr_rank", "units_per_pack", "carton_units", "parent_monthly_sales", "child_monthly_sales", "variant_count":
 			text = strings.ReplaceAll(text, ",", "")
 			n, e := parseNonnegativeInt(text)
 			if e != nil {
@@ -146,6 +146,26 @@ func normalizeRow(raw Object, mapping Object) (Object, []string) {
 	}
 	if role != "parent" && str(out["title"]) == "" {
 		errs = append(errs, "缺少商品标题")
+	}
+	// A self-parent ASIN with exactly one variant represents the same sales unit.
+	// Never infer this for multi-variant listings or missing variant counts.
+	if role != "parent" && parent == str(out["asin"]) && integer(out["variant_count"]) == 1 {
+		sales := out["child_monthly_sales"]
+		if sales == nil {
+			sales = out["monthly_sales"]
+		}
+		if sales == nil {
+			sales = out["parent_monthly_sales"]
+		}
+		if sales != nil {
+			out["child_monthly_sales"] = sales
+			out["parent_monthly_sales"] = sales
+			out["sales_basis"] = "single_variant_self_parent"
+			scope = "child"
+			if out["child_monthly_revenue"] == nil {
+				out["child_monthly_revenue"] = out["monthly_revenue"]
+			}
+		}
 	}
 	if out["child_monthly_sales"] != nil || out["child_monthly_revenue"] != nil {
 		if scope == "parent" {

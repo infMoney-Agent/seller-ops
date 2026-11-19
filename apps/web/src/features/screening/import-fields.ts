@@ -153,7 +153,7 @@ export const importFields = [
   {
     key: 'child_monthly_sales',
     label: '子体月销量',
-    aliases: ['子体月销量', '子ASIN月销量', 'Child Monthly Sales']
+    aliases: ['子体月销量', '子ASIN月销量', 'Child Monthly Sales', '子体销量']
   },
   {
     key: 'parent_monthly_sales',
@@ -163,11 +163,16 @@ export const importFields = [
   {
     key: 'child_monthly_revenue',
     label: '子体月销售额($)',
-    aliases: ['子体月销售额($)', 'Child Monthly Revenue']
+    aliases: ['子体月销售额($)', 'Child Monthly Revenue', '子体销售额($)', '子体销售额']
   },
   {
     key: 'parent_monthly_revenue',
     label: '父体月销售额($)',
     aliases: ['父体月销售额($)', 'Parent Monthly Revenue']
+  },
+  {
+    key: 'variant_count',
+    label: '变体数',
+    aliases: ['变体数', '变体数量', 'Variation Count', 'Variants']
   }
 ];
