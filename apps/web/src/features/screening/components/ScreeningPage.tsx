@@ -32,7 +32,7 @@ import type {
   ReviewStatus,
   FamilyResult
 } from '../types';
-import { childSales, salesNote } from '../sales';
+import { childSales } from '../sales';
 import ImportDialog from './ImportDialog';
 import ReviewPanel from './ReviewPanel';
 import ProfitPanel from './ProfitPanel';
@@ -336,7 +336,6 @@ export default function ScreeningPage() {
         cell: ({ row }) => (
           <div className='space-y-1 tabular-nums'>
             <p>{childSales(row.original)}</p>
-            <p className='text-muted-foreground text-xs'>{salesNote(row.original)}</p>
           </div>
         )
       },

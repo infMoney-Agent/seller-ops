@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { useScreeningQuery } from '../queries';
 import type { MonthlyRecord, PageResult, Product } from '../types';
 import { Button, TableScroll, formatMoney } from './shared';
-import { childSales, salesNote } from '../sales';
+import { childSales } from '../sales';
 import OperatingTrends from './OperatingTrends';
 
 export const sourceLabels: Record<string, string> = {
@@ -76,10 +76,7 @@ export default function MonthlyHistory({
                   </p>
                 </td>
                 <td>{formatMoney(row.price_usd)}</td>
-                <td>
-                  {childSales(row)}
-                  <p className='text-muted-foreground text-xs'>{salesNote(row)}</p>
-                </td>
+                <td>{childSales(row)}</td>
                 <td>{formatMoney(row.monthly_revenue)}</td>
                 <td>
                   {row.rating ?? '—'} / {row.review_count ?? '—'}

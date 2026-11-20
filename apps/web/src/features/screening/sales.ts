@@ -10,12 +10,3 @@ export function childSales(value: Sales): string {
     (value.sales_quantity_kind === 'lower_bound' ? '+' : '')
   );
 }
-export function salesNote(value: Sales): string {
-  return value.sales_scope !== 'child' || value.monthly_sales == null
-    ? '子体销量缺失'
-    : value.sales_quantity_kind === 'lower_bound'
-      ? '购买量级'
-      : value.sales_quantity_kind === 'single_variant_estimate'
-        ? '单变体推定'
-        : '';
-}
