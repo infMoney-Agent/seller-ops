@@ -7,6 +7,7 @@ export interface Product {
   asin: string;
   parent_asin: string | null;
   manual_category: string;
+  listing_date?: string | null;
   material: string | null;
   product_length_cm: string | number | null;
   product_width_cm: string | number | null;

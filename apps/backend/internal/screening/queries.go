@@ -145,7 +145,7 @@ func (s *service) products(r *http.Request) (any, error) {
 	// List clients use the public aliases. Keep full machine evidence on detail responses.
 	for _, item := range items {
 		for _, field := range importedColumns {
-			if field.Table == "product" && !containsColumn([]string{"product_length_cm", "product_width_cm", "product_height_cm", "product_dimensions", "product_dimensions_original", "package_dimensions", "package_dimensions_original"}, field.Key) {
+			if field.Table == "product" && !containsColumn([]string{"listing_date", "product_length_cm", "product_width_cm", "product_height_cm", "product_dimensions", "product_dimensions_original", "package_dimensions", "package_dimensions_original"}, field.Key) {
 				delete(item, field.Key)
 			}
 		}

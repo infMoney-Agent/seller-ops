@@ -335,6 +335,31 @@ export default function ScreeningPage() {
         )
       },
       {
+        id: 'rating_reviews',
+        header: '评分 / 评分数',
+        cell: ({ row }) => (
+          <p className='whitespace-nowrap tabular-nums'>
+            {row.original.rating == null
+              ? '—'
+              : Number(row.original.rating).toLocaleString('zh-CN', {
+                  minimumFractionDigits: 1,
+                  maximumFractionDigits: 2
+                })}
+            {' / '}
+            {row.original.review_count?.toLocaleString('zh-CN') ?? '—'}
+          </p>
+        )
+      },
+      {
+        accessorKey: 'listing_date',
+        header: '上架时间',
+        cell: ({ row }) => (
+          <p className='whitespace-nowrap tabular-nums'>
+            {row.original.listing_date?.trim() || '—'}
+          </p>
+        )
+      },
+      {
         id: 'dimensions',
         header: '尺寸 / 重量',
         cell: ({ row }) => <ProductMeasurements product={row.original} />
