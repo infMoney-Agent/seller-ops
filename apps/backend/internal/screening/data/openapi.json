@@ -2079,7 +2079,7 @@
         }
       },
       "delete": {
-        "summary": "删除导入历史记录（保留商品、经营数据与原始来源）",
+        "summary": "撤销导入批次及经营数据，保留其他来源与审计",
         "parameters": [
           {
             "name": "id",
@@ -6343,6 +6343,27 @@
             }
           }
         ]
+      }
+    },
+    "/api/v1/screening/imports/{id}/removal-preview": {
+      "get": {
+        "summary": "查询删除导入的影响范围",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "涉及商品数、独有商品数、来源行数"
+          }
+        }
       }
     }
   },

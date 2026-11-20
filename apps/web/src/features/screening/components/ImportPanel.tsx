@@ -10,11 +10,13 @@ import { Badge, Button, DataBlock, Field, Input, TableScroll, type Action } from
 export default function ImportPanel({
   act,
   watch,
-  busy
+  busy,
+  onRemoved
 }: {
   act: Action;
   watch: (id: string) => void;
   busy: boolean;
+  onRemoved?: (id: string) => void;
 }) {
   const inFlight = useRef(false);
   const uploadController = useRef<AbortController | null>(null);
@@ -31,6 +33,11 @@ export default function ImportPanel({
   const batchHeading = useRef<HTMLHeadingElement>(null);
   const [files, setFiles] = useState<File[]>([]);
   const [uploads, setUploads] = useState<{ name: string; id?: string; error?: string }[]>([]);
+  const [removal, setRemoval] = useState<{
+    products: number;
+    exclusive_products: number;
+    source_rows: number;
+  } | null>(null);
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
   const [date, setDate] = useState(defaultObservationDate);
   const [period, setPeriod] = useState('');
@@ -524,21 +531,31 @@ export default function ImportPanel({
                   <td className='space-x-2'>
                     {pendingDelete === item.id ? (
                       <span className='inline-flex flex-wrap items-center gap-2'>
-                        <span className='text-xs'>仅删除记录，保留商品数据</span>
+                        <span className='text-xs'>
+                          将撤销本批经营数据；
+                          {removal
+                            ? '涉及 ' +
+                              removal.products +
+                              ' 个商品，其中 ' +
+                              removal.exclusive_products +
+                              ' 个无其他来源，将移出商品库。'
+                            : '正在核对影响范围…'}
+                        </span>
                         <Button
                           size='sm'
                           variant='outline'
-                          disabled={busy}
+                          disabled={busy || !removal}
                           onClick={() =>
                             void run(async () => {
                               await request('/imports/' + item.id, 'DELETE');
+                              onRemoved?.(item.id);
                               setPendingDelete(null);
                               setUploads((old) => old.filter((upload) => upload.id !== item.id));
                               if (selected === item.id) setSelected(null);
-                            }, '导入记录已删除')
+                            }, '已撤销本批导入数据')
                           }
                         >
-                          确认删除记录
+                          确认删除数据
                         </Button>
                         <Button size='sm' variant='ghost' onClick={() => setPendingDelete(null)}>
                           取消
@@ -549,9 +566,20 @@ export default function ImportPanel({
                         size='sm'
                         variant='ghost'
                         disabled={busy || ['uploaded', 'parsing', 'importing'].includes(item.state)}
-                        onClick={() => setPendingDelete(item.id)}
+                        onClick={() => {
+                          setPendingDelete(item.id);
+                          setRemoval(null);
+                          void run(async () => {
+                            const impact = await request<{
+                              products: number;
+                              exclusive_products: number;
+                              source_rows: number;
+                            }>('/imports/' + item.id + '/removal-preview');
+                            setRemoval(impact);
+                          });
+                        }}
                       >
-                        删除记录
+                        删除导入
                       </Button>
                     )}
 

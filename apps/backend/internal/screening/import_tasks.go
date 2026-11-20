@@ -25,6 +25,9 @@ func (s *service) runParse(ctx context.Context, job Object, token string) error 
 		return e
 	}
 	batch := decodeObject(raw)
+	if counts, ok := batch["counts"].(map[string]any); ok && counts["data_deleted_at"] != nil {
+		return s.finishJob(ctx, job, token, Object{"deleted": true}, "succeeded")
+	}
 	if integer(batch["parse_generation"]) != integer(payload["generation"]) {
 		return s.finishJob(ctx, job, token, Object{"superseded": true}, "succeeded")
 	}
@@ -91,7 +94,7 @@ func (s *service) editImport(ctx context.Context, a identity, id string, b Objec
 		return nil, e
 	}
 	batch := decodeObject(raw)
-	if counts, ok := batch["counts"].(map[string]any); ok && counts["history_deleted_at"] != nil {
+	if counts, ok := batch["counts"].(map[string]any); ok && counts["data_deleted_at"] != nil {
 		return nil, fail(404, "导入记录已删除，请重新上传后操作")
 	}
 	if commit {
@@ -181,6 +184,9 @@ func (s *service) runImport(ctx context.Context, job Object, token string) error
 	batch, e := s.one(ctx, "SELECT to_jsonb(i) FROM ps_imports i WHERE tenant_id=$1 AND id=$2::uuid", a.Tenant, payload["import_id"])
 	if e != nil {
 		return e
+	}
+	if counts, ok := batch["counts"].(map[string]any); ok && counts["data_deleted_at"] != nil {
+		return s.finishJob(ctx, job, token, Object{"deleted": true}, "succeeded")
 	}
 	meta, e := period(batch, true)
 	if e != nil {
@@ -299,6 +305,9 @@ func (s *service) runImport(ctx context.Context, job Object, token string) error
 	return s.finishJob(ctx, job, token, result, jobState)
 }
 func importObservation(ctx context.Context, tx pgx.Tx, a identity, batch, meta, row, n Object) (string, error) {
+	if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtextextended('import-data',$1))", a.Tenant); err != nil {
+		return "", err
+	}
 	scope := str(n["sales_scope"])
 	if n["sales_scope_explicit"] != true && str(batch["default_sales_scope"]) != "unknown" {
 		scope = str(batch["default_sales_scope"])
@@ -328,7 +337,7 @@ func importObservation(ctx context.Context, tx pgx.Tx, a identity, batch, meta, 
 		return "", nil
 	}
 	id := uuid()
-	if e := tx.QueryRow(ctx, "INSERT INTO ps_products(tenant_id,id,asin,title) VALUES($1,$2,$3,$4) ON CONFLICT(tenant_id,marketplace,asin) DO UPDATE SET asin=EXCLUDED.asin RETURNING id::text", a.Tenant, id, n["asin"], n["title"]).Scan(&id); e != nil {
+	if e := tx.QueryRow(ctx, "INSERT INTO ps_products(tenant_id,id,asin,title) VALUES($1,$2,$3,$4) ON CONFLICT(tenant_id,marketplace,asin) DO UPDATE SET asin=EXCLUDED.asin,archived_at=NULL RETURNING id::text", a.Tenant, id, n["asin"], n["title"]).Scan(&id); e != nil {
 		return "", e
 	}
 	_, e := tx.Exec(ctx, `INSERT INTO ps_product_monthly(tenant_id,id,product_id,stat_month,period_type,period_start,period_end,observed_on,source_type,source_row_id,price_usd,monthly_sales,monthly_revenue,review_count,rating,bsr_rank,sales_scope,parent_asin_snapshot) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) ON CONFLICT(tenant_id,product_id,source_type,period_type,period_start,period_end) DO UPDATE SET observed_on=EXCLUDED.observed_on,source_row_id=EXCLUDED.source_row_id,price_usd=EXCLUDED.price_usd,monthly_sales=EXCLUDED.monthly_sales,monthly_revenue=EXCLUDED.monthly_revenue,review_count=EXCLUDED.review_count,rating=EXCLUDED.rating,bsr_rank=EXCLUDED.bsr_rank,sales_scope=EXCLUDED.sales_scope,parent_asin_snapshot=EXCLUDED.parent_asin_snapshot,revision=ps_product_monthly.revision+1,updated_at=now() WHERE ROW(EXCLUDED.observed_on,(SELECT ROW(i.created_at,r.member_path,r.sheet_name,r.row_no,r.id) FROM ps_import_rows r JOIN ps_imports i ON i.tenant_id=r.tenant_id AND i.id=r.import_id WHERE r.tenant_id=EXCLUDED.tenant_id AND r.id=EXCLUDED.source_row_id)) > ROW(ps_product_monthly.observed_on,(SELECT ROW(i.created_at,r.member_path,r.sheet_name,r.row_no,r.id) FROM ps_import_rows r JOIN ps_imports i ON i.tenant_id=r.tenant_id AND i.id=r.import_id WHERE r.tenant_id=ps_product_monthly.tenant_id AND r.id=ps_product_monthly.source_row_id))`, a.Tenant, uuid(), id, meta["stat_month"], meta["period_type"], meta["period_start"], meta["period_end"], batch["observed_on"], meta["source_type"], row["id"], n["price_usd"], n["monthly_sales"], n["monthly_revenue"], n["review_count"], n["rating"], n["bsr_rank"], scope, nullableString(parent))
@@ -337,6 +346,9 @@ func importObservation(ctx context.Context, tx pgx.Tx, a identity, batch, meta, 
 	}
 	if e = saveImportedMonthly(ctx, tx, a, id, str(row["id"]), n); e != nil {
 		return "", e
+	}
+	if n["restore_monthly_only"] == true {
+		return id, nil
 	}
 	var currentRow string
 	var monthlyID string

@@ -29,7 +29,7 @@ func (s *service) selection(ctx context.Context, a identity, b Object) ([]string
 			ids = append(ids, str(v))
 		}
 		var total int
-		if e := s.db.QueryRow(ctx, "SELECT count(*) FROM ps_products WHERE tenant_id=$1 AND id=ANY($2::uuid[])", a.Tenant, ids).Scan(&total); e != nil {
+		if e := s.db.QueryRow(ctx, "SELECT count(*) FROM ps_products WHERE tenant_id=$1 AND archived_at IS NULL AND id=ANY($2::uuid[])", a.Tenant, ids).Scan(&total); e != nil {
 			return nil, e
 		}
 		if total != len(ids) {
@@ -224,7 +224,7 @@ func (s *service) runExport(ctx context.Context, job Object, token string) error
 		sql     string
 	}{
 		{"月份数据", []string{"asin", "parent_asin_snapshot", "stat_month", "period_type", "period_start", "period_end", "observed_on", "source_type", "sales_scope", "price_usd", "monthly_sales", "monthly_revenue", "review_count", "rating", "bsr_rank", "revision"}, "SELECT to_jsonb(m)||jsonb_build_object('asin',p.asin) FROM ps_product_monthly m JOIN ps_products p ON p.tenant_id=m.tenant_id AND p.id=m.product_id WHERE m.tenant_id=$1 AND m.product_id=ANY($2::uuid[]) ORDER BY p.asin,m.stat_month DESC,m.id"},
-		{"来源行", []string{"product_id", "import_id", "member_path", "sheet_name", "row_no", "raw_data", "normalized_data", "state", "errors"}, "SELECT to_jsonb(r) FROM ps_import_rows r WHERE tenant_id=$1 AND product_id=ANY($2::uuid[]) ORDER BY product_id,import_id,row_no"},
+		{"来源行", []string{"product_id", "import_id", "member_path", "sheet_name", "row_no", "raw_data", "normalized_data", "state", "errors"}, "SELECT to_jsonb(r) FROM ps_import_rows r WHERE tenant_id=$1 AND product_id=ANY($2::uuid[]) AND import_id IN(SELECT id FROM ps_imports WHERE tenant_id=$1 AND NOT(counts ? 'data_deleted_at')) ORDER BY product_id,import_id,row_no"},
 		{"利润方案", []string{"product_id", "name", "inputs", "output", "formula_version", "product_data_revision", "monthly_id", "monthly_revision", "monthly_snapshot", "product_snapshot", "template_snapshot", "created_at"}, "SELECT to_jsonb(q) FROM ps_profit_scenarios q WHERE tenant_id=$1 AND product_id=ANY($2::uuid[]) ORDER BY product_id,created_at,id"},
 		{"父体销量", []string{"parent_asin", "stat_month", "period_type", "period_start", "period_end", "source_type", "monthly_sales", "monthly_revenue", "observed_on"}, "SELECT to_jsonb(m) FROM ps_parent_monthly m WHERE tenant_id=$1 AND parent_asin IN (SELECT parent_asin FROM ps_products WHERE tenant_id=$1 AND id=ANY($2::uuid[])) ORDER BY parent_asin,stat_month,id"},
 	}

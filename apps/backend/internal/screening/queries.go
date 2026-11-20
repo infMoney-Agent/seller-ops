@@ -10,7 +10,7 @@ import (
 
 var uuidPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 
-const referenceSQL = "EXISTS(SELECT 1 FROM ps_products ref WHERE ref.tenant_id=p.tenant_id AND ref.id<>p.id AND ref.machine_direction=p.machine_direction AND ref.review_status<>'pending')"
+const referenceSQL = "EXISTS(SELECT 1 FROM ps_products ref WHERE ref.tenant_id=p.tenant_id AND ref.archived_at IS NULL AND ref.id<>p.id AND ref.machine_direction=p.machine_direction AND ref.review_status<>'pending')"
 const productProjection = "to_jsonb(p)||jsonb_build_object('monthly_id',m.id,'monthly_revision',m.revision,'stat_month',m.stat_month,'period_type',m.period_type,'period_start',m.period_start,'period_end',m.period_end,'source_type',m.source_type,'sales_scope',m.sales_scope,'sales_quantity_kind',m.sales_quantity_kind,'child_sales_raw',m.child_sales_raw,'price_usd',m.price_usd::text,'reported_monthly_sales',m.monthly_sales,'monthly_sales',CASE WHEN m.sales_scope='child' THEN m.monthly_sales END,'monthly_revenue',CASE WHEN m.sales_scope='child' THEN m.monthly_revenue::text END,'review_count',m.review_count,'rating',m.rating::text,'bsr_rank',m.bsr_rank,'decision',p.machine_decision,'recommendation',p.machine_recommendation,'direction',p.machine_direction,'group_key',p.machine_group_key,'reasons',p.machine_reasons,'profit_output',q.output,'profit_data_revision',q.product_data_revision,'profit_monthly_revision',q.monthly_revision,'has_reference'," + referenceSQL + ")"
 const parentFamilySQL = "COALESCE('parent:'||p.marketplace||':'||NULLIF(p.parent_asin,''),'product:'||p.id::text)"
 const familyRankSQL = "m.stat_month DESC NULLS LAST,m.period_end DESC NULLS LAST,m.period_type,m.source_type,CASE WHEN m.sales_scope='child' THEN m.monthly_sales END DESC NULLS LAST,p.updated_at DESC,p.id"
@@ -22,7 +22,7 @@ type productQuery struct {
 }
 
 func newProductQuery(a identity, values url.Values) productQuery {
-	q := productQuery{where: "p.tenant_id=$1", args: []any{a.Tenant}}
+	q := productQuery{where: "p.tenant_id=$1 AND p.archived_at IS NULL", args: []any{a.Tenant}}
 	add := func(v any) string { q.args = append(q.args, v); return fmt.Sprintf("$%d", len(q.args)) }
 	monthly := "m0.tenant_id=p.tenant_id AND m0.product_id=p.id"
 	hasPeriod := false
@@ -57,7 +57,7 @@ func newProductQuery(a identity, values url.Values) productQuery {
 		q.where += " AND (p.asin ILIKE " + bind + " OR p.title ILIKE " + bind + ")"
 	}
 	if v := values.Get("import_id"); v != "" {
-		q.where += " AND EXISTS(SELECT 1 FROM ps_import_rows ir WHERE ir.tenant_id=p.tenant_id AND ir.product_id=p.id AND ir.import_id=" + add(v) + "::uuid)"
+		q.where += " AND EXISTS(SELECT 1 FROM ps_import_rows ir WHERE ir.tenant_id=p.tenant_id AND ir.product_id=p.id AND ir.import_id=" + add(v) + "::uuid AND EXISTS(SELECT 1 FROM ps_imports ii WHERE ii.tenant_id=ir.tenant_id AND ii.id=ir.import_id AND NOT(ii.counts ? 'data_deleted_at')))"
 	}
 	if v := values.Get("has_reference"); v == "true" {
 		q.where += " AND " + referenceSQL
@@ -119,7 +119,7 @@ func (s *service) products(r *http.Request) (any, error) {
 		sql += " WHERE group_rank=1"
 	}
 	q.args = append(q.args, n, (p-1)*n)
-	sql += fmt.Sprintf(" ORDER BY sort_value %s NULLS LAST,id LIMIT $%d OFFSET $%d) SELECT ", direction, len(q.args)-1, len(q.args)) + productProjection + "||jsonb_build_object('family_count',CASE WHEN NULLIF(p.parent_asin,'') IS NULL THEN 1 ELSE (SELECT count(*) FROM ps_products sibling WHERE sibling.tenant_id=p.tenant_id AND sibling.marketplace=p.marketplace AND sibling.parent_asin=p.parent_asin) END,'family_sales_pending',EXISTS(SELECT 1 FROM ps_products sibling LEFT JOIN ps_product_monthly sm ON sm.tenant_id=sibling.tenant_id AND sm.id=sibling.current_monthly_id WHERE sibling.tenant_id=p.tenant_id AND sibling.marketplace=p.marketplace AND sibling.parent_asin=p.parent_asin AND (sm.sales_scope IS DISTINCT FROM 'child' OR sm.monthly_sales IS NULL)))" + " FROM selected JOIN ps_products p ON p.tenant_id=$1 AND p.id=selected.id " + q.joins + " ORDER BY selected.sort_value " + direction + " NULLS LAST,p.id"
+	sql += fmt.Sprintf(" ORDER BY sort_value %s NULLS LAST,id LIMIT $%d OFFSET $%d) SELECT ", direction, len(q.args)-1, len(q.args)) + productProjection + "||jsonb_build_object('family_count',CASE WHEN NULLIF(p.parent_asin,'') IS NULL THEN 1 ELSE (SELECT count(*) FROM ps_products sibling WHERE sibling.tenant_id=p.tenant_id AND sibling.archived_at IS NULL AND sibling.marketplace=p.marketplace AND sibling.parent_asin=p.parent_asin) END,'family_sales_pending',EXISTS(SELECT 1 FROM ps_products sibling LEFT JOIN ps_product_monthly sm ON sm.tenant_id=sibling.tenant_id AND sm.id=sibling.current_monthly_id WHERE sibling.tenant_id=p.tenant_id AND sibling.marketplace=p.marketplace AND sibling.parent_asin=p.parent_asin AND (sm.sales_scope IS DISTINCT FROM 'child' OR sm.monthly_sales IS NULL)))" + " FROM selected JOIN ps_products p ON p.tenant_id=$1 AND p.id=selected.id " + q.joins + " ORDER BY selected.sort_value " + direction + " NULLS LAST,p.id"
 	items, e := s.query(r.Context(), sql, q.args...)
 	// List clients use the public aliases. Keep full machine evidence on detail responses.
 	for _, item := range items {
@@ -139,7 +139,7 @@ func (s *service) summary(r *http.Request) (any, error) {
 		return nil, e
 	}
 	q := newProductQuery(actor(r), r.URL.Query())
-	return s.one(r.Context(), "SELECT jsonb_build_object('products',count(*),'displayed',count(DISTINCT COALESCE('parent:'||p.marketplace||':'||NULLIF(p.parent_asin,''),'product:'||p.id::text)),'pending_displayed',count(DISTINCT "+parentFamilySQL+") FILTER(WHERE p.review_status='pending'),'pending',count(*) FILTER(WHERE p.review_status='pending'),'kept',count(*) FILTER(WHERE p.review_status='kept'),'excluded',count(*) FILTER(WHERE p.review_status='excluded'),'source_rows',COALESCE(sum((SELECT count(*) FROM ps_import_rows ir WHERE ir.tenant_id=p.tenant_id AND ir.product_id=p.id)),0)) FROM ps_products p "+filterJoins(q, false)+" WHERE "+q.where, q.args...)
+	return s.one(r.Context(), "SELECT jsonb_build_object('products',count(*),'displayed',count(DISTINCT COALESCE('parent:'||p.marketplace||':'||NULLIF(p.parent_asin,''),'product:'||p.id::text)),'pending_displayed',count(DISTINCT "+parentFamilySQL+") FILTER(WHERE p.review_status='pending'),'pending',count(*) FILTER(WHERE p.review_status='pending'),'kept',count(*) FILTER(WHERE p.review_status='kept'),'excluded',count(*) FILTER(WHERE p.review_status='excluded'),'source_rows',COALESCE(sum((SELECT count(*) FROM ps_import_rows ir JOIN ps_imports ii ON ii.tenant_id=ir.tenant_id AND ii.id=ir.import_id WHERE ir.tenant_id=p.tenant_id AND ir.product_id=p.id AND NOT(ii.counts ? 'data_deleted_at'))),0)) FROM ps_products p "+filterJoins(q, false)+" WHERE "+q.where, q.args...)
 }
 func (s *service) monthlyList(r *http.Request, id string) (any, error) {
 	window := r.URL.Query().Get("recent_months")

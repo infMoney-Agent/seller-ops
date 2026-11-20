@@ -963,6 +963,18 @@ export default function ScreeningPage() {
         error={error}
         message={message}
         job={showJob ? undefined : job.data}
+        onRemoved={(id) => {
+          setSelected({});
+          setFocus(null);
+          setFamilyRows({});
+          setGroup(null);
+          setFilters((old) => {
+            if (old.import_id !== id) return old;
+            const next = { ...old };
+            delete next.import_id;
+            return next;
+          });
+        }}
       />
     </div>
   );

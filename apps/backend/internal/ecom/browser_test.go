@@ -101,13 +101,20 @@ func TestBrowserScreening(t *testing.T) {
 		chromedp.Poll(`(async()=>{const v=await(await fetch('/api/ecom/screening/products?q=MULTI&show_merged=true')).json();return v.total===2})()`, nil),
 		chromedp.Evaluate(`document.querySelector('[aria-label="导入记录，可横向滚动"]').closest('details').open=true`, nil),
 		chromedp.Evaluate("window.__multiStep=4", nil),
-		chromedp.Poll(`[...document.querySelectorAll('[aria-label="导入记录，可横向滚动"] tbody tr')].some(r=>r.textContent.includes('Product-Multi-US-2026.10-b.csv')&&[...r.querySelectorAll('button')].some(b=>b.textContent.trim()==='删除记录'&&!b.disabled))`, nil),
+		chromedp.Poll(`[...document.querySelectorAll('[aria-label="导入记录，可横向滚动"] tbody tr')].some(r=>r.textContent.includes('Product-Multi-US-2026.10-b.csv')&&[...r.querySelectorAll('button')].some(b=>b.textContent.trim()==='删除导入'&&!b.disabled))`, nil),
 		chromedp.Evaluate(`(()=>{const r=[...document.querySelectorAll('[aria-label="导入记录，可横向滚动"] tbody tr')].find(r=>r.textContent.includes('Product-Multi-US-2026.10-b.csv'));[...r.querySelectorAll('button')].find(b=>b.textContent.trim()==='删除记录').click()})()`, nil),
 		chromedp.Evaluate("window.__multiStep=5", nil),
-		chromedp.Poll(`[...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='确认删除记录')`, nil),
+		chromedp.Poll(`[...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='确认删除数据')`, nil),
 		chromedp.Evaluate(`[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='确认删除记录').click()`, nil),
 		chromedp.Evaluate("window.__multiStep=6", nil),
-		chromedp.Poll(`(async()=>{const v=await(await fetch('/api/ecom/screening/imports')).json();const p=await(await fetch('/api/ecom/screening/products?q=MULTI&show_merged=true')).json();return !v.items.some(i=>i.file_name==='Product-Multi-US-2026.10-b.csv')&&p.total===2})()`, nil),
+		chromedp.Poll(`(async()=>{const v=await(await fetch('/api/ecom/screening/imports')).json();const p=await(await fetch('/api/ecom/screening/products?q=MULTI&show_merged=true')).json();return !v.items.some(i=>i.file_name==='Product-Multi-US-2026.10-b.csv')&&p.total===1})()`, nil),
+		chromedp.Evaluate(`document.querySelector('[aria-label="选择商品文件"]').closest('details').open=true`, nil),
+		chromedp.SetUploadFiles(`[aria-label="选择商品文件"]`, []string{multiB}, chromedp.ByQuery),
+		chromedp.Poll(`[...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='上传并预览'&&!b.disabled)`, nil),
+		chromedp.Evaluate(`[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='上传并预览').click()`, nil),
+		chromedp.Poll(`[...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='确认导入'&&!b.disabled)`, nil),
+		chromedp.Evaluate(`[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='确认导入').click()`, nil),
+		chromedp.Poll(`(async()=>{const v=await(await fetch('/api/ecom/screening/products?q=MULTI&show_merged=true')).json();return v.total===2})()`, nil),
 	); e != nil {
 		var body string
 		chromedp.Run(ctx, chromedp.Evaluate("String(window.__multiStep)+document.body.innerText", &body))

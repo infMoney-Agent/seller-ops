@@ -20,7 +20,7 @@ func (s *service) mutateProduct(ctx context.Context, a identity, id, action stri
 		return previous, e
 	}
 	var raw []byte
-	if e = tx.QueryRow(ctx, "SELECT to_jsonb(p) FROM ps_products p WHERE tenant_id=$1 AND id=$2::uuid FOR UPDATE", a.Tenant, id).Scan(&raw); e != nil {
+	if e = tx.QueryRow(ctx, "SELECT to_jsonb(p) FROM ps_products p WHERE tenant_id=$1 AND id=$2::uuid AND archived_at IS NULL FOR UPDATE", a.Tenant, id).Scan(&raw); e != nil {
 		return nil, e
 	}
 	before := decodeObject(raw)

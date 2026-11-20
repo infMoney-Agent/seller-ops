@@ -554,7 +554,7 @@ func (s *service) upload(w http.ResponseWriter, r *http.Request) (any, error) {
 		return nil, e
 	}
 	var actual string
-	if e = tx.QueryRow(r.Context(), "SELECT id::text FROM ps_imports WHERE tenant_id=$1 AND file_sha256=$2 AND mapping_hash=$3 AND source_period=$4 AND observed_on IS NOT DISTINCT FROM $5::date AND source_type=$6 AND period_type=$7 AND period_start IS NOT DISTINCT FROM $8::date AND period_end IS NOT DISTINCT FROM $9::date AND default_sales_scope=$10", a.Tenant, hash, shaDigest(encoded(mapping)), str(b["source_period"]), b["observed_on"], str(b["source_type"]), str(b["period_type"]), b["period_start"], b["period_end"], str(b["default_sales_scope"])).Scan(&actual); e != nil {
+	if e = tx.QueryRow(r.Context(), "SELECT id::text FROM ps_imports WHERE tenant_id=$1 AND file_sha256=$2 AND mapping_hash=$3 AND source_period=$4 AND observed_on IS NOT DISTINCT FROM $5::date AND source_type=$6 AND period_type=$7 AND period_start IS NOT DISTINCT FROM $8::date AND period_end IS NOT DISTINCT FROM $9::date AND default_sales_scope=$10 AND NOT(counts ? 'data_deleted_at')", a.Tenant, hash, shaDigest(encoded(mapping)), str(b["source_period"]), b["observed_on"], str(b["source_type"]), str(b["period_type"]), b["period_start"], b["period_end"], str(b["default_sales_scope"])).Scan(&actual); e != nil {
 		return nil, e
 	}
 	if actual != id {

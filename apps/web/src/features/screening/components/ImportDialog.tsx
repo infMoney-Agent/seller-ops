@@ -11,7 +11,8 @@ export default function ImportDialog({
   busy,
   error,
   message,
-  job
+  job,
+  onRemoved
 }: {
   open: boolean;
   onClose: () => void;
@@ -21,6 +22,7 @@ export default function ImportDialog({
   error: string;
   message: string;
   job: Job | undefined;
+  onRemoved?: (id: string) => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const title = useId();
@@ -73,7 +75,7 @@ export default function ImportDialog({
             {job.error.message}
           </p>
         )}
-        {started && <ImportPanel act={act} watch={watch} busy={busy} />}
+        {started && <ImportPanel act={act} watch={watch} busy={busy} onRemoved={onRemoved} />}
       </div>
     </dialog>
   );

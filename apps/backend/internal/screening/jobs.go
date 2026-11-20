@@ -80,9 +80,9 @@ func (s *service) enqueueScreenTx(ctx context.Context, tx pgx.Tx, a identity, b 
 	}
 	var rows pgx.Rows
 	if b["product_ids"] != nil {
-		rows, e = tx.Query(ctx, "UPDATE ps_products SET screen_generation=screen_generation+1 WHERE tenant_id=$1 AND id=ANY($2::uuid[]) RETURNING id::text,data_revision,screen_generation", a.Tenant, ids)
+		rows, e = tx.Query(ctx, "UPDATE ps_products SET screen_generation=screen_generation+1 WHERE tenant_id=$1 AND archived_at IS NULL AND id=ANY($2::uuid[]) RETURNING id::text,data_revision,screen_generation", a.Tenant, ids)
 	} else {
-		rows, e = tx.Query(ctx, "UPDATE ps_products SET screen_generation=screen_generation+1 WHERE tenant_id=$1 RETURNING id::text,data_revision,screen_generation", a.Tenant)
+		rows, e = tx.Query(ctx, "UPDATE ps_products SET screen_generation=screen_generation+1 WHERE tenant_id=$1 AND archived_at IS NULL RETURNING id::text,data_revision,screen_generation", a.Tenant)
 	}
 	if e != nil {
 		return nil, e
