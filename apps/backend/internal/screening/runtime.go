@@ -27,7 +27,7 @@ func NewRuntime(ctx context.Context) (*Runtime, error) {
 		return nil, fmt.Errorf("screening database unavailable: %w", err)
 	}
 	var version int
-	if err = pool.QueryRow(ctx, "SELECT COALESCE(max(version),0) FROM screening_schema_versions").Scan(&version); err != nil || version != 9 {
+	if err = pool.QueryRow(ctx, "SELECT COALESCE(max(version),0) FROM screening_schema_versions").Scan(&version); err != nil || version != 10 {
 		pool.Close()
 		return nil, fmt.Errorf("screening schema is not current; run seller-backend migrate before startup")
 	}

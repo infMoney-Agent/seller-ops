@@ -1,5 +1,5 @@
 'use client';
-import { childSales } from '../sales';
+import { childSales, childSalesValue } from '../sales';
 import { useState } from 'react';
 import type { MonthlyRecord } from '../types';
 import { formatMoney } from './shared';
@@ -124,7 +124,7 @@ export default function OperatingTrends({ rows, total }: { rows: MonthlyRecord[]
     return value == null ? null : Number(value);
   });
   const sales = months.map((month) =>
-    latest.sales_scope === 'child' ? (byMonth.get(month)?.monthly_sales ?? null) : null
+    byMonth.has(month) ? childSalesValue(byMonth.get(month)!) : null
   );
   return (
     <div className='space-y-3' data-operating-trends>

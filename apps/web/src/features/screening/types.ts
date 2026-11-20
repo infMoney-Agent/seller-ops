@@ -50,6 +50,7 @@ export interface Product {
   bsr_rank: number | null;
   price_usd: string | null;
   monthly_sales: number | null;
+  display_child_sales?: number | null;
   specs: Record<string, Json>;
   decision: string | null;
   recommendation: string | null;
@@ -219,6 +220,7 @@ export interface MonthlyRecord {
   source_row_id: string;
   price_usd: string | null;
   monthly_sales: number | null;
+  display_child_sales?: number | null;
   monthly_revenue: string | null;
   review_count: number | null;
   rating: string | null;
@@ -242,6 +244,7 @@ export interface ParentMonthly {
   observed_on: string;
   source_type: string;
   monthly_sales: number | null;
+  display_child_sales?: number | null;
   monthly_revenue: string | null;
 }
 export interface FamilyResult extends PageResult<Product> {
