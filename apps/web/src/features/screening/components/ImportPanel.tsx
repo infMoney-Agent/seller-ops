@@ -27,20 +27,28 @@ export default function ImportPanel({
     }
   };
   const batchHeading = useRef<HTMLHeadingElement>(null);
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
+  const [uploads, setUploads] = useState<{ name: string; id?: string; error?: string }[]>([]);
+  const [pendingDelete, setPendingDelete] = useState<string | null>(null);
   const [date, setDate] = useState(defaultObservationDate);
   const [period, setPeriod] = useState('');
   const [periodType, setPeriodType] = useState('calendar_month');
   const [selected, setSelected] = useState<string | null>(null);
   const [page, setPage] = useState(1);
-  const imports = useScreeningQuery<PageResult<ImportRecord>>('/imports', (data) =>
-    Boolean(data?.items.some((item) => ['uploaded', 'parsing', 'importing'].includes(item.state)))
+  const [historyPage, setHistoryPage] = useState(1);
+  const imports = useScreeningQuery<PageResult<ImportRecord>>(
+    '/imports?page=' + historyPage,
+    (data) =>
+      Boolean(data?.items.some((item) => ['uploaded', 'parsing', 'importing'].includes(item.state)))
   );
   const preview = useScreeningQuery<PageResult<ImportRow>>(
     selected ? `/imports/${selected}/preview?page=${page}` : null,
     false
   );
-  const active = imports.data?.items.find((item) => item.id === selected);
+  const detail = useScreeningQuery<ImportRecord>(selected ? '/imports/' + selected : null, (data) =>
+    Boolean(data && ['uploaded', 'parsing', 'importing'].includes(data.state))
+  );
+  const active = detail.data || imports.data?.items.find((item) => item.id === selected);
   const { refetch: refreshPreview } = preview;
   useEffect(() => {
     if (active?.id) batchHeading.current?.focus();
@@ -92,7 +100,11 @@ export default function ImportPanel({
           </select>
         )}
       </Field>
-      <Field label='来源期（从文件名识别，可修改）'>
+      <Field
+        label={
+          files.length > 1 ? '来源期（无法从文件名识别时使用）' : '来源期（从文件名识别，可修改）'
+        }
+      >
         <Input
           value={period}
           placeholder='例如 2026-10'
@@ -133,47 +145,68 @@ export default function ImportPanel({
               <Input
                 aria-label='选择商品文件'
                 type='file'
+                multiple
                 accept='.xlsx,.csv,.zip'
                 onChange={(e) => {
-                  const selectedFile = e.target.files?.[0] || null;
-                  setFile(selectedFile);
+                  const selectedFiles = Array.from(e.target.files || []);
+                  setFiles(selectedFiles);
+                  setUploads([]);
+                  const selectedFile = selectedFiles[0];
                   setPeriodType((current) =>
                     current === 'rolling_30d' ? current : 'calendar_month'
                   );
                   setSelected(null);
                   setDate(defaultObservationDate());
-                  setPeriod(selectedFile ? sourcePeriodFromFilename(selectedFile.name) : '');
+                  setPeriod(
+                    selectedFiles.length === 1 && selectedFile
+                      ? sourcePeriodFromFilename(selectedFile.name)
+                      : ''
+                  );
+                  setHistoryPage(1);
                 }}
               />
             </Field>
           </div>
           {!active && importMetadata}
           <Button
-            disabled={busy || !file || Boolean(active)}
+            disabled={busy || !files.length || files.length > 100 || Boolean(active)}
             onClick={() =>
               void run(async () => {
-                if (!file) return;
-                const data = new FormData();
-                data.set('file', file);
-                data.set('source_period', period);
-                data.set('observed_on', date);
-                data.set('default_sales_scope', 'unknown');
-                data.set('source_type', 'sellersprite');
-                data.set(
-                  'period_type',
-                  periodType === 'rolling_30d' ? 'rolling_30d' : 'calendar_month'
-                );
-                data.set('period_start', '');
-                data.set('period_end', '');
-                const job = await request<JobCreated & { import_id: string }>(
-                  '/imports',
-                  'POST',
-                  data
-                );
-                setSelected(job.import_id);
+                const results: { name: string; id?: string; error?: string }[] = [];
+                for (const file of files) {
+                  try {
+                    if (file.size > 30 * 1024 * 1024) throw Error('文件超过30MB');
+                    const data = new FormData();
+                    data.set('file', file);
+                    data.set(
+                      'source_period',
+                      files.length === 1 ? period : sourcePeriodFromFilename(file.name) || period
+                    );
+                    data.set('observed_on', date);
+                    data.set('source_type', 'sellersprite');
+                    data.set('default_sales_scope', 'unknown');
+                    data.set(
+                      'period_type',
+                      periodType === 'rolling_30d' ? 'rolling_30d' : 'calendar_month'
+                    );
+                    const result = await request<JobCreated & { import_id: string }>(
+                      '/imports',
+                      'POST',
+                      data
+                    );
+                    results.push({ name: file.name, id: result.import_id });
+                    if (result.job_id) watch(result.job_id);
+                  } catch (error) {
+                    results.push({
+                      name: file.name,
+                      error: error instanceof Error ? error.message : '上传失败'
+                    });
+                  }
+                  setUploads([...results]);
+                }
+                setSelected(results.find((item) => item.id)?.id || null);
                 setPage(1);
-                if (job.job_id) watch(job.job_id);
-              }, '文件已接收，正在解析')
+              })
             }
           >
             上传并预览
@@ -183,6 +216,83 @@ export default function ImportPanel({
           文件名自动识别来源月份，观察日期默认今天。上传后先检查预览，确认后才写入商品库。
         </p>
       </details>
+      {files.length > 100 && (
+        <p role='alert' className='text-destructive text-sm'>
+          一次最多选择100个文件。
+        </p>
+      )}
+      {files.length > 1 && (
+        <p className='text-muted-foreground text-xs'>
+          已选择 {files.length} 个文件，每个文件最多30MB，分别从文件名识别月份。
+        </p>
+      )}
+      {uploads.length > 0 && (
+        <section className='space-y-2 rounded border p-3'>
+          <h3 className='font-semibold'>本次文件（{uploads.length}）</h3>
+          {uploads.map((item, index) => (
+            <div key={index} className='flex flex-wrap items-center justify-between gap-2 text-sm'>
+              <span className='min-w-0 flex-1 break-words'>{item.name}</span>
+              {item.error && (
+                <span role='alert' className='text-destructive'>
+                  {item.error}
+                </span>
+              )}
+              {item.id && (
+                <Button
+                  size='sm'
+                  variant='outline'
+                  disabled={busy}
+                  onClick={() => {
+                    setSelected(item.id || null);
+                    setPage(1);
+                  }}
+                >
+                  查看预览
+                </Button>
+              )}
+            </div>
+          ))}
+          {uploads.filter((item) => item.id).length > 1 && (
+            <Button
+              disabled={busy}
+              onClick={() =>
+                void run(async () => {
+                  const updated = [...uploads];
+                  for (let index = 0; index < updated.length; index++) {
+                    const item = updated[index];
+                    if (!item.id) continue;
+                    try {
+                      const batch = await request<ImportRecord>('/imports/' + item.id);
+                      if (
+                        batch.state === 'completed' ||
+                        batch.state === 'importing' ||
+                        batch.state === 'partial'
+                      )
+                        continue;
+                      if (batch.state !== 'preview') throw Error('尚未解析完成，请稍后再确认');
+                      if (!batch.counts.valid) throw Error('没有有效数据');
+                      const result = await request<JobCreated>(
+                        '/imports/' + item.id + '/commit',
+                        'POST'
+                      );
+                      if (result.job_id) watch(result.job_id);
+                      updated[index] = { ...item, error: undefined };
+                    } catch (error) {
+                      updated[index] = {
+                        ...item,
+                        error: error instanceof Error ? error.message : '确认失败'
+                      };
+                    }
+                  }
+                  setUploads(updated);
+                }, '已提交可导入的文件')
+              }
+            >
+              确认本次全部文件
+            </Button>
+          )}
+        </section>
+      )}
       {imports.isError && <p role='alert'>{imports.error.message}</p>}
       {active && (
         <section
@@ -405,6 +515,39 @@ export default function ImportPanel({
                     )}
                   </td>
                   <td className='space-x-2'>
+                    {pendingDelete === item.id ? (
+                      <span className='inline-flex flex-wrap items-center gap-2'>
+                        <span className='text-xs'>仅删除记录，保留商品数据</span>
+                        <Button
+                          size='sm'
+                          variant='outline'
+                          disabled={busy}
+                          onClick={() =>
+                            void run(async () => {
+                              await request('/imports/' + item.id, 'DELETE');
+                              setPendingDelete(null);
+                              setUploads((old) => old.filter((upload) => upload.id !== item.id));
+                              if (selected === item.id) setSelected(null);
+                            }, '导入记录已删除')
+                          }
+                        >
+                          确认删除记录
+                        </Button>
+                        <Button size='sm' variant='ghost' onClick={() => setPendingDelete(null)}>
+                          取消
+                        </Button>
+                      </span>
+                    ) : (
+                      <Button
+                        size='sm'
+                        variant='ghost'
+                        disabled={busy || ['uploaded', 'parsing', 'importing'].includes(item.state)}
+                        onClick={() => setPendingDelete(item.id)}
+                      >
+                        删除记录
+                      </Button>
+                    )}
+
                     <Button
                       size='sm'
                       variant='outline'
@@ -437,6 +580,27 @@ export default function ImportPanel({
             </tbody>
           </table>
         </TableScroll>
+        {(imports.data?.total || 0) > 50 && (
+          <div className='mt-3 flex items-center gap-3 text-sm'>
+            <Button
+              size='sm'
+              variant='outline'
+              disabled={historyPage === 1}
+              onClick={() => setHistoryPage((v) => v - 1)}
+            >
+              上一页记录
+            </Button>
+            <span>第 {historyPage} 页</span>
+            <Button
+              size='sm'
+              variant='outline'
+              disabled={historyPage * 50 >= (imports.data?.total || 0)}
+              onClick={() => setHistoryPage((v) => v + 1)}
+            >
+              下一页记录
+            </Button>
+          </div>
+        )}
       </details>
     </div>
   );

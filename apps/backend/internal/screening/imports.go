@@ -558,6 +558,9 @@ func (s *service) upload(w http.ResponseWriter, r *http.Request) (any, error) {
 		return nil, e
 	}
 	if actual != id {
+		if _, e = tx.Exec(r.Context(), "UPDATE ps_imports SET counts=counts-'history_deleted_at'-'history_deleted_by' WHERE tenant_id=$1 AND id=$2::uuid", a.Tenant, actual); e != nil {
+			return nil, e
+		}
 		os.Remove(target)
 		if e = tx.Commit(r.Context()); e != nil {
 			return nil, e

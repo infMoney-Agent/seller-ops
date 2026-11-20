@@ -2077,6 +2077,36 @@
             }
           }
         }
+      },
+      "delete": {
+        "summary": "删除导入历史记录（保留商品、经营数据与原始来源）",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "记录已从历史列表移除"
+          },
+          "409": {
+            "description": "文件正在处理中，不能删除"
+          }
+        }
       }
     },
     "/api/v1/screening/imports/{id}/mapping": {

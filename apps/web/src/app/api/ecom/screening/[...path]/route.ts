@@ -170,4 +170,4 @@ async function proxy(request: Request, { params }: { params: Promise<{ path: str
     );
   }
 }
-export { proxy as GET, proxy as POST, proxy as PUT, proxy as PATCH };
+export { proxy as GET, proxy as POST, proxy as PUT, proxy as PATCH, proxy as DELETE };

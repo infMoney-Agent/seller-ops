@@ -171,6 +171,25 @@ func TestImportHTTPWorkflow(t *testing.T) {
 		if screen, ok := finished["result"].(map[string]any)["screen"].(map[string]any); ok {
 			wait(str(screen["job_id"]))
 		}
+		var productsBefore, productsAfter int
+		if e = pool.QueryRow(ctx, "SELECT count(*) FROM ps_products WHERE tenant_id=501").Scan(&productsBefore); e != nil {
+			t.Fatal(e)
+		}
+		call("DELETE", "imports/"+str(job["import_id"]), "", nil)
+		var hidden bool
+		if e = pool.QueryRow(ctx, "SELECT counts ? 'history_deleted_at' FROM ps_imports WHERE tenant_id=501 AND id=$1", job["import_id"]).Scan(&hidden); e != nil || !hidden {
+			t.Fatal(hidden, e)
+		}
+		if e = pool.QueryRow(ctx, "SELECT count(*) FROM ps_products WHERE tenant_id=501").Scan(&productsAfter); e != nil || productsAfter != productsBefore {
+			t.Fatal("history removal deleted products", e)
+		}
+		restored := call("POST", "imports", writer.FormDataContentType(), body.Bytes())
+		if restored["import_id"] != job["import_id"] {
+			t.Fatal("restoring history duplicated batch", restored)
+		}
+		if e = pool.QueryRow(ctx, "SELECT counts ? 'history_deleted_at' FROM ps_imports WHERE tenant_id=501 AND id=$1", job["import_id"]).Scan(&hidden); e != nil || hidden {
+			t.Fatal("history not restored", e)
+		}
 		return job
 	}
 	upload("2026-11", "2026-11-18", "19.99")

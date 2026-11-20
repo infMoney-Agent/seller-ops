@@ -91,6 +91,9 @@ func (s *service) editImport(ctx context.Context, a identity, id string, b Objec
 		return nil, e
 	}
 	batch := decodeObject(raw)
+	if counts, ok := batch["counts"].(map[string]any); ok && counts["history_deleted_at"] != nil {
+		return nil, fail(404, "导入记录已删除，请重新上传后操作")
+	}
 	if commit {
 		state := str(batch["state"])
 		if state == "importing" || state == "completed" || state == "partial" {
