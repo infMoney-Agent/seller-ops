@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/chromedp"
-	"github.com/chromedp/chromedp/kb"
 	"os"
 	"path/filepath"
 	"strings"
@@ -73,14 +72,7 @@ func TestBrowserScreening(t *testing.T) {
 			}
 			return os.WriteFile(filepath.Join(os.Getenv("SCREENING_QA_DIR"), "import-preview.png"), shot, 0640)
 		}),
-		chromedp.Evaluate(`(()=>{if(!document.querySelector('[aria-label="导入步骤"]'))throw Error('import steps missing');if(document.querySelector('textarea[aria-label="字段映射"]'))throw Error('raw JSON mapping remains');const select=document.querySelector('select[aria-label="映射 ASIN"]');if(!select)throw Error('field dropdown missing');select.closest('details').open=true;if(select.disabled)throw Error('mapping disabled');})()`, nil),
-		chromedp.Evaluate(`(()=>{if(document.body.innerText.includes('高级导入设置'))throw Error('manual sales scope control remains');const current=document.querySelector('[aria-label="当前导入批次"]');if(!current||!current.innerText.includes('可导入数据')||!current.innerText.includes('异常数据'))throw Error('batch summary missing');const history=document.querySelector('[aria-label="导入记录，可横向滚动"]');if(!(current.compareDocumentPosition(history)&Node.DOCUMENT_POSITION_FOLLOWING))throw Error('history precedes current batch');const heading=current.querySelector('h2');if(document.activeElement!==heading)throw Error('batch heading not focused');})()`, nil),
-		chromedp.Focus(`select[aria-label="映射 ASIN"]`, chromedp.ByQuery),
-		chromedp.KeyEvent(kb.ArrowDown),
-		chromedp.KeyEvent(kb.Enter),
-		chromedp.Poll(`[...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='确认导入'&&b.disabled)`, nil),
-		chromedp.Evaluate(`[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='保存日期与映射，重新解析').click()`, nil),
-		chromedp.Poll(`[...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='确认导入'&&!b.disabled)`, nil),
+		chromedp.Evaluate(`(()=>{if(document.querySelector('select[aria-label^="映射 "]')||document.body.innerText.includes('调整日期与字段对应关系')||[...document.querySelectorAll('button')].some(b=>b.textContent.includes('重新解析')))throw Error('manual mapping UI remains');if(!document.querySelector('dialog[open]'))throw Error('import dialog missing');})()`, nil),
 		chromedp.Evaluate(`[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='确认导入').click()`, nil),
 		chromedp.Poll(`(async()=>{const r=await fetch('/api/ecom/screening/products?q=GUI0000001&show_merged=true');const v=await r.json();return r.ok&&v.total===1})()`, nil),
 	); e != nil {

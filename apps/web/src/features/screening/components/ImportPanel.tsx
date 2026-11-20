@@ -2,7 +2,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useScreeningQuery } from '../queries';
 import { download, request } from '../service';
-import { importFields } from '../import-fields';
 import { sourceLabels } from './MonthlyHistory';
 import { defaultObservationDate, sourcePeriodFromFilename } from '../import-dates';
 import type { ImportRecord, ImportRow, JobCreated, PageResult } from '../types';
@@ -21,13 +20,8 @@ export default function ImportPanel({
   const [file, setFile] = useState<File | null>(null);
   const [date, setDate] = useState(defaultObservationDate);
   const [period, setPeriod] = useState('');
-  const [salesScope, setSalesScope] = useState('unknown');
-  const [sourceType, setSourceType] = useState('sellersprite');
   const [periodType, setPeriodType] = useState('calendar_month');
-  const [periodStart, setPeriodStart] = useState('');
-  const [periodEnd, setPeriodEnd] = useState('');
   const [selected, setSelected] = useState<string | null>(null);
-  const [mapping, setMapping] = useState<Record<string, string>>({});
   const [page, setPage] = useState(1);
   const imports = useScreeningQuery<PageResult<ImportRecord>>('/imports', (data) =>
     Boolean(data?.items.some((item) => ['uploaded', 'parsing', 'importing'].includes(item.state)))
@@ -46,45 +40,23 @@ export default function ImportPanel({
       void refreshPreview();
     }
   }, [selected, active?.state, refreshPreview]);
-  const headers = [
-    ...new Set([
-      ...Object.values(mapping),
-      ...(active?.counts.headers || []),
-      ...(preview.data?.items.flatMap((row) => Object.keys(row.raw_data)) || [])
-    ])
-  ].toSorted();
-  const editable = Boolean(active && ['preview', 'failed'].includes(active.state));
-  const dirty = Boolean(
-    active &&
-    (JSON.stringify(Object.entries(mapping).toSorted()) !==
-      JSON.stringify(Object.entries(active.mapping).toSorted()) ||
-      date !== (active.observed_on || '') ||
-      period !== active.source_period ||
-      salesScope !== active.default_sales_scope ||
-      sourceType !== active.source_type ||
-      periodType !== active.period_type ||
-      (periodType === 'custom' &&
-        (periodStart !== active.period_start || periodEnd !== active.period_end)))
-  );
   const stage = !active
     ? 1
     : ['completed', 'partial', 'importing'].includes(active.state) ||
-        (active.state === 'preview' && Boolean(active.counts.valid) && !dirty)
+        (active.state === 'preview' && Boolean(active.counts.valid))
       ? 3
       : 2;
   const nextAction =
     active?.state === 'preview'
-      ? dirty
-        ? '修改尚未应用，请展开下方设置，保存并重新解析。'
-        : !active.counts.valid
-          ? '没有可导入数据，请检查字段映射或下载错误报告。'
-          : !active.observed_on ||
-              (active.period_type === 'calendar_month' &&
-                !/^\d{4}-(0[1-9]|1[0-2])$/.test(active.source_period))
-            ? '请在下方设置中补全有效来源月份与观察日期，再保存。'
-            : '检查预览无误后，点击确认导入。异常行会跳过，不影响有效数据。'
+      ? !active.counts.valid
+        ? '没有可导入数据，请下载错误报告查看原因。标准导出文件无法识别时，应修复后端解析规则。'
+        : !active.observed_on ||
+            (active.period_type === 'calendar_month' &&
+              !/^\d{4}-(0[1-9]|1[0-2])$/.test(active.source_period))
+          ? '来源月份或观察日期不完整，请重新上传并填写。'
+          : '检查预览无误后，点击确认导入。异常行会跳过，不影响有效数据。'
       : active?.state === 'failed'
-        ? '本批次处理失败，请查看后台任务原因；修正设置后可重新解析。'
+        ? '本批次处理失败，请查看后台任务原因或下载错误报告。'
         : active?.state === 'partial'
           ? '本批次仅部分完成，请查看后台任务失败原因，并重试未完成部分。'
           : active?.state === 'completed'
@@ -103,8 +75,6 @@ export default function ImportPanel({
             value={periodType}
             onChange={(e) => {
               setPeriodType(e.target.value);
-              setPeriodStart('');
-              setPeriodEnd('');
             }}
           >
             <option value='calendar_month'>固定月份</option>
@@ -112,16 +82,6 @@ export default function ImportPanel({
           </select>
         )}
       </Field>
-      {periodType === 'custom' && (
-        <>
-          <Field label='统计开始'>
-            <Input type='date' value={periodStart} readOnly />
-          </Field>
-          <Field label='统计结束'>
-            <Input type='date' value={periodEnd} readOnly />
-          </Field>
-        </>
-      )}
       <Field label='来源期（从文件名识别，可修改）'>
         <Input
           value={period}
@@ -134,57 +94,6 @@ export default function ImportPanel({
       </Field>
     </>
   );
-  const matchesHeader = (field: (typeof importFields)[number]) =>
-    Boolean(mapping[field.key]) ||
-    headers.some(
-      (header) =>
-        header === field.key ||
-        field.aliases.some((alias) => alias.toLowerCase() === header.toLowerCase())
-    );
-  const availableFields = importFields.filter(
-    (field) => matchesHeader(field) || ['asin', 'title'].includes(field.key)
-  );
-  const absentFields = importFields.filter((field) => !availableFields.includes(field));
-  const renderFields = (fields: typeof importFields) =>
-    fields.map((field) => {
-      const auto = headers.find((header) =>
-        field.aliases.some((alias) => alias.toLowerCase() === header.toLowerCase())
-      );
-      return (
-        <Field
-          key={field.key}
-          label={
-            field.label +
-            (['asin', 'title'].includes(field.key) ? ' *' : '') +
-            ' · ' +
-            field.storage
-          }
-        >
-          <select
-            aria-label={'映射 ' + field.label}
-            disabled={!editable || busy}
-            className='w-full min-w-0 rounded border bg-transparent p-2 text-sm'
-            value={mapping[field.key] || ''}
-            onChange={(event) => {
-              const value = event.target.value;
-              setMapping((current) => {
-                const next = { ...current };
-                if (value) next[field.key] = value;
-                else delete next[field.key];
-                return next;
-              });
-            }}
-          >
-            <option value=''>{auto ? '自动识别：' + auto : '文件未提供（留空）'}</option>
-            {headers.map((header) => (
-              <option key={header} value={header}>
-                {header}
-              </option>
-            ))}
-          </select>
-        </Field>
-      );
-    });
   return (
     <div className='space-y-5'>
       <ol aria-label='导入步骤' className='grid grid-cols-3 gap-2'>
@@ -218,15 +127,10 @@ export default function ImportPanel({
                 onChange={(e) => {
                   const selectedFile = e.target.files?.[0] || null;
                   setFile(selectedFile);
-                  setSourceType('sellersprite');
-                  setSalesScope('unknown');
                   setPeriodType((current) =>
                     current === 'rolling_30d' ? current : 'calendar_month'
                   );
-                  setPeriodStart('');
-                  setPeriodEnd('');
                   setSelected(null);
-                  setMapping({});
                   setDate(defaultObservationDate());
                   setPeriod(selectedFile ? sourcePeriodFromFilename(selectedFile.name) : '');
                 }}
@@ -257,7 +161,6 @@ export default function ImportPanel({
                   data
                 );
                 setSelected(job.import_id);
-                setMapping({});
                 setPage(1);
                 if (job.job_id) watch(job.job_id);
               }, '文件已接收，正在解析')
@@ -320,7 +223,6 @@ export default function ImportPanel({
               <Button
                 disabled={
                   busy ||
-                  dirty ||
                   active.state !== 'preview' ||
                   !active.observed_on ||
                   (active.period_type === 'calendar_month' &&
@@ -348,11 +250,6 @@ export default function ImportPanel({
               )}
             </div>
           </div>
-          {dirty && editable && (
-            <p role='status' className='text-sm text-amber-700 dark:text-amber-400'>
-              日期或字段对应关系尚未应用，请先保存并重新解析，再确认导入。
-            </p>
-          )}
           {active.state === 'parsing' && (
             <p role='status' className='text-sm'>
               正在解析文件，完成后将自动更新预览。
@@ -370,68 +267,9 @@ export default function ImportPanel({
           )}
           {active.state === 'preview' && !active.counts.valid && (
             <p role='alert' className='text-sm text-destructive'>
-              暂无有效行。请检查字段对应关系，修正后重新解析。
+              暂无有效行，请下载错误报告查看原因。
             </p>
           )}
-          <details
-            open={!active.counts.valid && active.state === 'preview'}
-            className='rounded border p-3'
-          >
-            <summary className='cursor-pointer text-sm font-medium'>
-              调整日期与字段对应关系（自动识别有误时使用）
-            </summary>
-            <fieldset disabled={!editable || busy} className='mt-4 space-y-4'>
-              <legend className='sr-only'>导入日期与字段对应关系</legend>
-              <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-3'>{importMetadata}</div>
-              <p className='text-muted-foreground text-xs'>
-                ASIN、标题为必填数据。下方按整份文件的表头识别，字段旁标明入库位置；可选列缺失时留空，不影响其他列保存。修改后请保存并重新解析。
-              </p>
-              <div className='grid gap-3 sm:grid-cols-2 lg:grid-cols-3'>
-                {renderFields(availableFields)}
-              </div>
-              {absentFields.length > 0 && (
-                <details className='mt-4 rounded border p-3'>
-                  <summary className='cursor-pointer text-sm'>
-                    文件未提供的可选字段（{absentFields.length}）
-                  </summary>
-                  <p className='text-muted-foreground my-3 text-xs'>
-                    这些列不是必填项，保持留空即可。若文件使用其他列名，可在这里手动对应；原始列始终保留。
-                  </p>
-                  <div className='grid gap-3 sm:grid-cols-2 lg:grid-cols-3'>
-                    {renderFields(absentFields)}
-                  </div>
-                </details>
-              )}
-              <div className='mt-4'>
-                {' '}
-                <Button
-                  variant='outline'
-                  disabled={busy || !['preview', 'failed'].includes(active.state)}
-                  onClick={() =>
-                    void act(async () => {
-                      const job = await request<JobCreated>(
-                        `/imports/${active.id}/mapping`,
-                        'PUT',
-                        {
-                          mapping,
-                          default_sales_scope: salesScope,
-                          source_type: sourceType,
-                          period_type: periodType,
-                          period_start: periodType === 'custom' ? periodStart || null : null,
-                          period_end: periodType === 'custom' ? periodEnd || null : null,
-                          observed_on: date || null,
-                          source_period: period
-                        }
-                      );
-                      watch(job.job_id);
-                    }, '已更新字段映射，正在重新解析')
-                  }
-                >
-                  保存日期与映射，重新解析
-                </Button>
-              </div>
-            </fieldset>
-          </details>
           {Boolean(active.counts.skipped_sheets?.length) && (
             <details className='rounded-lg border p-3 text-sm'>
               <summary className='cursor-pointer'>
@@ -562,14 +400,9 @@ export default function ImportPanel({
                       variant='outline'
                       onClick={() => {
                         setSelected(item.id);
-                        setMapping(item.mapping);
                         setDate(item.observed_on || defaultObservationDate());
                         setPeriod(item.source_period || sourcePeriodFromFilename(item.file_name));
-                        setSalesScope(item.default_sales_scope);
-                        setSourceType(item.source_type);
                         setPeriodType(item.period_type);
-                        setPeriodStart(item.period_start || '');
-                        setPeriodEnd(item.period_end || '');
                         setPage(1);
                         void act(async () => {
                           const detail = await request<ImportRecord>(`/imports/${item.id}`);
