@@ -13,13 +13,8 @@ import {
 } from '@tanstack/react-table';
 import PageContainer from '@/components/layout/page-container';
 import { Icons } from '@/components/icons';
-import {
-  Popover,
-  PopoverTrigger,
-  PopoverContent,
-  PopoverTitle,
-  PopoverDescription
-} from '@/components/ui/popover';
+import { Dialog, DialogTrigger } from '@/components/ui/dialog';
+import DataDialogContent from './DataDialogContent';
 import { useSellerSession } from '@/features/auth/session';
 import { cn } from '@/lib/utils';
 import { useJob, useScreeningQuery } from '../queries';
@@ -1143,25 +1138,15 @@ function PriceHistoryCard({
   return (
     <div className='space-y-1'>
       <p className='whitespace-nowrap'>${formatMoney(product.price_usd)}</p>
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger className='text-primary text-xs underline underline-offset-2'>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogTrigger className='text-primary text-xs underline underline-offset-2'>
           查看详细数据
-        </PopoverTrigger>
-        <PopoverContent
-          align='start'
-          className='max-h-[65vh] w-[min(46rem,calc(100vw-2rem))] overflow-y-auto p-3'
+        </DialogTrigger>
+        <DataDialogContent
+          title={'经营数据 · ' + product.asin}
+          description={product.title_zh || product.title}
+          wide
         >
-          <div className='flex items-start justify-between gap-3'>
-            <div className='min-w-0'>
-              <PopoverTitle>经营数据 · {product.asin}</PopoverTitle>
-              <PopoverDescription className='line-clamp-2'>
-                {product.title_zh || product.title}
-              </PopoverDescription>
-            </div>
-            <Button size='sm' variant='ghost' onClick={() => setOpen(false)}>
-              关闭
-            </Button>
-          </div>
           {open && (
             <MonthlyHistory
               product={product}
@@ -1172,8 +1157,8 @@ function PriceHistoryCard({
               }}
             />
           )}
-        </PopoverContent>
-      </Popover>
+        </DataDialogContent>
+      </Dialog>
     </div>
   );
 }

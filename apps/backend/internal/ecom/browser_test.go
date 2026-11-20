@@ -162,6 +162,23 @@ func TestBrowserScreening(t *testing.T) {
 	); e != nil {
 		t.Fatal("source row card failed", e)
 	}
+	// Resizing must keep both dialogs centered; only the content body scrolls.
+	if e := chromedp.Run(ctx,
+		chromedp.EmulateViewport(390, 480),
+		chromedp.Poll(`(()=>{const dialogs=[...document.querySelectorAll('[data-slot="dialog-content"][data-open]')];return dialogs.length===2&&dialogs.every(d=>{const r=d.getBoundingClientRect();return Math.abs(r.left+r.width/2-innerWidth/2)<2&&Math.abs(r.top+r.height/2-innerHeight/2)<2&&r.left>=8&&r.right<=innerWidth-8})})()`, nil),
+		chromedp.Evaluate(`(()=>{const close=document.querySelector('button[aria-label="关闭来源原始数据"]');const panel=close.closest('[data-slot="dialog-content"]');const body=panel.querySelector('[data-data-dialog-body]');const before=close.getBoundingClientRect();body.scrollTop=body.scrollHeight;const after=close.getBoundingClientRect();if(Math.abs(before.top-after.top)>1||after.top<0||after.bottom>innerHeight)throw Error('Close button moved with content');})()`, nil),
+		chromedp.Click(`button[aria-label="关闭来源原始数据"]`, chromedp.ByQuery),
+		chromedp.Poll(`document.querySelectorAll('[data-slot="dialog-content"][data-open]').length===1&&document.body.innerText.includes('近一年经营数据')`, nil),
+		chromedp.KeyEvent("\u001b"),
+		chromedp.Poll(`document.querySelectorAll('[data-slot="dialog-content"][data-open]').length===0`, nil),
+		chromedp.EmulateViewport(1440, 1100),
+		chromedp.Evaluate(`(()=>{const row=[...document.querySelectorAll('tbody tr')].find(r=>r.textContent.includes('BROWSER001'));[...row.querySelectorAll('button')].find(b=>b.textContent.trim()==='查看详细数据').click()})()`, nil),
+		chromedp.Poll(`!!document.querySelector('[data-operating-trends] svg')`, nil),
+		chromedp.Evaluate(`[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='查看来源文件').click()`, nil),
+		chromedp.Poll(`!!document.querySelector('[aria-label="来源原始行数据，可滚动"]')`, nil),
+	); e != nil {
+		t.Fatal("centered data dialog resize, fixed close or nested dismissal", e)
+	}
 	if e := chromedp.Run(ctx, chromedp.Evaluate(`(()=>{if(!document.querySelector('button[aria-label="复制 ASIN BROWSER001"]'))throw Error('ASIN copy action missing');const t=document.querySelector('[data-screening-table]');if(!t||getComputedStyle(t.querySelector('thead')).position!=='sticky')throw Error('Product header must remain sticky');if(document.body.innerText.includes('Vercel'))throw Error('Template entry remains')})()`, nil)); e != nil {
 		t.Fatal(e)
 	}

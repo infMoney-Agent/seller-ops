@@ -1,15 +1,10 @@
 'use client';
 import { useState } from 'react';
-import {
-  Popover,
-  PopoverTrigger,
-  PopoverContent,
-  PopoverTitle,
-  PopoverDescription
-} from '@/components/ui/popover';
+import { Dialog, DialogTrigger } from '@/components/ui/dialog';
+import DataDialogContent from './DataDialogContent';
 import { useScreeningQuery } from '../queries';
 import type { Json } from '../types';
-import { Button, TableScroll } from './shared';
+import { TableScroll } from './shared';
 type Source = {
   id: string;
   import_id: string;
@@ -25,23 +20,11 @@ export default function SourceRowCard({ productID, rowID }: { productID: string;
     open ? '/products/' + productID + '/observations/' + rowID : null
   );
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger className='text-primary mt-1 text-xs underline underline-offset-2'>
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger className='text-primary mt-1 text-xs underline underline-offset-2'>
         查看来源文件
-      </PopoverTrigger>
-      <PopoverContent
-        align='end'
-        className='max-h-[65vh] w-[min(36rem,calc(100vw-2rem))] overflow-y-auto p-4'
-      >
-        <div className='flex items-start justify-between gap-3'>
-          <div className='min-w-0'>
-            <PopoverTitle>来源原始数据</PopoverTitle>
-            <PopoverDescription>对应当前经营记录的原始表格行</PopoverDescription>
-          </div>
-          <Button size='sm' variant='ghost' onClick={() => setOpen(false)}>
-            关闭
-          </Button>
-        </div>
+      </DialogTrigger>
+      <DataDialogContent title='来源原始数据' description='对应当前经营记录的原始表格行'>
         {source.isLoading && (
           <p role='status' className='mt-3 text-sm'>
             正在加载原始数据…
@@ -103,7 +86,7 @@ export default function SourceRowCard({ productID, rowID }: { productID: string;
             </TableScroll>
           </div>
         )}
-      </PopoverContent>
-    </Popover>
+      </DataDialogContent>
+    </Dialog>
   );
 }
