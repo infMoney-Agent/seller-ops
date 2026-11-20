@@ -32,6 +32,7 @@ import type {
   ReviewStatus,
   FamilyResult
 } from '../types';
+import { childSales, salesNote } from '../sales';
 import ImportDialog from './ImportDialog';
 import ReviewPanel from './ReviewPanel';
 import ProfitPanel from './ProfitPanel';
@@ -143,6 +144,7 @@ export default function ScreeningPage() {
     'category',
     'seller_region',
     'direction',
+    'child_sales_min',
     'profit_min',
     'profit_max',
     'import_id',
@@ -330,13 +332,11 @@ export default function ScreeningPage() {
       },
       {
         accessorKey: 'monthly_sales',
-        header: '月销量',
+        header: '子体销量',
         cell: ({ row }) => (
           <div className='space-y-1 tabular-nums'>
-            <p>{row.original.monthly_sales?.toLocaleString('zh-CN') ?? '—'}</p>
-            {row.original.sales_scope && row.original.sales_scope !== 'child' && (
-              <p className='text-muted-foreground text-xs'>销量归属待确认</p>
-            )}
+            <p>{childSales(row.original)}</p>
+            <p className='text-muted-foreground text-xs'>{salesNote(row.original)}</p>
           </div>
         )
       },
@@ -673,6 +673,7 @@ export default function ScreeningPage() {
                         ['category', '类目'],
                         ['seller_region', '卖家地区'],
                         ['direction', '产品方向'],
+                        ['child_sales_min', '最低子体销量（仅确定达到）'],
                         ['profit_min', '最低利润 USD'],
                         ['profit_max', '最高利润 USD']
                       ] as const

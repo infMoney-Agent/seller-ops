@@ -113,6 +113,16 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "child_sales_min",
+            "in": "query",
+            "required": false,
+            "description": "最低子体销量参考值，仅返回已知值达到门槛的商品，不使用父体销量补全",
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
           }
         ],
         "responses": {
@@ -360,6 +370,16 @@
             "description": "SHA256 HMAC，签名由Next.js代理生成",
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "child_sales_min",
+            "in": "query",
+            "required": false,
+            "description": "最低子体销量参考值，仅返回已知值达到门槛的商品，不使用父体销量补全",
+            "schema": {
+              "type": "integer",
+              "minimum": 0
             }
           }
         ]

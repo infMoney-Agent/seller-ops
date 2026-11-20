@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useScreeningQuery } from '../queries';
 import type { MonthlyRecord, PageResult, Product } from '../types';
 import { Button, TableScroll, formatMoney } from './shared';
+import { childSales, salesNote } from '../sales';
 import OperatingTrends from './OperatingTrends';
 
 export const sourceLabels: Record<string, string> = {
@@ -52,7 +53,7 @@ export default function MonthlyHistory({
               {[
                 '月份 / 周期',
                 '价格 USD',
-                '销量',
+                '子体销量',
                 '销售额 USD',
                 '评分 / 数量',
                 'BSR',
@@ -76,11 +77,8 @@ export default function MonthlyHistory({
                 </td>
                 <td>{formatMoney(row.price_usd)}</td>
                 <td>
-                  {row.sales_scope === 'child'
-                    ? (row.monthly_sales ?? '—')
-                    : row.sales_scope === 'parent'
-                      ? '父体汇总见父体数据'
-                      : `${row.monthly_sales ?? '—'}（归属待确认）`}
+                  {childSales(row)}
+                  <p className='text-muted-foreground text-xs'>{salesNote(row)}</p>
                 </td>
                 <td>{formatMoney(row.monthly_revenue)}</td>
                 <td>

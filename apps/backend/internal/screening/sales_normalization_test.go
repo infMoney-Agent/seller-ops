@@ -19,7 +19,7 @@ func TestSalesNormalization(t *testing.T) {
 		{"multiple self parent", "B000000001", "4", nil, "6454", "unknown", nil, nil},
 		{"different parent", "PARENT0001", "1", nil, "500", "unknown", nil, nil},
 		{"missing variants", "B000000001", "", nil, "500", "unknown", nil, nil},
-		{"explicit sellersprite child", "PARENT0001", "4", "200 ", "3292", "child", int64(200), nil},
+		{"explicit sellersprite child", "PARENT0001", "4", "200 ", "3292", "child", int64(200), int64(3292)},
 		{"zero child is known", "B000000001", "1", "0", "100", "child", int64(0), int64(0)},
 	}
 	for _, tc := range tests {

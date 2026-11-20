@@ -48,7 +48,7 @@ func (s *service) policyAction(ctx context.Context, a identity, id, action strin
 		}
 		items := []Object{}
 		for _, v := range raw {
-			p, e := s.product(ctx, a, str(v))
+			p, e := s.productView(ctx, a, str(v))
 			if e != nil {
 				return nil, e
 			}

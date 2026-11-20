@@ -27,6 +27,8 @@ export interface Product {
   carton_width_cm: string | number | null;
   carton_height_cm: string | number | null;
   sales_scope: 'child' | 'parent' | 'unknown' | null;
+  sales_quantity_kind?: string;
+  child_sales_raw?: string | null;
   reported_monthly_sales: number | null;
   title: string;
   title_zh: string | null;

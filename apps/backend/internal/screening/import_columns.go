@@ -138,10 +138,13 @@ func normalizeImportedColumns(n Object) {
 }
 
 // Each source estimate is immutable and is never selected as a calculated profit.
-func saveImportedMonthly(ctx context.Context, tx pgx.Tx, a identity, productID, rowID string, n Object) error {
+func saveImportedMonthly(ctx context.Context, tx pgx.Tx, a identity, productID, rowID string, n Object, salesMetadata ...bool) error {
 	args := []any{a.Tenant, productID, rowID}
 	sets := []string{}
 	for _, field := range importedColumns {
+		if len(salesMetadata) > 0 && !salesMetadata[0] && (field.Key == "sales_quantity_kind" || field.Key == "child_sales_raw") {
+			continue
+		}
 		if field.Table != "monthly" || n[field.Key] == nil || str(n[field.Key]) == "" {
 			continue
 		}
@@ -210,7 +213,7 @@ func backfillImportedColumns(ctx context.Context, tx pgx.Tx) error {
 			for _, v := range items {
 				n, _ := normalizeRow(decodeObject(v.raw), decodeObject(v.mapping))
 				if kind == "monthly" {
-					if err = saveImportedMonthly(ctx, tx, identity{Tenant: v.tenant, User: v.user}, v.product, v.row, n); err != nil {
+					if err = saveImportedMonthly(ctx, tx, identity{Tenant: v.tenant, User: v.user}, v.product, v.row, n, false); err != nil {
 						return err
 					}
 				} else {

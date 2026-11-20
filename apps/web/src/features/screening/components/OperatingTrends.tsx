@@ -1,4 +1,5 @@
 'use client';
+import { childSales } from '../sales';
 import { useState } from 'react';
 import type { MonthlyRecord } from '../types';
 import { formatMoney } from './shared';
@@ -155,12 +156,7 @@ export default function OperatingTrends({ rows, total }: { rows: MonthlyRecord[]
         {[
           ['最新数据', latest.stat_month.slice(0, 7)],
           ['最新价格 USD', formatMoney(latest.price_usd)],
-          [
-            '最新销量',
-            latest.sales_scope === 'child'
-              ? (latest.monthly_sales?.toLocaleString() ?? '—')
-              : '待核实'
-          ]
+          ['最新子体销量', childSales(latest)]
         ].map(([label, value]) => (
           <div key={label} className='bg-muted/50 rounded-lg p-3'>
             <p className='text-muted-foreground text-xs'>{label}</p>
@@ -171,13 +167,13 @@ export default function OperatingTrends({ rows, total }: { rows: MonthlyRecord[]
       {latest.period_type !== 'custom' && (
         <div className='grid gap-2 sm:grid-cols-2'>
           <Trend months={months} values={prices} label='价格 USD' money />
-          <Trend months={months} values={sales} label='销量（件）' />
+          <Trend months={months} values={sales} label='子体销量参考值（件）' />
         </div>
       )}
       <p className='text-muted-foreground text-xs'>
         {latest.period_type === 'custom'
           ? '自定义周期长短可能不同，请以明细起止日期逐条比较。'
-          : '同月多次观察采用最近记录；缺失月份断线，悬停圆点查看数值。'}
+          : '同月多次观察采用最近记录；缺失月份断线。曲线为子体参考值，购买量级不是精确销量，不能与父体估算直接相加核对。'}
         {latest.sales_scope !== 'child' &&
           (latest.sales_scope === 'parent'
             ? ' 该数据为父体汇总，请在父体数据中查看销量。'

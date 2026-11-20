@@ -93,6 +93,11 @@ func validatePolicy(config Object) error {
 			}
 		}
 	}
+	if v := config["child_sales_min"]; v != nil {
+		if _, err := parseNonnegativeInt(str(v)); err != nil {
+			return fmt.Errorf("最低子体销量必须为非负整数")
+		}
+	}
 	rules, e := policyRules(config)
 	if e != nil {
 		return e
@@ -218,6 +223,19 @@ func classify(p, config Object) Object {
 			}
 			if limit := str(prices["max"]); limit != "" && ratCompare(value, limit) > 0 {
 				reasons = append(reasons, "价格高于配置")
+			}
+		}
+	}
+	if limit := integer(config["child_sales_min"]); limit > 0 && !mandatory {
+		if p["sales_scope"] != "child" || p["monthly_sales"] == nil {
+			decision = "insufficient"
+			reasons = append(reasons, "子体销量缺失，不能用父体销量替代")
+		} else if integer(p["monthly_sales"]) < limit {
+			if p["sales_quantity_kind"] == "lower_bound" || p["sales_quantity_kind"] == "single_variant_estimate" {
+				decision = "insufficient"
+				reasons = append(reasons, "子体销量参考值不足以确认达到门槛")
+			} else {
+				reasons = append(reasons, "子体销量低于门槛")
 			}
 		}
 	}
