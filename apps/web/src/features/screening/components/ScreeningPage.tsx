@@ -52,6 +52,22 @@ import {
   type Action
 } from './shared';
 
+const sortFields: Record<string, string> = {
+  price_usd: 'price_usd',
+  monthly_sales: 'monthly_sales',
+  profit: 'profit_usd'
+};
+function sortDirection(
+  sort: string | undefined,
+  column: string
+): 'ascending' | 'descending' | undefined {
+  const field = sortFields[column];
+  return field && sort === field
+    ? 'ascending'
+    : field && sort === '-' + field
+      ? 'descending'
+      : undefined;
+}
 const tabs = ['商品库', '导入记录', '批量复核', '利润测算', '规则与历史', '父体数据'];
 export default function ScreeningPage() {
   const session = useSellerSession();
@@ -102,7 +118,10 @@ export default function ScreeningPage() {
     session.workspaceId
   ]);
   const counts = useScreeningQuery<Record<string, number>>(
-    '/summary?' + new URLSearchParams(filters)
+    '/summary?' +
+      new URLSearchParams(
+        Object.fromEntries(Object.entries(filters).filter(([key]) => key !== 'sort'))
+      )
   );
   const imports = useScreeningQuery<PageResult<ImportRecord>>('/imports');
   const months = useScreeningQuery<{ items: MonthOption[] }>('/months');
@@ -123,7 +142,7 @@ export default function ScreeningPage() {
   ];
   const advancedCount = advancedKeys.filter((key) => Boolean(filters[key])).length;
   const filterCount = Object.entries(filters).filter(
-    ([key, value]) => value && (key !== 'show_merged' || value === 'true')
+    ([key, value]) => key !== 'sort' && value && (key !== 'show_merged' || value === 'true')
   ).length;
   function resetFilters() {
     setFilters({ show_merged: 'false' });
@@ -196,6 +215,7 @@ export default function ScreeningPage() {
         header: ({ table }) => (
           <input
             aria-label='选择当前页代表商品'
+            disabled={products.isPlaceholderData}
             type='checkbox'
             checked={table.getIsAllPageRowsSelected()}
             onChange={table.getToggleAllPageRowsSelectedHandler()}
@@ -287,7 +307,7 @@ export default function ScreeningPage() {
       },
       {
         accessorKey: 'price_usd',
-        header: '价格 / 月销量',
+        header: '价格 USD',
         cell: ({ row }) => (
           <PriceHistoryCard
             product={row.original}
@@ -296,6 +316,18 @@ export default function ScreeningPage() {
               setTab(3);
             }}
           />
+        )
+      },
+      {
+        accessorKey: 'monthly_sales',
+        header: '月销量',
+        cell: ({ row }) => (
+          <div className='space-y-1 tabular-nums'>
+            <p>{row.original.monthly_sales?.toLocaleString('zh-CN') ?? '—'}</p>
+            {row.original.sales_scope && row.original.sales_scope !== 'child' && (
+              <p className='text-muted-foreground text-xs'>销量归属待确认</p>
+            )}
+          </div>
         )
       },
       {
@@ -390,7 +422,7 @@ export default function ScreeningPage() {
         )
       }
     ],
-    [familyRows]
+    [familyRows, products.isPlaceholderData]
   );
   // oxlint-disable-next-line react/incompatible-library -- TanStack Table is intentionally kept outside React Compiler memoization.
   const table = useReactTable({
@@ -492,12 +524,11 @@ export default function ScreeningPage() {
           )}
           {tab === 0 && (
             <>
-              <div className='grid grid-cols-2 gap-2 md:grid-cols-4'>
+              <div className='grid grid-cols-1 gap-2 sm:grid-cols-3'>
                 {[
-                  ['source_rows', '子体来源行数'],
-                  ['products', '去重商品'],
-                  ['displayed', '父体折叠展示'],
-                  ['pending', '待复核']
+                  ['displayed', '商品数'],
+                  ['products', '子体商品数'],
+                  ['pending_displayed', '待复核']
                 ].map(([key, title]) => (
                   <div
                     key={key}
@@ -703,7 +734,7 @@ export default function ScreeningPage() {
                   正在加载商品…
                 </div>
               ) : (
-                <fieldset disabled={products.isPlaceholderData} className='min-w-0'>
+                <fieldset className='min-w-0'>
                   <legend className='sr-only'>商品列表操作</legend>
                   <TableScroll
                     label='商品列表，可横向和纵向滚动'
@@ -719,14 +750,40 @@ export default function ScreeningPage() {
                         {table.getHeaderGroups().map((g) => (
                           <tr key={g.id}>
                             {g.headers.map((h) => (
-                              <th scope='col' key={h.id} className='whitespace-nowrap p-3'>
-                                {flexRender(h.column.columnDef.header, h.getContext())}
+                              <th
+                                scope='col'
+                                key={h.id}
+                                aria-sort={sortDirection(filters.sort, h.column.id)}
+                                className='group whitespace-nowrap p-3 has-[>button]:p-0'
+                              >
+                                {sortFields[h.column.id] ? (
+                                  <button
+                                    type='button'
+                                    className='inline-flex min-h-12 w-full items-center gap-2 p-3 text-left font-semibold focus-visible:outline-2 focus-visible:outline-primary'
+                                    onClick={() => {
+                                      const field = sortFields[h.column.id];
+                                      setFilters((old) => ({
+                                        ...old,
+                                        sort: old.sort === field ? '-' + field : field
+                                      }));
+                                      setPage(1);
+                                    }}
+                                  >
+                                    {flexRender(h.column.columnDef.header, h.getContext())}
+                                    <span aria-hidden='true' className='text-muted-foreground'>
+                                      <span className='group-aria-[sort=descending]:hidden'>↑</span>
+                                      <span className='group-aria-[sort=ascending]:hidden'>↓</span>
+                                    </span>
+                                  </button>
+                                ) : (
+                                  flexRender(h.column.columnDef.header, h.getContext())
+                                )}
                               </th>
                             ))}
                           </tr>
                         ))}
                       </thead>
-                      <tbody>
+                      <tbody inert={products.isPlaceholderData}>
                         {table.getRowModel().rows.map((row) => (
                           <Fragment key={row.id}>
                             <tr
@@ -1038,9 +1095,7 @@ function PriceHistoryCard({
   const [open, setOpen] = useState(false);
   return (
     <div className='space-y-1'>
-      <p className='whitespace-nowrap'>
-        ${formatMoney(product.price_usd)} / {product.monthly_sales ?? '—'}
-      </p>
+      <p className='whitespace-nowrap'>${formatMoney(product.price_usd)}</p>
       {product.sales_scope && product.sales_scope !== 'child' && (
         <p className='text-muted-foreground text-xs'>
           {product.sales_scope === 'parent' ? '父体汇总见父体数据' : '销量归属待确认'}

@@ -2,6 +2,7 @@ package ecom
 
 import (
 	"context"
+	"fmt"
 	"github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/chromedp"
 	"github.com/chromedp/chromedp/kb"
@@ -94,6 +95,12 @@ func TestBrowserScreening(t *testing.T) {
 	}
 	if e := chromedp.Run(ctx, chromedp.Reload(), chromedp.WaitReady(`#main-content`, chromedp.ByQuery), chromedp.Poll(`document.body.innerText.includes('BROWSER001')`, nil)); e != nil {
 		t.Fatal(e)
+	}
+
+	for _, label := range []string{"价格 USD", "月销量", "预计单件利润"} {
+		if e := chromedp.Run(ctx, chromedp.Evaluate(fmt.Sprintf(`[...document.querySelectorAll('[data-screening-table] th button')].find(b=>b.textContent.trim().startsWith(%q)).click()`, label), nil), chromedp.Poll(`document.querySelectorAll('[data-screening-table] th[aria-sort=ascending]').length===1 && !document.querySelector('[data-screening-table] tbody').inert`, nil)); e != nil {
+			t.Fatal(label, e)
+		}
 	}
 	if e := chromedp.Run(ctx,
 		chromedp.Evaluate(`(()=>{const row=[...document.querySelectorAll('tbody tr')].find(r=>r.textContent.includes('BROWSER001'));row.querySelector('button[aria-controls^="family-"]').click()})()`, nil),

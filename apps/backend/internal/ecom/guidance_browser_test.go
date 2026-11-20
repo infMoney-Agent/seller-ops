@@ -114,7 +114,7 @@ func checkBrowserGuidance(t *testing.T, ctx context.Context, base string) {
 	)
 
 	run(chromedp.Focus("input[placeholder='搜索 ASIN 或商品标题']", chromedp.ByQuery), chromedp.ActionFunc(func(ctx context.Context) error { return input.InsertText("slow-list").Do(ctx) }),
-		chromedp.Poll("!!document.querySelector('[data-screening-table][aria-busy=true]') && document.querySelector('[data-screening-table]').closest('fieldset').disabled && document.querySelector('[data-screening-table]').textContent.includes('BROWSER001')", nil),
+		chromedp.Poll("!!document.querySelector('[data-screening-table][aria-busy=true]') && document.querySelector('[data-screening-table] tbody').inert && document.querySelector('[data-screening-table]').textContent.includes('BROWSER001')", nil),
 		chromedp.Poll("document.body.innerText.includes('没有符合筛选条件的商品') && !document.querySelector('[data-screening-table]').closest('fieldset').disabled", nil),
 		chromedp.Focus("input[placeholder='搜索 ASIN 或商品标题']", chromedp.ByQuery), chromedp.KeyEvent("a", chromedp.KeyModifiers(input.ModifierCtrl)), chromedp.KeyEvent(kb.Backspace),
 		chromedp.ActionFunc(func(ctx context.Context) error { return input.InsertText("prefetch").Do(ctx) }),

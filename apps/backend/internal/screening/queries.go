@@ -103,11 +103,15 @@ func (s *service) products(r *http.Request) (any, error) {
 		field = strings.TrimPrefix(field, "-")
 		direction = "DESC"
 	}
-	column := map[string]string{"price_usd": "m.price_usd", "monthly_sales": "CASE WHEN m.sales_scope='child' THEN m.monthly_sales END", "updated_at": "p.updated_at", "asin": "p.asin"}[field]
+	column := map[string]string{"price_usd": "m.price_usd", "monthly_sales": "CASE WHEN m.sales_scope='child' THEN m.monthly_sales END", "updated_at": "p.updated_at", "asin": "p.asin", "profit_usd": "(q.output->>'profit_usd')::numeric"}[field]
 	if column == "" {
 		return nil, fail(422, "不支持的排序字段")
 	}
-	sql := "WITH candidates AS (SELECT " + column + " AS sort_value,p.id,row_number() OVER(PARTITION BY " + group + " ORDER BY " + familyRankSQL + ") AS group_rank FROM ps_products p " + filterJoins(q, true) + " WHERE " + q.where + "), selected AS (SELECT id,sort_value FROM candidates"
+	candidateJoins := filterJoins(q, true)
+	if field == "profit_usd" {
+		candidateJoins = q.sets + profitJoin
+	}
+	sql := "WITH candidates AS (SELECT " + column + " AS sort_value,p.id,row_number() OVER(PARTITION BY " + group + " ORDER BY " + familyRankSQL + ") AS group_rank FROM ps_products p " + candidateJoins + " WHERE " + q.where + "), selected AS (SELECT id,sort_value FROM candidates"
 	if collapse {
 		sql += " WHERE group_rank=1"
 	}
@@ -132,7 +136,7 @@ func (s *service) summary(r *http.Request) (any, error) {
 		return nil, e
 	}
 	q := newProductQuery(actor(r), r.URL.Query())
-	return s.one(r.Context(), "SELECT jsonb_build_object('products',count(*),'displayed',count(DISTINCT COALESCE('parent:'||p.marketplace||':'||NULLIF(p.parent_asin,''),'product:'||p.id::text)),'pending',count(*) FILTER(WHERE p.review_status='pending'),'kept',count(*) FILTER(WHERE p.review_status='kept'),'excluded',count(*) FILTER(WHERE p.review_status='excluded'),'source_rows',COALESCE(sum((SELECT count(*) FROM ps_import_rows ir WHERE ir.tenant_id=p.tenant_id AND ir.product_id=p.id)),0)) FROM ps_products p "+filterJoins(q, false)+" WHERE "+q.where, q.args...)
+	return s.one(r.Context(), "SELECT jsonb_build_object('products',count(*),'displayed',count(DISTINCT COALESCE('parent:'||p.marketplace||':'||NULLIF(p.parent_asin,''),'product:'||p.id::text)),'pending_displayed',count(DISTINCT "+parentFamilySQL+") FILTER(WHERE p.review_status='pending'),'pending',count(*) FILTER(WHERE p.review_status='pending'),'kept',count(*) FILTER(WHERE p.review_status='kept'),'excluded',count(*) FILTER(WHERE p.review_status='excluded'),'source_rows',COALESCE(sum((SELECT count(*) FROM ps_import_rows ir WHERE ir.tenant_id=p.tenant_id AND ir.product_id=p.id)),0)) FROM ps_products p "+filterJoins(q, false)+" WHERE "+q.where, q.args...)
 }
 func (s *service) monthlyList(r *http.Request, id string) (any, error) {
 	window := r.URL.Query().Get("recent_months")
