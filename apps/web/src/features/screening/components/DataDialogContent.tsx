@@ -19,7 +19,7 @@ export default function DataDialogContent({
     <DialogContent
       showCloseButton={false}
       className={cn(
-        'flex h-[min(80dvh,48rem)] w-[calc(100%-2rem)] max-w-[calc(100%-2rem)] flex-col gap-0 p-0',
+        'flex h-[min(80dvh,48rem)] w-[calc(100%-2rem)] max-w-[calc(100%-2rem)] flex-col gap-0 p-0 data-open:animate-none data-closed:animate-none',
         wide ? 'sm:max-w-4xl' : 'sm:max-w-2xl'
       )}
     >
