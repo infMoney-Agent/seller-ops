@@ -39,7 +39,9 @@ export default function ImportDialog({
       ref={dialog}
       aria-labelledby={title}
       aria-describedby={description}
-      onClose={onClose}
+      onClose={() => {
+        if (!dialog.current?.open) onClose();
+      }}
       className='m-auto max-h-[85dvh] w-[calc(100%-2rem)] max-w-3xl overflow-y-auto overscroll-contain rounded-xl border bg-background p-0 text-foreground shadow-xl backdrop:bg-black/30 backdrop:overflow-hidden backdrop:overscroll-contain'
     >
       <div className='sticky top-0 z-10 flex items-start justify-between gap-4 border-b bg-background p-4'>
@@ -51,7 +53,7 @@ export default function ImportDialog({
             上传卖家精灵文件，检查后确认导入。关闭卡片后仍会继续处理，可在历史导入记录查看结果。
           </p>
         </div>
-        <Button variant='ghost' size='sm' onClick={() => dialog.current?.close()}>
+        <Button variant='ghost' size='sm' onClick={onClose}>
           关闭
         </Button>
       </div>
