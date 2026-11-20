@@ -510,8 +510,10 @@ export default function ImportPanel({
           </div>
         </section>
       )}
-      <section className='space-y-3 rounded-xl border bg-card p-4 sm:p-5'>
-        <h2 className='font-semibold'>历史导入（{imports.data?.total || 0}）</h2>
+      <details className='bg-card rounded-lg border p-3'>
+        <summary className='cursor-pointer font-semibold'>
+          历史导入（{imports.data?.total || 0}）
+        </summary>
         <TableScroll label='导入记录，可横向滚动' className='mt-3'>
           <table className='w-full text-left text-sm'>
             <caption className='sr-only'>导入文件或商品预览明细</caption>
@@ -592,7 +594,7 @@ export default function ImportPanel({
             </tbody>
           </table>
         </TableScroll>
-      </section>
+      </details>
     </div>
   );
 }

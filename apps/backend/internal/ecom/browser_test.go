@@ -55,9 +55,14 @@ func TestBrowserScreening(t *testing.T) {
 		t.Fatal(e)
 	}
 	if e := chromedp.Run(ctx,
-		chromedp.Evaluate(`[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='导入记录').click()`, nil),
+		chromedp.Evaluate(`[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='导入商品').click()`, nil),
 		chromedp.WaitVisible(`[aria-label="选择商品文件"]`, chromedp.ByQuery),
 		chromedp.SetUploadFiles(`[aria-label="选择商品文件"]`, []string{fixturePath}, chromedp.ByQuery),
+		chromedp.Evaluate(`document.querySelector('dialog[open] button').click()`, nil),
+		chromedp.Poll(`!document.querySelector('dialog[open]')`, nil),
+		chromedp.Evaluate(`[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='导入商品').click()`, nil),
+		chromedp.Poll(`!!document.querySelector('dialog[open]') && document.querySelector('[aria-label="选择商品文件"]').files.length===1`, nil),
+
 		chromedp.Poll(`[...document.querySelectorAll('input')].some(x=>x.value==='2026-08') && !!document.querySelector('input[type=date]')?.value`, nil),
 		chromedp.Evaluate(`[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='上传并预览').click()`, nil),
 		chromedp.Poll(`[...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='确认导入'&&!b.disabled)`, nil),

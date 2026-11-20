@@ -32,7 +32,7 @@ import type {
   ReviewStatus,
   FamilyResult
 } from '../types';
-import ImportPanel from './ImportPanel';
+import ImportDialog from './ImportDialog';
 import ReviewPanel from './ReviewPanel';
 import ProfitPanel from './ProfitPanel';
 import PolicyPanel from './PolicyPanel';
@@ -68,11 +68,18 @@ function sortDirection(
       ? 'descending'
       : undefined;
 }
-const tabs = ['商品库', '导入记录', '批量复核', '利润测算', '规则与历史', '父体数据'];
+const tabs = [
+  { id: 0, title: '商品库' },
+  { id: 2, title: '批量复核' },
+  { id: 3, title: '利润测算' },
+  { id: 4, title: '规则与历史' },
+  { id: 5, title: '父体数据' }
+];
 export default function ScreeningPage() {
   const session = useSellerSession();
   const client = useQueryClient();
   const [tab, setTab] = useState(0);
+  const [importOpen, setImportOpen] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [page, setPage] = useState(1);
   const [filters, setFilters] = useState<Record<string, string>>({ show_merged: 'false' });
@@ -184,6 +191,7 @@ export default function ScreeningPage() {
     setSelected({});
     setFamilyRows({});
     setFocus(null);
+    setImportOpen(false);
     setGroup(null);
     setJobs([]);
     setActiveJob(null);
@@ -440,19 +448,26 @@ export default function ScreeningPage() {
         pageTitle='产品初筛'
         pageDescription='导入、筛选、人工复核与利润测算，保留每次判断的来源。'
         pageHeaderAction={
-          <Button
-            size='sm'
-            variant='outline'
-            disabled={products.isFetching}
-            onClick={() => void refresh()}
-          >
-            {products.isFetching ? '刷新中…' : '刷新'}
-          </Button>
+          <div className='flex items-center gap-2'>
+            {tab === 0 && (
+              <Button size='sm' onClick={() => setImportOpen(true)}>
+                导入商品
+              </Button>
+            )}
+            <Button
+              size='sm'
+              variant='outline'
+              disabled={products.isFetching}
+              onClick={() => void refresh()}
+            >
+              {products.isFetching ? '刷新中…' : '刷新'}
+            </Button>
+          </div>
         }
       >
         <div className='space-y-4'>
           <nav className='flex flex-wrap gap-2 border-b pb-3' aria-label='初筛工作台'>
-            {tabs.map((title, i) => (
+            {tabs.map(({ title, id: i }) => (
               <Button
                 key={title}
                 variant={tab === i ? 'default' : 'ghost'}
@@ -821,7 +836,7 @@ export default function ScreeningPage() {
                         </p>
                         <Button
                           variant='link'
-                          onClick={() => (filterCount ? resetFilters() : setTab(1))}
+                          onClick={() => (filterCount ? resetFilters() : setImportOpen(true))}
                         >
                           {filterCount ? '重置筛选' : '导入商品文件'}
                         </Button>
@@ -920,7 +935,6 @@ export default function ScreeningPage() {
               )}
             </>
           )}
-          {tab === 1 && <ImportPanel act={act} watch={watch} busy={busy} />}
           {tab === 2 && <ReviewPanel selected={selectedIds} act={act} busy={busy} />}
           {tab === 3 && (
             <ProfitPanel
@@ -937,6 +951,17 @@ export default function ScreeningPage() {
           {tab === 4 && <PolicyPanel selected={selectedIds} act={act} watch={watch} busy={busy} />}
         </div>
       </PageContainer>
+      <ImportDialog
+        key={session.workspaceId}
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        act={act}
+        watch={watch}
+        busy={busy}
+        error={error}
+        message={message}
+        job={job.data}
+      />
     </div>
   );
 }

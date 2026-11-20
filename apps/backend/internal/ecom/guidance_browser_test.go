@@ -51,7 +51,10 @@ func checkBrowserGuidance(t *testing.T, ctx context.Context, base string) {
 	fill("commission_rate", "0.15")
 	run(chromedp.Click("button[value=compare]", chromedp.ByQuery),
 		chromedp.Poll("[...document.querySelectorAll('form tbody tr')].filter(row=>row.textContent.includes('6.64')).length===2 && !document.querySelector('form fieldset').disabled", nil),
-		chromedp.Evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='导入记录').click()", nil),
+		chromedp.Evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='商品库').click()", nil),
+		chromedp.Evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='导入商品').click()", nil),
+		chromedp.Poll("!!document.querySelector('dialog[open]')", nil),
+		chromedp.Evaluate("document.querySelector('[aria-label=\"导入记录，可横向滚动\"]').closest('details').open=true", nil),
 		chromedp.Poll("[...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='查看')", nil),
 		chromedp.Evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='查看').click()", nil),
 		chromedp.Poll("document.body.innerText.includes('导入完成，可前往商品库查看')", nil),
