@@ -528,44 +528,46 @@ export default function ImportPanel({
                       </span>
                     )}
                   </td>
-                  <td className='space-x-2'>
-                    {pendingDelete === item.id ? (
-                      <span className='inline-flex flex-wrap items-center gap-2'>
-                        <span className='text-xs'>
-                          将撤销本批经营数据；
-                          {removal
-                            ? '涉及 ' +
-                              removal.products +
-                              ' 个商品，其中 ' +
-                              removal.exclusive_products +
-                              ' 个无其他来源，将移出商品库。'
-                            : '正在核对影响范围…'}
-                        </span>
-                        <Button
-                          size='sm'
-                          variant='outline'
-                          disabled={busy || !removal}
-                          onClick={() =>
-                            void run(async () => {
-                              await request('/imports/' + item.id, 'DELETE');
-                              onRemoved?.(item.id);
-                              setPendingDelete(null);
-                              setUploads((old) => old.filter((upload) => upload.id !== item.id));
-                              if (selected === item.id) setSelected(null);
-                            }, '已撤销本批导入数据')
-                          }
-                        >
-                          确认删除数据
-                        </Button>
-                        <Button size='sm' variant='ghost' onClick={() => setPendingDelete(null)}>
-                          取消
-                        </Button>
-                      </span>
-                    ) : (
+                  <td className='p-3 align-top'>
+                    <div className='flex w-64 items-center gap-2 whitespace-nowrap'>
                       <Button
                         size='sm'
-                        variant='ghost'
-                        disabled={busy || ['uploaded', 'parsing', 'importing'].includes(item.state)}
+                        className='h-8 px-3'
+                        variant='outline'
+                        onClick={() => {
+                          setSelected(item.id);
+                          setDate(item.observed_on || defaultObservationDate());
+                          setPeriod(item.source_period || sourcePeriodFromFilename(item.file_name));
+                          setPeriodType(item.period_type);
+                          setPage(1);
+                          void run(async () => {
+                            const detail = await request<ImportRecord>(`/imports/${item.id}`);
+                            if (detail.latest_job_id) watch(detail.latest_job_id);
+                          });
+                        }}
+                      >
+                        查看
+                      </Button>
+                      <Button
+                        size='sm'
+                        className='h-8 px-3'
+                        variant='outline'
+                        onClick={() =>
+                          void run(() => download(`/imports/${item.id}/source`, item.file_name))
+                        }
+                      >
+                        源文件
+                      </Button>
+                      <Button
+                        size='sm'
+                        aria-expanded={pendingDelete === item.id}
+                        variant='destructive'
+                        className='h-8 border-destructive/20 px-3'
+                        disabled={
+                          pendingDelete === item.id ||
+                          busy ||
+                          ['uploaded', 'parsing', 'importing'].includes(item.state)
+                        }
                         onClick={() => {
                           setPendingDelete(item.id);
                           setRemoval(null);
@@ -581,34 +583,48 @@ export default function ImportPanel({
                       >
                         删除导入
                       </Button>
+                    </div>
+                    {pendingDelete === item.id && (
+                      <div className='mt-3 w-64 space-y-3 rounded-lg border border-destructive/20 bg-destructive/5 p-3'>
+                        <p className='text-xs leading-5'>
+                          将撤销本批经营数据；
+                          {removal
+                            ? '涉及 ' +
+                              removal.products +
+                              ' 个商品，其中 ' +
+                              removal.exclusive_products +
+                              ' 个无其他来源，将移出商品库。'
+                            : '正在核对影响范围…'}
+                        </p>
+                        <div className='flex items-center gap-2'>
+                          <Button
+                            size='sm'
+                            variant='destructive'
+                            className='h-8 px-3'
+                            disabled={busy || !removal}
+                            onClick={() =>
+                              void run(async () => {
+                                await request('/imports/' + item.id, 'DELETE');
+                                onRemoved?.(item.id);
+                                setPendingDelete(null);
+                                setUploads((old) => old.filter((upload) => upload.id !== item.id));
+                                if (selected === item.id) setSelected(null);
+                              }, '已撤销本批导入数据')
+                            }
+                          >
+                            确认删除数据
+                          </Button>
+                          <Button
+                            size='sm'
+                            variant='outline'
+                            className='h-8 px-3'
+                            onClick={() => setPendingDelete(null)}
+                          >
+                            取消
+                          </Button>
+                        </div>
+                      </div>
                     )}
-
-                    <Button
-                      size='sm'
-                      variant='outline'
-                      onClick={() => {
-                        setSelected(item.id);
-                        setDate(item.observed_on || defaultObservationDate());
-                        setPeriod(item.source_period || sourcePeriodFromFilename(item.file_name));
-                        setPeriodType(item.period_type);
-                        setPage(1);
-                        void run(async () => {
-                          const detail = await request<ImportRecord>(`/imports/${item.id}`);
-                          if (detail.latest_job_id) watch(detail.latest_job_id);
-                        });
-                      }}
-                    >
-                      查看
-                    </Button>
-                    <Button
-                      size='sm'
-                      variant='ghost'
-                      onClick={() =>
-                        void run(() => download(`/imports/${item.id}/source`, item.file_name))
-                      }
-                    >
-                      源文件
-                    </Button>
                   </td>
                 </tr>
               ))}
