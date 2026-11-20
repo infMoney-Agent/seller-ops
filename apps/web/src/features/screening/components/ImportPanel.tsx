@@ -17,6 +17,8 @@ export default function ImportPanel({
   busy: boolean;
 }) {
   const inFlight = useRef(false);
+  const uploadController = useRef<AbortController | null>(null);
+  useEffect(() => () => uploadController.current?.abort(), []);
   const run: Action = async (work, message) => {
     if (inFlight.current) return;
     inFlight.current = true;
@@ -141,11 +143,12 @@ export default function ImportPanel({
         </summary>
         <div className='mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3'>
           <div className='sm:col-span-2 lg:col-span-3'>
-            <Field label='原始文件（XLSX / CSV / ZIP，最多30MB）'>
+            <Field label='原始文件（可多选，每个最多30MB，XLSX / CSV / ZIP）'>
               <Input
                 aria-label='选择商品文件'
                 type='file'
                 multiple
+                disabled={busy}
                 accept='.xlsx,.csv,.zip'
                 onChange={(e) => {
                   const selectedFiles = Array.from(e.target.files || []);
@@ -172,8 +175,11 @@ export default function ImportPanel({
             disabled={busy || !files.length || files.length > 100 || Boolean(active)}
             onClick={() =>
               void run(async () => {
+                const controller = new AbortController();
+                uploadController.current = controller;
                 const results: { name: string; id?: string; error?: string }[] = [];
                 for (const file of files) {
+                  if (controller.signal.aborted) break;
                   try {
                     if (file.size > 30 * 1024 * 1024) throw Error('文件超过30MB');
                     const data = new FormData();
@@ -192,7 +198,8 @@ export default function ImportPanel({
                     const result = await request<JobCreated & { import_id: string }>(
                       '/imports',
                       'POST',
-                      data
+                      data,
+                      controller.signal
                     );
                     results.push({ name: file.name, id: result.import_id });
                     if (result.job_id) watch(result.job_id);

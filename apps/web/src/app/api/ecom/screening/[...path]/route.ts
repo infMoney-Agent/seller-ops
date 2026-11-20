@@ -22,6 +22,7 @@ const routes = [
   ],
   ['PATCH', `products/${uuid}/(review|category|parameters)`],
   ['PUT', `imports/${uuid}/mapping`],
+  ['DELETE', `imports/${uuid}`],
   [
     'POST',
     `imports/${uuid}/commit|policies/${uuid}/(test|activate)|review-batches/${uuid}/(apply|undo)|products/${uuid}/profit-scenarios|jobs/${uuid}/retry`
