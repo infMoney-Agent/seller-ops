@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { useScreeningQuery } from '../queries';
 import { request } from '../service';
 import type {
@@ -10,7 +10,7 @@ import type {
   Product,
   ReviewWorkspace
 } from '../types';
-import { Badge, Button, Field, Input, type Action } from './shared';
+import { Badge, Button, Field, Input, TableScroll, type Action } from './shared';
 import ReviewProductCard from './ReviewProductCard';
 
 export default function ReviewPanel({
@@ -217,6 +217,7 @@ function GroupReview({
   const [preview, setPreview] = useState<BatchPreview | null>(null);
   const [result, setResult] = useState<BatchResult | null>(null);
   const [validation, setValidation] = useState('');
+  const formID = useId();
   const form = useRef<HTMLFormElement>(null);
   const confirm = useRef<HTMLButtonElement>(null);
   useEffect(() => {
@@ -270,6 +271,8 @@ function GroupReview({
   return (
     <div className='space-y-4' data-review-group={data.group?.id}>
       <form
+        id={formID}
+        method='post'
         ref={form}
         aria-label='批量复核设置'
         onSubmit={(e) => {
@@ -496,9 +499,9 @@ function GroupReview({
             )}
           </details>
         </aside>
-        <section
-          className='min-w-0 max-h-[62dvh] space-y-4 overflow-y-auto overscroll-contain pe-2 [scrollbar-gutter:stable]'
-          aria-label='本组候选商品'
+        <TableScroll
+          label='本组候选商品'
+          className='max-h-[62dvh] min-w-0 space-y-4 overscroll-contain border-0 pe-2 [scrollbar-gutter:stable]'
         >
           <div>
             <h3 className='break-words text-lg font-semibold'>{data.group?.title}</h3>
@@ -560,7 +563,7 @@ function GroupReview({
               下一页商品
             </Button>
           </div>
-        </section>
+        </TableScroll>
       </div>
       {preview && (
         <section
@@ -647,7 +650,7 @@ function GroupReview({
             </p>
           )}
         </div>
-        <Button disabled={busy || !selected.length} onClick={() => void generate()}>
+        <Button type='submit' form={formID} disabled={busy || !selected.length}>
           预览批量复核
         </Button>
       </div>

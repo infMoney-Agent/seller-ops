@@ -44,10 +44,10 @@ func TestBrowserGroupedReview(t *testing.T) {
 	}
 	if e := chromedp.Run(ctx,
 		chromedp.Evaluate(`[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='批量复核').click()`, nil),
-		chromedp.Poll(`document.querySelector('[data-review-workspace]')&&document.querySelectorAll('aside[aria-label="人工参考样本"] article').length===2&&document.querySelectorAll('section[aria-label="本组候选商品"] article').length===5`, nil),
+		chromedp.Poll(`document.querySelector('[data-review-workspace]')&&document.querySelectorAll('aside[aria-label="人工参考样本"] article').length===2&&document.querySelectorAll('[aria-label="本组候选商品"] article').length===5`, nil),
 		chromedp.Evaluate(`(()=>{const refs=document.querySelector('aside[aria-label="人工参考样本"]');refs.querySelector('button').click();const compare=refs.querySelectorAll('input[aria-label^="比较样本"]');compare[0].click();compare[1].click();})()`, nil),
 		chromedp.Poll(`!!document.querySelector('section[aria-label="样本对比"]')`, nil),
-		chromedp.Evaluate(`document.querySelector('input[aria-label="全选本页可处理商品"]').click()`, nil),
+		chromedp.Evaluate(`(()=>{const scroll=document.querySelector('[aria-label="本组候选商品"]');if(scroll.tabIndex!==0)throw Error('Candidate scroll region must accept keyboard focus');scroll.focus();document.querySelector('input[aria-label="全选本页可处理商品"]').click()})()`, nil),
 		chromedp.Poll(`document.querySelector('[data-review-toolbar]').textContent.includes('已选 3 / 100 项')`, nil),
 	); e != nil {
 		t.Fatal("group cards and sample selection", e)
