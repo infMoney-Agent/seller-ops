@@ -107,6 +107,21 @@ func TestBatchDataRemoval(t *testing.T) {
 		t.Fatal(err)
 	}
 	exec(`INSERT INTO ps_profit_scenarios(tenant_id,id,product_id,name,inputs,output,formula_version,product_data_revision,created_by,monthly_id,monthly_revision) VALUES(622,$1,$2,'saved','{}','{"profit_usd":"6.64"}','test',0,7,$3,1)`, uuid(), pid, monthly)
+
+	var sourceRow string
+	if err = pool.QueryRow(ctx, "SELECT id::text FROM ps_import_rows WHERE tenant_id=622 AND import_id=$1 AND product_id=$2", removed, pid).Scan(&sourceRow); err != nil {
+		t.Fatal(err)
+	}
+	source, err := s.observationSource(ctx, a, pid, sourceRow)
+	if err != nil || str(source["file_name"]) != "source.csv" || integer(source["row_no"]) != 2 || str(source["raw_data"].(map[string]any)["ASIN"]) != "SHARED0001" {
+		t.Fatal(source, err)
+	}
+	if _, err = s.observationSource(ctx, identity{Tenant: 999}, pid, sourceRow); err == nil {
+		t.Fatal("cross tenant source row exposed")
+	}
+	if _, err = s.observationSource(ctx, a, uuid(), sourceRow); err == nil {
+		t.Fatal("unrelated product source row exposed")
+	}
 	impact, err := s.importRemovalPreview(ctx, a, removed)
 	if err != nil || integer(impact.(Object)["exclusive_products"]) != 1 {
 		t.Fatal(impact, err)
@@ -126,6 +141,9 @@ func TestBatchDataRemoval(t *testing.T) {
 	}
 	if _, err = s.removeImportHistory(ctx, key, removed); err != nil {
 		t.Fatal(err)
+	}
+	if _, err = s.observationSource(ctx, a, pid, sourceRow); err == nil {
+		t.Fatal("removed source row exposed")
 	}
 	var price, parentPrice, length, status, note string
 	if err = pool.QueryRow(ctx, "SELECT m.price_usd::text,p.package_length_cm::text,p.review_status,p.review_note FROM ps_products p JOIN ps_product_monthly m ON m.tenant_id=p.tenant_id AND m.id=p.current_monthly_id WHERE p.tenant_id=622 AND p.id=$1", pid).Scan(&price, &length, &status, &note); err != nil || price != "30.000000" || length != "99.000000" || status != "kept" || note != "必须保留" {

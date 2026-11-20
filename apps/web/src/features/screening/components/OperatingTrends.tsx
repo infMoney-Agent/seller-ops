@@ -18,7 +18,7 @@ const periods: Record<string, string> = {
 const scopes: Record<string, string> = {
   child: '',
   parent: '父体汇总',
-  unknown: '销量归属待确认'
+  unknown: ''
 };
 const groupKey = (row: MonthlyRecord) =>
   [row.source_type, row.period_type, row.sales_scope].join('|');
@@ -174,10 +174,6 @@ export default function OperatingTrends({ rows, total }: { rows: MonthlyRecord[]
         {latest.period_type === 'custom'
           ? '自定义周期长短可能不同，请以明细起止日期逐条比较。'
           : '同月多次观察采用最近记录；缺失月份断线。曲线为子体参考值，购买量级不是精确销量，不能与父体估算直接相加核对。'}
-        {latest.sales_scope !== 'child' &&
-          (latest.sales_scope === 'parent'
-            ? ' 该数据为父体汇总，请在父体数据中查看销量。'
-            : ' 销量归属待确认，确认前暂不显示销量趋势。')}
         {total > rows.length && ' 趋势仅基于当前页数据，可翻页查看更多记录。'}
       </p>
     </div>

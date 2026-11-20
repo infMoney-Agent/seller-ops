@@ -104,6 +104,12 @@ func (s *service) route(w http.ResponseWriter, r *http.Request) (any, error) {
 				case "monthly":
 					return s.monthlyList(r, id)
 				case "observations":
+					if len(parts) == 4 {
+						if !uuidPattern.MatchString(parts[3]) {
+							return nil, fail(422, "来源行ID无效")
+						}
+						return s.observationSource(ctx, a, id, parts[3])
+					}
 					return s.list(r, "ps_import_rows", "tenant_id=$1 AND product_id=$2::uuid AND import_id IN (SELECT id FROM ps_imports WHERE tenant_id=$1 AND NOT(counts ? 'data_deleted_at'))", a.Tenant, id)
 				case "history":
 					return s.list(r, "ps_review_events", "tenant_id=$1 AND product_id=$2::uuid", a.Tenant, id)

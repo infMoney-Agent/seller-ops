@@ -6365,6 +6365,39 @@
           }
         }
       }
+    },
+    "/api/v1/screening/products/{id}/observations/{row_id}": {
+      "get": {
+        "summary": "获取当前商品指定来源行的原始数据与文件定位",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "row_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "原始字段、文件ID、名称、工作表和行号"
+          },
+          "404": {
+            "description": "来源不存在、已撤销或不属于该商品/工作区"
+          }
+        }
+      }
     }
   },
   "components": {

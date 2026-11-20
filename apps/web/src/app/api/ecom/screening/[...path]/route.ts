@@ -15,6 +15,7 @@ const routes = [
     'imports|policies|screen-runs|review-batches/preview|profit/calculate|profit/templates|profit/batches|exports'
   ],
   ['GET', `products/${uuid}(/(family|observations|monthly|history|references|profit-scenarios))?`],
+  ['GET', `products/${uuid}/observations/${uuid}`],
   ['GET', `imports/${uuid}(/(preview|errors|source|removal-preview))?`],
   [
     'GET',

@@ -154,6 +154,14 @@ func TestBrowserScreening(t *testing.T) {
 	); e != nil {
 		t.Fatalf("annual data popover failed: %v", e)
 	}
+
+	if e := chromedp.Run(ctx,
+		chromedp.Evaluate(`[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='查看来源文件').click()`, nil),
+		chromedp.Poll(`!!document.querySelector('[aria-label="来源原始行数据，可滚动"]')&&document.body.innerText.includes('BROWSER001')`, nil),
+		chromedp.Evaluate(`(()=>{const table=document.querySelector('[aria-label="来源原始行数据，可滚动"]');if(!table.innerText.includes('ASIN')||!table.innerText.includes('BROWSER001')||!table.innerText.includes('manual kitchen tool'))throw Error('wrong raw source row');if(!document.querySelector('a[href*="/imports/"][href$="/source"]'))throw Error('source file link missing');if(document.body.innerText.includes('销量归属待确认'))throw Error('sales scope note remains');})()`, nil),
+	); e != nil {
+		t.Fatal("source row card failed", e)
+	}
 	if e := chromedp.Run(ctx, chromedp.Evaluate(`(()=>{if(!document.querySelector('button[aria-label="复制 ASIN BROWSER001"]'))throw Error('ASIN copy action missing');const t=document.querySelector('[data-screening-table]');if(!t||getComputedStyle(t.querySelector('thead')).position!=='sticky')throw Error('Product header must remain sticky');if(document.body.innerText.includes('Vercel'))throw Error('Template entry remains')})()`, nil)); e != nil {
 		t.Fatal(e)
 	}

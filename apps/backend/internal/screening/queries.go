@@ -1,6 +1,7 @@
 package screening
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -228,4 +229,8 @@ func filterJoins(q productQuery, monthly bool) string {
 		return q.sets
 	}
 	return ""
+}
+
+func (s *service) observationSource(ctx context.Context, a identity, productID, rowID string) (Object, error) {
+	return s.one(ctx, "SELECT jsonb_build_object('id',r.id,'import_id',i.id,'file_name',i.file_name,'member_path',r.member_path,'sheet_name',r.sheet_name,'row_no',r.row_no,'raw_data',r.raw_data) FROM ps_import_rows r JOIN ps_imports i ON i.tenant_id=r.tenant_id AND i.id=r.import_id JOIN ps_products p ON p.tenant_id=r.tenant_id AND p.id=r.product_id WHERE r.tenant_id=$1 AND r.product_id=$2::uuid AND r.id=$3::uuid AND p.archived_at IS NULL AND NOT(i.counts ? 'data_deleted_at')", a.Tenant, productID, rowID)
 }

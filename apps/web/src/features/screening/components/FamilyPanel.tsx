@@ -45,9 +45,7 @@ export default function FamilyPanel({
       </div>
       {result.isError && <p role='alert'>{result.error.message}</p>}
       <p className='text-muted-foreground text-xs'>
-        {result.data?.aggregate_label}：{result.data?.known_child_sales_total ?? '未确认'}
-        {Boolean(result.data?.unknown_child_count) &&
-          `；${result.data?.unknown_child_count} 个商品销量归属待确认。`}
+        {result.data?.aggregate_label}：{result.data?.known_child_sales_total ?? '—'}
       </p>
       <div className='overflow-auto'>
         <table className='w-full text-left text-sm'>

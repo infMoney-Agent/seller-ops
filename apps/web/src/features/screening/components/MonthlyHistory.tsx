@@ -4,6 +4,7 @@ import { useScreeningQuery } from '../queries';
 import type { MonthlyRecord, PageResult, Product } from '../types';
 import { Button, TableScroll, formatMoney } from './shared';
 import { childSales } from '../sales';
+import SourceRowCard from './SourceRowCard';
 import OperatingTrends from './OperatingTrends';
 
 export const sourceLabels: Record<string, string> = {
@@ -85,10 +86,7 @@ export default function MonthlyHistory({
                 <td className='text-xs'>
                   {sourceLabels[row.source_type] || row.source_type}
                   <p>{row.observed_on}</p>
-                  <details>
-                    <summary className='cursor-pointer'>查看来源文件</summary>
-                    <p className='max-w-48 break-words'>{row.file_name}</p>
-                  </details>
+                  <SourceRowCard productID={product.id} rowID={row.source_row_id} />
                 </td>
                 <td>
                   <Button
