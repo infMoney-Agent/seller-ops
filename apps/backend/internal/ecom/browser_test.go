@@ -72,7 +72,7 @@ func TestBrowserScreening(t *testing.T) {
 			}
 			return os.WriteFile(filepath.Join(os.Getenv("SCREENING_QA_DIR"), "import-preview.png"), shot, 0640)
 		}),
-		chromedp.Evaluate(`(()=>{if(document.querySelector('select[aria-label^="映射 "]')||document.body.innerText.includes('调整日期与字段对应关系')||[...document.querySelectorAll('button')].some(b=>b.textContent.includes('重新解析')))throw Error('manual mapping UI remains');if(!document.querySelector('dialog[open]'))throw Error('import dialog missing');})()`, nil),
+		chromedp.Evaluate(`(()=>{if(document.querySelector('select[aria-label^="映射 "]')||document.body.innerText.includes('调整日期与字段对应关系')||[...document.querySelectorAll('button')].some(b=>b.textContent.includes('重新解析')))throw Error('manual mapping UI remains');if(!document.querySelector('dialog[open]'))throw Error('import dialog missing');if(document.body.innerText.includes('后台任务'))throw Error('technical import task UI remains');})()`, nil),
 		chromedp.Evaluate(`[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='确认导入').click()`, nil),
 		chromedp.Poll(`(async()=>{const r=await fetch('/api/ecom/screening/products?q=GUI0000001&show_merged=true');const v=await r.json();return r.ok&&v.total===1})()`, nil),
 	); e != nil {

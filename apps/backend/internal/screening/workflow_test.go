@@ -158,7 +158,15 @@ func TestImportHTTPWorkflow(t *testing.T) {
 		writer.Close()
 		job := call("POST", "imports", writer.FormDataContentType(), body.Bytes())
 		wait(str(job["job_id"]))
+		duplicate := call("POST", "imports", writer.FormDataContentType(), body.Bytes())
+		if duplicate["import_id"] != job["import_id"] || duplicate["job_id"] != job["job_id"] {
+			t.Fatal("duplicate upload created new batch", duplicate, job)
+		}
 		commit := call("POST", "imports/"+str(job["import_id"])+"/commit", "application/json", nil)
+		again := call("POST", "imports/"+str(job["import_id"])+"/commit", "application/json", nil)
+		if again["job_id"] != commit["job_id"] {
+			t.Fatal("duplicate commit created new task", again, commit)
+		}
 		finished := wait(str(commit["job_id"]))
 		if screen, ok := finished["result"].(map[string]any)["screen"].(map[string]any); ok {
 			wait(str(screen["job_id"]))

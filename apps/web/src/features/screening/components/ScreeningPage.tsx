@@ -91,6 +91,7 @@ export default function ScreeningPage() {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [jobs, setJobs] = useState<string[]>([]);
+  const [showJob, setShowJob] = useState(true);
   const [activeJob, setActiveJob] = useState<string | null>(null);
   const query = new URLSearchParams({ ...filters, page: String(page) }).toString();
   const products = useScreeningQuery<PageResult<Product>>('/products?' + query, false, true);
@@ -183,7 +184,8 @@ export default function ScreeningPage() {
       setBusy(false);
     }
   };
-  function watch(id: string) {
+  function watch(id: string, visible = true) {
+    setShowJob(visible);
     setJobs((old) => [...new Set([id, ...old])]);
     setActiveJob(id);
   }
@@ -487,7 +489,7 @@ export default function ScreeningPage() {
               {message}
             </div>
           )}
-          {activeJob && (
+          {activeJob && showJob && (
             <section className='space-y-2 rounded border p-3'>
               <div className='flex flex-wrap items-center gap-3'>
                 <strong className='text-sm'>后台任务</strong>
@@ -956,11 +958,11 @@ export default function ScreeningPage() {
         open={importOpen}
         onClose={() => setImportOpen(false)}
         act={act}
-        watch={watch}
+        watch={(id) => watch(id, false)}
         busy={busy}
         error={error}
         message={message}
-        job={job.data}
+        job={showJob ? undefined : job.data}
       />
     </div>
   );

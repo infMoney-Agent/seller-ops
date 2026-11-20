@@ -16,6 +16,16 @@ export default function ImportPanel({
   watch: (id: string) => void;
   busy: boolean;
 }) {
+  const inFlight = useRef(false);
+  const run: Action = async (work, message) => {
+    if (inFlight.current) return;
+    inFlight.current = true;
+    try {
+      return await act(work, message);
+    } finally {
+      inFlight.current = false;
+    }
+  };
   const batchHeading = useRef<HTMLHeadingElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [date, setDate] = useState(defaultObservationDate);
@@ -56,9 +66,9 @@ export default function ImportPanel({
           ? '来源月份或观察日期不完整，请重新上传并填写。'
           : '检查预览无误后，点击确认导入。异常行会跳过，不影响有效数据。'
       : active?.state === 'failed'
-        ? '本批次处理失败，请查看后台任务原因或下载错误报告。'
+        ? '本批次处理失败，请查看错误提示或下载错误报告。'
         : active?.state === 'partial'
-          ? '本批次仅部分完成，请查看后台任务失败原因，并重试未完成部分。'
+          ? '本批次仅部分完成，请查看失败原因及导入记录。'
           : active?.state === 'completed'
             ? '本批次已完成，无需再次确认。'
             : active?.state === 'importing'
@@ -141,7 +151,7 @@ export default function ImportPanel({
           <Button
             disabled={busy || !file || Boolean(active)}
             onClick={() =>
-              void act(async () => {
+              void run(async () => {
                 if (!file) return;
                 const data = new FormData();
                 data.set('file', file);
@@ -230,7 +240,7 @@ export default function ImportPanel({
                   !active.counts.valid
                 }
                 onClick={() =>
-                  void act(async () => {
+                  void run(async () => {
                     const job = await request<JobCreated>(`/imports/${active.id}/commit`, 'POST');
                     watch(job.job_id);
                   }, '导入任务已创建')
@@ -242,7 +252,7 @@ export default function ImportPanel({
                 <Button
                   variant='ghost'
                   onClick={() =>
-                    void act(() => download(`/imports/${active.id}/errors`, '导入错误.csv'))
+                    void run(() => download(`/imports/${active.id}/errors`, '导入错误.csv'))
                   }
                 >
                   下载错误报告
@@ -257,12 +267,12 @@ export default function ImportPanel({
           )}
           {active.state === 'importing' && (
             <p role='status' className='text-sm'>
-              正在写入商品及经营数据，后台任务中可查看进度。
+              正在写入商品及经营数据，可关闭卡片，稍后在历史导入记录查看结果。
             </p>
           )}
           {active.state === 'completed' && (
             <p role='status' className='text-sm text-green-700 dark:text-green-400'>
-              导入完成，可前往商品库查看；自动初筛进度见后台任务。
+              导入完成，可前往商品库查看；后续处理会自动完成。
             </p>
           )}
           {active.state === 'preview' && !active.counts.valid && (
@@ -404,7 +414,7 @@ export default function ImportPanel({
                         setPeriod(item.source_period || sourcePeriodFromFilename(item.file_name));
                         setPeriodType(item.period_type);
                         setPage(1);
-                        void act(async () => {
+                        void run(async () => {
                           const detail = await request<ImportRecord>(`/imports/${item.id}`);
                           if (detail.latest_job_id) watch(detail.latest_job_id);
                         });
@@ -416,7 +426,7 @@ export default function ImportPanel({
                       size='sm'
                       variant='ghost'
                       onClick={() =>
-                        void act(() => download(`/imports/${item.id}/source`, item.file_name))
+                        void run(() => download(`/imports/${item.id}/source`, item.file_name))
                       }
                     >
                       源文件

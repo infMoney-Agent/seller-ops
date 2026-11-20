@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useId, useRef, useState } from 'react';
 import ImportPanel from './ImportPanel';
-import { Badge, Button, type Action } from './shared';
+import { Button, type Action } from './shared';
 import type { Job } from '../types';
 export default function ImportDialog({
   open,
@@ -48,7 +48,7 @@ export default function ImportDialog({
             导入商品
           </h2>
           <p id={description} className='text-muted-foreground mt-1 text-xs'>
-            上传卖家精灵文件，检查后确认导入。关闭卡片后，后台任务继续运行。
+            上传卖家精灵文件，检查后确认导入。关闭卡片后仍会继续处理，可在历史导入记录查看结果。
           </p>
         </div>
         <Button variant='ghost' size='sm' onClick={() => dialog.current?.close()}>
@@ -66,17 +66,10 @@ export default function ImportDialog({
             {message}
           </p>
         )}
-        {job && (
-          <div className='flex flex-wrap items-center gap-2 rounded border p-3 text-sm'>
-            <span>后台任务</span>
-            <Badge value={job.state} />
-            <span>{job.progress}%</span>
-            {job.error && (
-              <p role='alert' className='text-destructive basis-full'>
-                {job.error.message}
-              </p>
-            )}
-          </div>
+        {job?.error && (
+          <p role='alert' className='text-destructive text-sm'>
+            {job.error.message}
+          </p>
         )}
         {started && <ImportPanel act={act} watch={watch} busy={busy} />}
       </div>
