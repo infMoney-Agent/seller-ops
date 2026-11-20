@@ -1,305 +1,699 @@
 'use client';
-import { useState } from 'react';
-import Image from 'next/image';
+import { useEffect, useRef, useState } from 'react';
 import { useScreeningQuery } from '../queries';
 import { request } from '../service';
-import type { BatchPreview, BatchRecord, BatchResult, PageResult, Product } from '../types';
-import { Badge, Button, DataBlock, Field, Input, type Action } from './shared';
-
-export function ProductPicture({ product }: { product: Product }) {
-  return (
-    <div className='flex items-start gap-3'>
-      {product.image_url?.startsWith('https://') && (
-        <Image
-          unoptimized
-          width={96}
-          height={96}
-          src={product.image_url}
-          alt={product.title}
-          className='h-24 w-24 shrink-0 rounded bg-white object-contain'
-          loading='lazy'
-          referrerPolicy='no-referrer'
-        />
-      )}
-      <div>
-        <strong>{product.asin}</strong>
-        <p className='text-sm'>{product.title_zh || product.title}</p>
-        <p className='text-muted-foreground text-xs'>{product.direction}</p>
-        <Badge value={product.review_status} />
-        <p className='text-sm'>{product.review_reason}</p>
-      </div>
-    </div>
-  );
-}
+import type {
+  BatchPreview,
+  BatchRecord,
+  BatchResult,
+  PageResult,
+  Product,
+  ReviewWorkspace
+} from '../types';
+import { Badge, Button, Field, Input, type Action } from './shared';
+import ReviewProductCard from './ReviewProductCard';
 
 export default function ReviewPanel({
   selected,
+  filters,
   act,
   busy
 }: {
   selected: string[];
+  filters: Record<string, string>;
   act: Action;
   busy: boolean;
 }) {
-  const [mode, setMode] = useState('direct');
-  const [scope,setScope]=useState('selected');
-  const [action,setAction]=useState('review');
-  const [category,setCategory]=useState('');
-  const [status, setStatus] = useState('kept');
-  const [reason, setReason] = useState('');
-  const [note, setNote] = useState('');
-  const [reference, setReference] = useState<string | null>(null);
-  const [compare, setCompare] = useState<string[]>([]);
-  const [preview, setPreview] = useState<BatchPreview | null>(null);
-  const [result, setResult] = useState<BatchResult | null>(null);
-  const references = useScreeningQuery<{ items: Product[] }>(
-    selected[0] ? `/products/${selected[0]}/references` : null
-  );
-  const history = useScreeningQuery<PageResult<BatchRecord>>('/review-batches');
-  const [imagePage, setImagePage] = useState(1);
-  const [imagesOpen, setImagesOpen] = useState(false);
-  const ids = selected.slice((imagePage - 1) * 50, imagePage * 50);
+  const [seed] = useState(selected);
+  const [scope, setScope] = useState(seed.length ? 'selected' : 'filtered');
+  const [groupPage, setGroupPage] = useState(1);
+  const [groupID, setGroupID] = useState('');
+  const [memberPage, setMemberPage] = useState(1);
+  const [samplePage, setSamplePage] = useState(1);
+  const params = new URLSearchParams(filters);
+  params.delete('page');
+  params.delete('page_size');
+  params.delete('show_merged');
+  params.delete('sort');
+  params.set('group_page', String(groupPage));
+  params.set('group_id', groupID);
+  params.set('member_page', String(memberPage));
+  params.set('sample_page', String(samplePage));
+  if (scope === 'selected') params.set('selected_ids', seed.join(','));
+  const workspace = useScreeningQuery<ReviewWorkspace>('/review-workspace?' + params);
+  const data = workspace.data;
+  const navigation = useRef<HTMLSelectElement>(null);
+  const previousGroup = useRef<string | null>(null);
+  useEffect(() => {
+    const id = data?.group?.id;
+    if (id && previousGroup.current && previousGroup.current !== id) {
+      navigation.current?.focus({ preventScroll: true });
+      navigation.current?.scrollIntoView({ block: 'center' });
+    }
+    if (id) previousGroup.current = id;
+  }, [data?.group?.id]);
+  const groups = data?.groups.items || [];
+  const index = groups.findIndex((g) => g.id === data?.group?.id);
+  function choose(id: string) {
+    setGroupID(id);
+    setMemberPage(1);
+    setSamplePage(1);
+  }
+  function groupPages(page: number) {
+    setGroupPage(page);
+    choose('');
+  }
+  function next() {
+    if (index >= 0 && index < groups.length - 1) choose(groups[index + 1].id);
+    else groupPages((data?.groups.page || 1) + 1);
+  }
   return (
-    <div className='space-y-4'>
-      <p className='text-sm'>
-        已跨页选择 {selected.length} 个商品。每批最多 100 个，仅处理待复核商品。先预览，再确认。
-      </p>
-      <div className='grid gap-3 md:grid-cols-3'>
-        <Field label='处理范围'><select aria-label='处理范围' className='rounded border bg-transparent p-2' value={scope} onChange={e=>{setScope(e.target.value);setPreview(null);}}><option value='selected'>仅明确勾选的子体</option><option value='family'>首个已选子体的同父体子体</option></select></Field>
-        <Field label='处理动作'><select aria-label='处理动作' className='rounded border bg-transparent p-2' value={action} onChange={e=>{setAction(e.target.value);setPreview(null);}}><option value='review'>人工复核 / 排除</option><option value='categorize'>人工归类（不改变结论）</option></select></Field>
-        {action==='categorize' && <Field label='人工分类'><Input value={category} onChange={e=>{setCategory(e.target.value);setPreview(null);}} /></Field>}
-        <Field label='复核方式'>
-          <select
-            className='rounded border bg-transparent p-2'
-            value={mode}
-            onChange={(e) => {
-              setMode(e.target.value);
-              setPreview(null);
-            }}
-          >
-            <option value='direct'>直接填写结论</option>
-            <option value='reference'>采用人工样本</option>
-          </select>
-        </Field>
-        <Field label='结论'>
-          <select
-            className='rounded border bg-transparent p-2'
-            value={status}
-            onChange={(e) => {
-              setStatus(e.target.value);
-              setPreview(null);
-            }}
-            disabled={mode === 'reference'}
-          >
-            <option value='kept'>保留</option>
-            <option value='excluded'>排除</option>
-            <option value='unsure'>待确认</option>
-          </select>
-        </Field>
-        <Field label='原因'>
-          <Input
-            value={reason}
-            disabled={mode === 'reference'}
-            onChange={(e) => {
-              setReason(e.target.value);
-              setPreview(null);
-            }}
-          />
-        </Field>
-        <Field label='备注'>
-          <Input
-            value={note}
-            disabled={mode === 'reference'}
-            onChange={(e) => {
-              setNote(e.target.value);
-              setPreview(null);
-            }}
-          />
-        </Field>
-      </div>
-      <details className='rounded border p-3' open={mode === 'reference'}>
-        <summary>人工参考样本（可折叠；勾选两个样本比较）</summary>
-        {!references.data?.items.length && (
-          <p className='text-muted-foreground py-3 text-sm'>
-            所选首个商品暂无同方向人工样本，可直接填写复核结论。
+    <div className='@container space-y-4' data-review-workspace>
+      <section className='space-y-3 rounded-xl border bg-muted/30 p-4'>
+        <div className='flex flex-wrap items-center justify-between gap-3'>
+          <h3 className='font-semibold'>按类型分组复核</h3>
+          <p className='text-sm text-muted-foreground' role='status'>
+            {data
+              ? data.counts.groups.toLocaleString() +
+                ' 个类型组 · ' +
+                data.counts.products.toLocaleString() +
+                ' 个子体 · 待复核 ' +
+                data.counts.pending.toLocaleString()
+              : '正在加载类型组…'}
           </p>
-        )}
-        <div className='grid gap-3 pt-3 md:grid-cols-2'>
-          {references.data?.items.map((p) => (
-            <article key={p.id} className='space-y-2 rounded border p-3'>
-              <ProductPicture product={p} />
-              <div className='flex items-center gap-3'>
-                <Button
-                  size='sm'
-                  variant={reference === p.id ? 'default' : 'outline'}
-                  onClick={() => {
-                    setReference(p.id);
-                    setMode('reference');
-                    setPreview(null);
-                  }}
-                >
-                  采用此样本
-                </Button>
-                <label className='text-sm'>
-                  <input
-                    type='checkbox'
-                    aria-label={`比较样本 ${p.asin}`}
-                    checked={compare.includes(p.id)}
-                    onChange={(e) =>
-                      setCompare((old) =>
-                        e.target.checked
-                          ? [...old.filter((id) => id !== p.id).slice(-1), p.id]
-                          : old.filter((id) => id !== p.id)
-                      )
-                    }
-                  />{' '}
-                  比较
-                </label>
-              </div>
-            </article>
-          ))}
         </div>
-      </details>
-      {compare.length === 2 && (
-        <div className='grid gap-4 md:grid-cols-2'>
-          {compare.map((id) => (
-            <LazyProduct key={id} id={id} />
-          ))}
+        <div className='flex flex-wrap items-end gap-3'>
+          {seed.length > 0 && (
+            <Field label='商品范围'>
+              <select
+                aria-label='复核商品范围'
+                className='h-10 rounded-md border bg-background px-3'
+                value={scope}
+                onChange={(e) => {
+                  setScope(e.target.value);
+                  groupPages(1);
+                }}
+              >
+                <option value='selected'>商品库已选 {seed.length} 项</option>
+                <option value='filtered'>当前筛选结果</option>
+              </select>
+            </Field>
+          )}
+          <div className='min-w-0 flex-1 basis-80'>
+            <Field label='类型组'>
+              <select
+                ref={navigation}
+                aria-label='类型组'
+                className='h-10 w-full min-w-0 rounded-md border bg-background px-3 text-sm'
+                disabled={!groups.length || workspace.isFetching || busy}
+                value={data?.group?.id || ''}
+                onChange={(e) => choose(e.target.value)}
+              >
+                {groups.length ? (
+                  groups.map((g) => (
+                    <option key={g.id} value={g.id}>
+                      {g.title}（{g.products} 项 · 待复核 {g.pending} · 样本 {g.samples}）
+                    </option>
+                  ))
+                ) : (
+                  <option value=''>暂无类型组</option>
+                )}
+              </select>
+            </Field>
+          </div>
+          <div className='flex flex-wrap items-center gap-2'>
+            <Button
+              variant='outline'
+              disabled={busy || workspace.isFetching || !data || data.groups.page <= 1}
+              onClick={() => groupPages((data?.groups.page || 1) - 1)}
+            >
+              前20组
+            </Button>
+            <span className='text-xs text-muted-foreground'>
+              第 {data?.groups.page || 1} / {Math.max(1, Math.ceil((data?.groups.total || 0) / 20))}{' '}
+              页
+            </span>
+            <Button
+              variant='outline'
+              disabled={
+                busy || workspace.isFetching || !data || data.groups.page * 20 >= data.groups.total
+              }
+              onClick={() => groupPages((data?.groups.page || 1) + 1)}
+            >
+              后20组
+            </Button>
+            <Button
+              variant='secondary'
+              disabled={
+                busy ||
+                workspace.isFetching ||
+                !data?.group ||
+                (index >= groups.length - 1 && data.groups.page * 20 >= data.groups.total)
+              }
+              onClick={next}
+            >
+              下一类型组
+            </Button>
+          </div>
         </div>
+      </section>
+      {workspace.isError && (
+        <p role='alert' className='text-destructive'>
+          {workspace.error.message}
+        </p>
       )}
-      <div className='flex gap-2'>
-        <Button
-          disabled={
-            busy ||
-            !selected.length ||
-            selected.length > 100 ||
-            (mode === 'reference' && !reference)
-          }
-          onClick={() =>
-            void act(async () => {
-              const p = await request<BatchPreview>('/review-batches/preview', 'POST', {
-                product_ids: scope==='family' ? selected.slice(0,1) : selected,
-                scope,action,category:action==='categorize' ? category : null,
-                mode,
-                reference_product_id: reference,
-                status,
-                reason,
-                note
-              });
-              setPreview(p);
-              setResult(null);
-            }, '预览已生成，请核对后确认')
-          }
-        >
-          生成批量预览
-        </Button>
-      </div>
-      {preview && (
-        <section className='space-y-2 rounded border p-4'>
-          <h3 className='font-semibold'>
-            即将采用：
-            <Badge value={preview.status} />
-          </h3>
-          <p>{preview.action==='categorize' ? `将分类为：${preview.category}` : preview.reason}</p><p className='text-sm'>实际目标 {preview.targets.length} 个；范围：{preview.scope==='family' ? '同父体子体（仅以下明确列出的目标）' : '已选子体'}</p>
-          <p className='text-muted-foreground text-sm'>
-            有效至 {new Date(preview.expires_at).toLocaleString()}
-          </p>
-          {preview.targets.map((p) => (
-            <p key={p.id} className='text-sm'>
-              {p.asin} · {p.title} · {p.eligible ? '将保存' : p.skip_reason}
-            </p>
-          ))}
-          <Button
-            disabled={busy}
-            onClick={() =>
-              void act(async () => {
-                setResult(
-                  await request<BatchResult>(`/review-batches/${preview.id}/apply`, 'POST')
-                );
-                setPreview(null);
-              }, '批量复核已执行')
-            }
-          >
-            确认保存人工结论
-          </Button>
-        </section>
+      {workspace.isLoading && (
+        <p role='status' className='rounded-xl border p-6 text-sm text-muted-foreground'>
+          正在加载商品与参考样本…
+        </p>
       )}
-      {result && (
-        <DataBlock
-          title={`处理结果：成功 ${result.success}，跳过 ${result.skipped}`}
-          value={result}
+      {data?.group && (
+        <GroupReview
+          key={data.group.id + ':' + scope}
+          data={data}
+          seed={seed}
+          busy={busy || workspace.isFetching}
+          act={act}
+          memberPage={setMemberPage}
+          samplePage={setSamplePage}
         />
       )}
-      <details className='rounded border p-3' onToggle={(e) => setImagesOpen(e.currentTarget.open)}>
-        <summary>已选商品图片比较（每页50个，展开后加载规格）</summary>
-        {imagesOpen && (
-          <div className='grid gap-3 py-3 md:grid-cols-2'>
-            {ids.map((id) => (
-              <LazyProduct key={id} id={id} />
-            ))}
-          </div>
-        )}
-        <Button
-          variant='outline'
-          disabled={imagePage <= 1}
-          onClick={() => setImagePage((v) => v - 1)}
-        >
-          上一页
-        </Button>
-        <Button
-          variant='outline'
-          disabled={imagePage * 50 >= selected.length}
-          onClick={() => setImagePage((v) => v + 1)}
-        >
-          下一页
-        </Button>
-      </details>
-      <h3 className='font-semibold'>批量操作历史</h3>
-      {history.data?.items.map((b) => (
-        <div key={b.id} className='flex flex-wrap items-center gap-3 rounded border p-3'>
-          <span>{new Date(b.created_at).toLocaleString()}</span>
-          <Badge value={b.state} />
-          <span className='text-sm'>
-            {b.result ? `成功 ${b.result.success}，跳过 ${b.result.skipped}` : '尚未执行'}
-          </span>
-          {b.state === 'applied' && (
-            <Button
-              size='sm'
-              variant='outline'
-              disabled={busy}
-              onClick={() =>
-                void act(async () => {
-                  setResult(await request<BatchResult>(`/review-batches/${b.id}/undo`, 'POST'));
-                }, '撤销已完成，后续修改不会覆盖')
-              }
-            >
-              撤销此批次
-            </Button>
-          )}
-        </div>
-      ))}
+      {data && !data.group && (
+        <p className='rounded-xl border p-8 text-center text-sm text-muted-foreground'>
+          当前范围暂无商品，请调整商品库筛选或先导入商品。
+        </p>
+      )}
+      <ReviewHistory act={act} busy={busy} />
     </div>
   );
 }
 
-export function LazyProduct({ id }: { id: string }) {
-  const product = useScreeningQuery<Product>('/products/' + id);
-  const [expand, setExpand] = useState(false);
+function GroupReview({
+  data,
+  seed,
+  busy,
+  act,
+  memberPage,
+  samplePage
+}: {
+  data: ReviewWorkspace;
+  seed: string[];
+  busy: boolean;
+  act: Action;
+  memberPage: (page: number) => void;
+  samplePage: (page: number) => void;
+}) {
+  const [selected, setSelected] = useState<string[]>(() =>
+    data.items.filter((p) => seed.includes(p.id) && p.review_status === 'pending').map((p) => p.id)
+  );
+  const [action, setAction] = useState('review');
+  const [mode, setMode] = useState('direct');
+  const [status, setStatus] = useState('kept');
+  const [reason, setReason] = useState('');
+  const [note, setNote] = useState('');
+  const [category, setCategory] = useState('');
+  const [reference, setReference] = useState<Product | null>(null);
+  const [compare, setCompare] = useState<Product[]>([]);
+  const [preview, setPreview] = useState<BatchPreview | null>(null);
+  const [result, setResult] = useState<BatchResult | null>(null);
+  const [validation, setValidation] = useState('');
+  const form = useRef<HTMLFormElement>(null);
+  const confirm = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (preview && !busy) {
+      confirm.current?.scrollIntoView({ block: 'center' });
+      confirm.current?.focus();
+    }
+  }, [preview, busy]);
+  const items = data.items || [],
+    samples = data.samples.items || [];
+  const currentReference = samples.find((p) => p.id === reference?.id) || reference;
+  const eligible = items.filter((p) => action === 'categorize' || p.review_status === 'pending');
+  const allChecked = eligible.length > 0 && eligible.every((p) => selected.includes(p.id));
+  const canProcess = (p: Product) => action === 'categorize' || p.review_status === 'pending';
+  function change() {
+    setPreview(null);
+    setValidation('');
+  }
+  function toggle(id: string, checked: boolean) {
+    change();
+    setSelected((old) =>
+      checked ? [...old.filter((x) => x !== id), id].slice(0, 100) : old.filter((x) => x !== id)
+    );
+  }
+  async function generate() {
+    if (!selected.length) {
+      setValidation('请先勾选商品。');
+      return;
+    }
+    if (mode === 'reference' && !currentReference) {
+      setValidation('请先从左侧选择参考样本。');
+      return;
+    }
+    if (!form.current?.reportValidity()) return;
+    await act(async () => {
+      const value = await request<BatchPreview>('/review-batches/preview', 'POST', {
+        product_ids: selected,
+        scope: 'selected',
+        action,
+        category: action === 'categorize' ? category : null,
+        mode,
+        reference_product_id: mode === 'reference' ? currentReference?.id : null,
+        status,
+        reason,
+        note
+      });
+      setPreview(value);
+      setResult(null);
+    }, '预览已生成，请核对后确认');
+  }
   return (
-    <article className='space-y-2 rounded border p-3'>
-      {product.isError ? (
-        <p role='alert'>{product.error.message}</p>
-      ) : product.data ? (
-        <>
-          <ProductPicture product={product.data} />
-          <Button variant='ghost' size='sm' onClick={() => setExpand((v) => !v)}>
-            {expand ? '收起规格' : '展开规格'}
+    <div className='space-y-4' data-review-group={data.group?.id}>
+      <form
+        ref={form}
+        aria-label='批量复核设置'
+        onSubmit={(e) => {
+          e.preventDefault();
+          void generate();
+        }}
+        className='rounded-xl border bg-background p-4'
+      >
+        <fieldset className='space-y-3' disabled={busy}>
+          <legend className='px-1 text-sm font-semibold'>批量处理</legend>
+          <div className='grid gap-3 @xl:grid-cols-2 @4xl:grid-cols-4'>
+            <Field label='处理动作'>
+              <select
+                className='h-10 rounded-md border bg-background px-3'
+                value={action}
+                onChange={(e) => {
+                  setAction(e.target.value);
+                  setSelected([]);
+                  setMode('direct');
+                  change();
+                }}
+              >
+                <option value='review'>人工复核</option>
+                <option value='categorize'>人工归类</option>
+              </select>
+            </Field>
+            <Field label='复核方式'>
+              <select
+                className='h-10 rounded-md border bg-background px-3'
+                value={mode}
+                onChange={(e) => {
+                  setMode(e.target.value);
+                  change();
+                }}
+              >
+                <option value='direct'>直接人工复核</option>
+                <option value='reference'>采用参考样本</option>
+              </select>
+            </Field>
+            {action === 'categorize' ? (
+              <Field label='人工分类'>
+                <Input
+                  name='category'
+                  required={mode === 'direct'}
+                  disabled={mode === 'reference'}
+                  value={mode === 'reference' ? currentReference?.manual_category || '' : category}
+                  onChange={(e) => {
+                    setCategory(e.target.value);
+                    change();
+                  }}
+                />
+              </Field>
+            ) : (
+              <Field label='人工结论'>
+                <select
+                  className='h-10 rounded-md border bg-background px-3'
+                  disabled={mode === 'reference'}
+                  value={mode === 'reference' ? currentReference?.review_status || 'kept' : status}
+                  onChange={(e) => {
+                    setStatus(e.target.value);
+                    change();
+                  }}
+                >
+                  <option value='kept'>保留</option>
+                  <option value='excluded'>排除</option>
+                  <option value='unsure'>待确认</option>
+                </select>
+              </Field>
+            )}
+            <Field
+              label={
+                action === 'review' && status !== 'kept' && mode === 'direct'
+                  ? '原因（必填）'
+                  : '共同原因'
+              }
+            >
+              <Input
+                name='reason'
+                required={action === 'review' && status !== 'kept' && mode === 'direct'}
+                disabled={mode === 'reference'}
+                value={mode === 'reference' ? currentReference?.review_reason || '' : reason}
+                onChange={(e) => {
+                  setReason(e.target.value);
+                  change();
+                }}
+              />
+            </Field>
+            <div className='@xl:col-span-2 @4xl:col-span-4'>
+              <Field label='备注'>
+                <Input
+                  name='note'
+                  disabled={mode === 'reference'}
+                  value={mode === 'reference' ? currentReference?.review_note || '' : note}
+                  onChange={(e) => {
+                    setNote(e.target.value);
+                    change();
+                  }}
+                />
+              </Field>
+            </div>
+          </div>
+        </fieldset>
+      </form>
+      <div className='flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-2'>
+        <div className='flex flex-wrap items-center gap-4'>
+          <label className='flex min-h-10 items-center gap-2 text-sm'>
+            <input
+              type='checkbox'
+              className='size-4 accent-primary'
+              aria-label='全选本页可处理商品'
+              disabled={busy || !eligible.length}
+              checked={allChecked}
+              ref={(node) => {
+                if (node)
+                  node.indeterminate = !allChecked && eligible.some((p) => selected.includes(p.id));
+              }}
+              onChange={(e) => {
+                change();
+                setSelected((old) =>
+                  e.target.checked
+                    ? [...new Set([...old, ...eligible.map((p) => p.id)])].slice(0, 100)
+                    : old.filter((id) => !eligible.some((p) => p.id === id))
+                );
+              }}
+            />
+            全选本页可处理项
+          </label>
+          <Button
+            size='sm'
+            variant='ghost'
+            disabled={!selected.length || busy}
+            onClick={() => {
+              setSelected([]);
+              change();
+            }}
+          >
+            清空勾选
           </Button>
-          {expand && <DataBlock title='详细规格' value={product.data.specs} />}
-        </>
-      ) : (
-        '加载中…'
+        </div>
+        <p className='text-xs text-muted-foreground'>
+          本组 {data.group?.products} 项 · 待复核 {data.group?.pending} · 本页可选 {eligible.length}{' '}
+          项
+        </p>
+      </div>
+      <div className='grid min-w-0 items-start gap-4 @4xl:grid-cols-[18rem_minmax(0,1fr)]'>
+        <aside
+          className='min-w-0 rounded-xl border bg-muted/20 p-3 @4xl:sticky @4xl:top-4'
+          aria-label='人工参考样本'
+        >
+          <details open>
+            <summary className='cursor-pointer py-1 font-semibold'>
+              已复核的参考样本{' '}
+              <span className='text-xs font-normal text-muted-foreground'>
+                ({data.samples.total})
+              </span>
+            </summary>
+            {!samples.length && (
+              <p className='py-5 text-sm leading-relaxed text-muted-foreground'>
+                本类型组暂无参考样本，可直接看图填写共同结论。
+              </p>
+            )}
+            <div className='max-h-[55dvh] space-y-3 overflow-y-auto overscroll-contain pt-3 [scrollbar-gutter:stable]'>
+              {samples.map((p) => (
+                <ReviewProductCard
+                  key={p.id}
+                  product={p}
+                  compact
+                  checked={currentReference?.id === p.id}
+                >
+                  <Button
+                    size='sm'
+                    variant={currentReference?.id === p.id ? 'default' : 'outline'}
+                    disabled={busy}
+                    onClick={() => {
+                      setReference(p);
+                      setMode('reference');
+                      change();
+                    }}
+                  >
+                    {currentReference?.id === p.id ? '当前参考样本' : '采用此样本'}
+                  </Button>
+                  <label className='flex min-h-8 items-center gap-2 text-xs'>
+                    <input
+                      type='checkbox'
+                      className='size-4 accent-primary'
+                      aria-label={'比较样本 ' + p.asin}
+                      checked={compare.some((x) => x.id === p.id)}
+                      disabled={busy}
+                      onChange={(e) =>
+                        setCompare((old) =>
+                          e.target.checked
+                            ? [...old.filter((x) => x.id !== p.id).slice(-1), p]
+                            : old.filter((x) => x.id !== p.id)
+                        )
+                      }
+                    />
+                    对比
+                  </label>
+                </ReviewProductCard>
+              ))}
+            </div>
+            {data.samples.total > 50 && (
+              <div className='mt-3 flex flex-wrap items-center justify-between gap-2'>
+                <Button
+                  size='sm'
+                  variant='outline'
+                  disabled={busy || data.samples.page <= 1}
+                  onClick={() => samplePage(data.samples.page - 1)}
+                >
+                  前50个样本
+                </Button>
+                <span className='text-xs'>
+                  {data.samples.page} / {Math.ceil(data.samples.total / 50)}
+                </span>
+                <Button
+                  size='sm'
+                  variant='outline'
+                  disabled={busy || data.samples.page * 50 >= data.samples.total}
+                  onClick={() => samplePage(data.samples.page + 1)}
+                >
+                  后50个样本
+                </Button>
+              </div>
+            )}
+          </details>
+        </aside>
+        <section
+          className='min-w-0 max-h-[62dvh] space-y-4 overflow-y-auto overscroll-contain pe-2 [scrollbar-gutter:stable]'
+          aria-label='本组候选商品'
+        >
+          <div>
+            <h3 className='break-words text-lg font-semibold'>{data.group?.title}</h3>
+            <p className='mt-1 text-xs text-muted-foreground'>
+              逐项看图勾选，已有人工结论不会被批量覆盖。
+            </p>
+          </div>
+          {compare.length === 2 && (
+            <section className='space-y-3 rounded-xl border p-3' aria-label='样本对比'>
+              <div className='flex items-center justify-between gap-2'>
+                <h4 className='text-sm font-semibold'>样本对比</h4>
+                <Button size='sm' variant='ghost' onClick={() => setCompare([])}>
+                  关闭对比
+                </Button>
+              </div>
+              <div className='grid min-w-0 gap-3 @3xl:grid-cols-2'>
+                {compare.map((p) => (
+                  <ReviewProductCard key={p.id} product={p} />
+                ))}
+              </div>
+            </section>
+          )}
+          {mode === 'reference' && currentReference && (
+            <section className='space-y-2 rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-3'>
+              <h4 className='text-sm font-semibold text-emerald-700 dark:text-emerald-300'>
+                当前参考样本
+              </h4>
+              <ReviewProductCard product={currentReference} />
+            </section>
+          )}
+          {items.map((p) => (
+            <ReviewProductCard
+              key={p.id}
+              product={p}
+              checked={selected.includes(p.id)}
+              disabled={
+                busy || !canProcess(p) || (selected.length >= 100 && !selected.includes(p.id))
+              }
+              onCheck={(checked) => toggle(p.id, checked)}
+            />
+          ))}
+          <div className='flex flex-wrap items-center justify-between gap-2 rounded-xl border p-3'>
+            <Button
+              variant='outline'
+              disabled={busy || data.page <= 1}
+              onClick={() => memberPage(data.page - 1)}
+            >
+              上一页商品
+            </Button>
+            <span className='text-xs text-muted-foreground'>
+              第 {data.page} / {Math.max(1, Math.ceil((data.group?.products || 0) / 50))} 页 ·
+              每页50项
+            </span>
+            <Button
+              variant='outline'
+              disabled={busy || data.page * 50 >= (data.group?.products || 0)}
+              onClick={() => memberPage(data.page + 1)}
+            >
+              下一页商品
+            </Button>
+          </div>
+        </section>
+      </div>
+      {preview && (
+        <section
+          className='space-y-3 rounded-xl border border-primary/30 bg-primary/5 p-4'
+          aria-label='批量复核预览'
+          data-review-preview
+        >
+          <h3 className='font-semibold'>核对本次修改</h3>
+          <p className='flex flex-wrap items-center gap-2 text-sm'>
+            {preview.action === 'categorize' ? (
+              '归类为 ' + preview.category
+            ) : (
+              <>
+                <Badge value={preview.status} />
+                {preview.reason || '无共同原因'}
+              </>
+            )}
+          </p>
+          <p className='text-xs text-muted-foreground'>
+            将保存 {preview.targets.filter((p) => p.eligible).length} 项 · 跳过{' '}
+            {preview.targets.filter((p) => !p.eligible).length} 项 · 有效至{' '}
+            {new Date(preview.expires_at).toLocaleTimeString()}
+          </p>
+          <ul className='max-h-64 space-y-2 overflow-y-auto text-sm'>
+            {preview.targets.map((p) => (
+              <li key={p.id} className='flex flex-wrap gap-2'>
+                <strong>{p.asin}</strong>
+                <span className='flex-1'>{p.title}</span>
+                <span>{p.eligible ? '将保存' : p.skip_reason}</span>
+              </li>
+            ))}
+          </ul>
+          <div className='flex flex-wrap gap-2'>
+            <Button
+              ref={confirm}
+              disabled={busy || !preview.targets.some((p) => p.eligible)}
+              onClick={() =>
+                void act(async () => {
+                  const value = await request<BatchResult>(
+                    '/review-batches/' + preview.id + '/apply',
+                    'POST'
+                  );
+                  setResult(value);
+                  setPreview(null);
+                  setSelected([]);
+                }, '批量复核已保存')
+              }
+            >
+              确认保存本批修改
+            </Button>
+            <Button variant='outline' disabled={busy} onClick={() => setPreview(null)}>
+              返回调整
+            </Button>
+          </div>
+        </section>
       )}
-    </article>
+      {result && (
+        <div role='status' className='rounded-xl border bg-muted/30 p-4 text-sm'>
+          已处理：成功 {result.success} 项，跳过 {result.skipped} 项。
+          {result.skipped > 0 && (
+            <ul className='mt-2 space-y-1 text-muted-foreground'>
+              {result.items
+                .filter((p) => !p.success)
+                .map((p) => (
+                  <li key={p.id}>
+                    {p.asin || p.id} · {p.reason || p.skip_reason || '数据已变化'}
+                  </li>
+                ))}
+            </ul>
+          )}
+        </div>
+      )}
+      <div
+        className='sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-background/95 px-4 py-3 shadow-lg backdrop-blur-sm'
+        data-review-toolbar
+      >
+        <div>
+          <p className='font-semibold' role='status'>
+            已选 {selected.length} / 100 项
+          </p>
+          {validation && (
+            <p role='alert' className='mt-1 text-xs text-destructive'>
+              {validation}
+            </p>
+          )}
+        </div>
+        <Button disabled={busy || !selected.length} onClick={() => void generate()}>
+          预览批量复核
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function ReviewHistory({ act, busy }: { act: Action; busy: boolean }) {
+  const history = useScreeningQuery<PageResult<BatchRecord>>('/review-batches');
+  return (
+    <details className='rounded-xl border p-4'>
+      <summary className='cursor-pointer text-sm font-semibold'>批量操作历史</summary>
+      <div className='mt-3 space-y-2'>
+        {history.isError && <p role='alert'>{history.error.message}</p>}
+        {history.data?.items.length === 0 && (
+          <p className='text-sm text-muted-foreground'>暂无批量操作</p>
+        )}
+        {history.data?.items.map((b) => (
+          <div
+            key={b.id}
+            className='flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3'
+          >
+            <div className='flex flex-wrap items-center gap-2 text-sm'>
+              <span>{new Date(b.created_at).toLocaleString()}</span>
+              <Badge value={b.state} />
+              <span className='text-xs text-muted-foreground'>
+                {b.result ? '成功 ' + b.result.success + ' · 跳过 ' + b.result.skipped : '尚未执行'}
+              </span>
+            </div>
+            {b.state === 'applied' && (
+              <Button
+                size='sm'
+                variant='outline'
+                disabled={busy}
+                onClick={() =>
+                  void act(async () => {
+                    await request<BatchResult>('/review-batches/' + b.id + '/undo', 'POST');
+                  }, '已撤销可恢复的修改')
+                }
+              >
+                撤销此批次
+              </Button>
+            )}
+          </div>
+        ))}
+      </div>
+    </details>
   );
 }

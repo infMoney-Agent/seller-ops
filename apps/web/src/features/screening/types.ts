@@ -254,3 +254,22 @@ export interface FamilyResult extends PageResult<Product> {
   aggregate_label: string;
   parent_monthly: ParentMonthly[];
 }
+
+export interface ReviewTypeGroup {
+  id: string;
+  title: string;
+  marketplace: string;
+  products: number;
+  pending: number;
+  reviewed: number;
+  samples: number;
+}
+export interface ReviewWorkspace {
+  groups: PageResult<ReviewTypeGroup>;
+  counts: { products: number; groups: number; pending: number };
+  group: ReviewTypeGroup | null;
+  items: Product[];
+  page: number;
+  page_size: number;
+  samples: PageResult<Product>;
+}

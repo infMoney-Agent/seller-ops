@@ -937,7 +937,15 @@ export default function ScreeningPage() {
               )}
             </>
           )}
-          {tab === 2 && <ReviewPanel selected={selectedIds} act={act} busy={busy} />}
+          {tab === 2 && (
+            <ReviewPanel
+              key={session.workspaceId}
+              selected={selectedIds}
+              filters={filters}
+              act={act}
+              busy={busy}
+            />
+          )}
           {tab === 3 && (
             <ProfitPanel
               key={`${focus?.id || 'none'}:${focus?.monthly_id || 'latest'}`}

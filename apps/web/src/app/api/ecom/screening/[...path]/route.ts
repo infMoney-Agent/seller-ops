@@ -8,7 +8,7 @@ const uuid = '[0-9a-fA-F-]{36}';
 const routes = [
   [
     'GET',
-    'parents/monthly|summary|months|products|imports|policies|review-batches|profit/templates'
+    'parents/monthly|summary|months|products|imports|policies|review-batches|review-workspace|profit/templates'
   ],
   [
     'POST',

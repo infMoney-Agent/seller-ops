@@ -65,6 +65,8 @@ func (s *service) route(w http.ResponseWriter, r *http.Request) (any, error) {
 			return s.summary(r)
 		case "imports":
 			return s.list(r, "ps_imports", "tenant_id=$1 AND NOT(counts ? 'data_deleted_at')", a.Tenant)
+		case "review-workspace":
+			return s.reviewWorkspace(r)
 		case "review-batches":
 			return s.list(r, "ps_jobs", "tenant_id=$1 AND kind='review'", a.Tenant)
 		case "policies", "profit/templates":
