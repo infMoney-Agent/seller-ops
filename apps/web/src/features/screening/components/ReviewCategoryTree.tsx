@@ -37,7 +37,7 @@ export default function ReviewCategoryTree({
           {tree.error.message}
         </p>
       )}
-      <ul className='max-h-[28dvh] @3xl:max-h-[65dvh] [scrollbar-gutter:stable] space-y-1 overflow-auto overscroll-contain text-xs'>
+      <ul className='max-h-[28dvh] [scrollbar-gutter:stable] space-y-1 overflow-auto overscroll-contain text-xs'>
         {tree.data?.items.map((node) => (
           <CategoryBranch
             key={node.id}

@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useId, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useScreeningQuery } from '../queries';
 import { request } from '../service';
 import type {
@@ -29,6 +30,7 @@ export default function ReviewPanel({
 }) {
   const [categoriesOpen, setCategoriesOpen] = useState(true);
   const categoryID = useId();
+  const [referenceContainer, setReferenceContainer] = useState<HTMLDivElement | null>(null);
   const [seed] = useState(selected);
   const [scope, setScope] = useState(seed.length ? 'selected' : 'filtered');
   const [categoryPath, setCategoryPath] = useState<string[]>([]);
@@ -84,15 +86,18 @@ export default function ReviewPanel({
         <aside
           id={categoryID}
           hidden={!categoriesOpen}
-          className='min-w-0 rounded-xl border bg-muted/30 p-3 @3xl:sticky @3xl:top-20'
+          className='max-h-[calc(100dvh-7rem)] min-w-0 space-y-4 overflow-y-auto overscroll-contain @3xl:sticky @3xl:top-20 [scrollbar-gutter:stable]'
           data-review-category-sidebar
         >
-          <ReviewCategoryTree
-            query={categoryParams.toString()}
-            selected={categoryPath}
-            busy={busy}
-            onSelect={selectCategory}
-          />
+          <div className='rounded-xl border bg-muted/30 p-3'>
+            <ReviewCategoryTree
+              query={categoryParams.toString()}
+              selected={categoryPath}
+              busy={busy}
+              onSelect={selectCategory}
+            />
+          </div>
+          <div ref={setReferenceContainer} />
         </aside>
         <div className='@container min-w-0 space-y-4' data-review-content>
           <section className='space-y-2 rounded-xl border bg-muted/30 p-3'>
@@ -181,6 +186,7 @@ export default function ReviewPanel({
               act={act}
               memberPage={setMemberPage}
               samplePage={setSamplePage}
+              referenceContainer={referenceContainer}
             />
           )}
           {data && !data.group && (
@@ -201,7 +207,8 @@ function GroupReview({
   busy,
   act,
   memberPage,
-  samplePage
+  samplePage,
+  referenceContainer
 }: {
   data: ReviewWorkspace;
   seed: string[];
@@ -209,6 +216,7 @@ function GroupReview({
   act: Action;
   memberPage: (page: number) => void;
   samplePage: (page: number) => void;
+  referenceContainer: HTMLDivElement | null;
 }) {
   const [selected, setSelected] = useState<string[]>(() =>
     data.items.filter((p) => seed.includes(p.id) && p.review_status === 'pending').map((p) => p.id)
@@ -424,88 +432,89 @@ function GroupReview({
           {eligible.length} 项
         </p>
       </div>
-      <div className='grid min-w-0 items-start gap-4 @3xl:grid-cols-[14rem_minmax(0,1fr)]'>
-        <aside
-          className='min-w-0 rounded-xl border bg-muted/20 p-3 @3xl:sticky @3xl:top-4'
-          aria-label='人工参考样本'
-        >
-          <details open>
-            <summary className='cursor-pointer py-1 font-semibold'>
-              已复核的参考样本{' '}
-              <span className='text-xs font-normal text-muted-foreground'>
-                ({data.samples.total})
-              </span>
-            </summary>
-            {!samples.length && (
-              <p className='py-5 text-sm leading-relaxed text-muted-foreground'>
-                本类目暂无参考样本，可直接看图填写共同结论。
-              </p>
-            )}
-            <div className='max-h-[55dvh] space-y-3 overflow-y-auto overscroll-contain pt-3 [scrollbar-gutter:stable]'>
-              {samples.map((p) => (
-                <ReviewProductCard
-                  key={p.id}
-                  product={p}
-                  compact
-                  checked={currentReference?.id === p.id}
-                >
-                  <Button
-                    size='sm'
-                    variant={currentReference?.id === p.id ? 'default' : 'outline'}
-                    disabled={busy}
-                    onClick={() => {
-                      setReference(p);
-                      setMode('reference');
-                      change();
-                    }}
-                  >
-                    {currentReference?.id === p.id ? '当前参考样本' : '采用此样本'}
-                  </Button>
-                  <label className='flex min-h-8 items-center gap-2 text-xs'>
-                    <input
-                      type='checkbox'
-                      className='size-4 accent-primary'
-                      aria-label={'比较样本 ' + p.asin}
-                      checked={compare.some((x) => x.id === p.id)}
-                      disabled={busy}
-                      onChange={(e) =>
-                        setCompare((old) =>
-                          e.target.checked
-                            ? [...old.filter((x) => x.id !== p.id).slice(-1), p]
-                            : old.filter((x) => x.id !== p.id)
-                        )
-                      }
-                    />
-                    对比
-                  </label>
-                </ReviewProductCard>
-              ))}
-            </div>
-            {data.samples.total > 50 && (
-              <div className='mt-3 flex flex-wrap items-center justify-between gap-2'>
-                <Button
-                  size='sm'
-                  variant='outline'
-                  disabled={busy || data.samples.page <= 1}
-                  onClick={() => samplePage(data.samples.page - 1)}
-                >
-                  前50个样本
-                </Button>
-                <span className='text-xs'>
-                  {data.samples.page} / {Math.ceil(data.samples.total / 50)}
-                </span>
-                <Button
-                  size='sm'
-                  variant='outline'
-                  disabled={busy || data.samples.page * 50 >= data.samples.total}
-                  onClick={() => samplePage(data.samples.page + 1)}
-                >
-                  后50个样本
-                </Button>
-              </div>
-            )}
-          </details>
-        </aside>
+      <div className='min-w-0 space-y-4'>
+        {referenceContainer &&
+          createPortal(
+            <aside className='min-w-0 rounded-xl border bg-muted/20 p-3' aria-label='人工参考样本'>
+              <details open>
+                <summary className='cursor-pointer py-1 font-semibold'>
+                  已复核的参考样本{' '}
+                  <span className='text-xs font-normal text-muted-foreground'>
+                    ({data.samples.total})
+                  </span>
+                </summary>
+                {!samples.length && (
+                  <p className='py-5 text-sm leading-relaxed text-muted-foreground'>
+                    本类目暂无参考样本，可直接看图填写共同结论。
+                  </p>
+                )}
+                <div className='max-h-[38dvh] space-y-3 overflow-y-auto overscroll-contain pt-3 [scrollbar-gutter:stable]'>
+                  {samples.map((p) => (
+                    <ReviewProductCard
+                      key={p.id}
+                      product={p}
+                      compact
+                      checked={currentReference?.id === p.id}
+                    >
+                      <Button
+                        size='sm'
+                        variant={currentReference?.id === p.id ? 'default' : 'outline'}
+                        disabled={busy}
+                        onClick={() => {
+                          setReference(p);
+                          setMode('reference');
+                          change();
+                        }}
+                      >
+                        {currentReference?.id === p.id ? '当前参考样本' : '采用此样本'}
+                      </Button>
+                      <label className='flex min-h-8 items-center gap-2 text-xs'>
+                        <input
+                          type='checkbox'
+                          className='size-4 accent-primary'
+                          aria-label={'比较样本 ' + p.asin}
+                          checked={compare.some((x) => x.id === p.id)}
+                          disabled={busy}
+                          onChange={(e) =>
+                            setCompare((old) =>
+                              e.target.checked
+                                ? [...old.filter((x) => x.id !== p.id).slice(-1), p]
+                                : old.filter((x) => x.id !== p.id)
+                            )
+                          }
+                        />
+                        对比
+                      </label>
+                    </ReviewProductCard>
+                  ))}
+                </div>
+                {data.samples.total > 50 && (
+                  <div className='mt-3 flex flex-wrap items-center justify-between gap-2'>
+                    <Button
+                      size='sm'
+                      variant='outline'
+                      disabled={busy || data.samples.page <= 1}
+                      onClick={() => samplePage(data.samples.page - 1)}
+                    >
+                      前50个样本
+                    </Button>
+                    <span className='text-xs'>
+                      {data.samples.page} / {Math.ceil(data.samples.total / 50)}
+                    </span>
+                    <Button
+                      size='sm'
+                      variant='outline'
+                      disabled={busy || data.samples.page * 50 >= data.samples.total}
+                      onClick={() => samplePage(data.samples.page + 1)}
+                    >
+                      后50个样本
+                    </Button>
+                  </div>
+                )}
+              </details>
+            </aside>,
+            referenceContainer
+          )}
         <TableScroll
           label='本类目候选商品'
           className='max-h-[62dvh] min-w-0 space-y-4 overscroll-contain border-0 pe-2 [scrollbar-gutter:stable]'
