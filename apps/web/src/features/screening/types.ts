@@ -274,3 +274,12 @@ export interface ReviewWorkspace {
   page_size: number;
   samples: PageResult<Product>;
 }
+
+export interface ReviewCategory {
+  id: string;
+  name: string;
+  path: string[];
+  products: number;
+  pending: number;
+  children: ReviewCategory[];
+}

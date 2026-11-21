@@ -33,6 +33,7 @@ import { useTableTextAlignment } from '../use-table-text-alignment';
 import { countryCode, listingAge, shanghaiToday } from '../product-display';
 import ImportDialog from './ImportDialog';
 import ReviewPanel from './ReviewPanel';
+import BatchReviewDialog from './BatchReviewDialog';
 import ProfitPanel from './ProfitPanel';
 import PolicyPanel from './PolicyPanel';
 import ProductParameters from './ProductParameters';
@@ -107,7 +108,7 @@ function sortDirection(
 }
 const tabs = [
   { id: 0, title: '商品库' },
-  { id: 2, title: '批量复核' },
+  { id: 2, title: '分组复核' },
   { id: 3, title: '利润测算' },
   { id: 4, title: '规则与历史' },
   { id: 5, title: '父体数据' }
@@ -124,6 +125,7 @@ export default function ScreeningPage() {
   const client = useQueryClient();
   const [tab, setTab] = useState(0);
   const [importOpen, setImportOpen] = useState(false);
+  const [batchReviewOpen, setBatchReviewOpen] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [page, setPage] = useState(1);
   const [filters, setFilters] = useState<Record<string, string>>({ show_merged: 'false' });
@@ -850,7 +852,7 @@ export default function ScreeningPage() {
                 <Button variant='outline' onClick={() => setSelected({})}>
                   清空
                 </Button>
-                <Button disabled={!selectedIds.length} onClick={() => setTab(2)}>
+                <Button disabled={!selectedIds.length} onClick={() => setBatchReviewOpen(true)}>
                   批量复核
                 </Button>
                 <Button
@@ -1153,6 +1155,15 @@ export default function ScreeningPage() {
           {tab === 4 && <PolicyPanel selected={selectedIds} act={act} watch={watch} busy={busy} />}
         </div>
       </PageContainer>
+      <BatchReviewDialog
+        key={'batch-' + session.workspaceId}
+        open={batchReviewOpen}
+        onClose={() => setBatchReviewOpen(false)}
+        selected={selectedIds}
+        act={act}
+        busy={busy}
+        onApplied={() => setSelected({})}
+      />
       <ImportDialog
         key={session.workspaceId}
         open={importOpen}

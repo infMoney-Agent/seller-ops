@@ -6438,6 +6438,14 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "category_path",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "JSON编码的类目名称数组，选择父节点包含其全部后代。"
           }
         ],
         "responses": {
@@ -6446,6 +6454,17 @@
           },
           "422": {
             "description": "无效查询参数"
+          }
+        }
+      }
+    },
+    "/api/v1/screening/review-categories": {
+      "get": {
+        "summary": "真实商品类目目录树",
+        "description": "按现有筛选与明确商品ID返回真实类目层级、商品数和待复核数，不受当前类目选择限制。",
+        "responses": {
+          "200": {
+            "description": "items: recursive nodes with id, name, path, products, pending, children"
           }
         }
       }

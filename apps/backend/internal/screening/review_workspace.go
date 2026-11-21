@@ -37,29 +37,13 @@ func (s *service) reviewWorkspace(r *http.Request) (any, error) {
 	if e != nil {
 		return nil, e
 	}
-	chosen, selected := v.Get("group_id"), v.Get("selected_ids")
+	chosen := v.Get("group_id")
 	if chosen != "" && (len(chosen) != 32 || strings.Trim(chosen, "0123456789abcdef") != "") {
 		return nil, fail(422, "类型组无效")
 	}
-	for _, k := range []string{"group_page", "member_page", "sample_page", "group_id", "selected_ids"} {
-		v.Del(k)
-	}
-	if e = validateFilters(v); e != nil {
+	q, e := reviewCandidateQuery(r, false)
+	if e != nil {
 		return nil, e
-	}
-	q := newProductQuery(a, v)
-	if selected != "" {
-		ids := strings.Split(selected, ",")
-		if len(ids) > 100 {
-			return nil, fail(422, "最多选择100个商品")
-		}
-		for _, id := range ids {
-			if !uuidPattern.MatchString(id) {
-				return nil, fail(422, "商品ID无效")
-			}
-		}
-		q.args = append(q.args, ids)
-		q.where += fmt.Sprintf(" AND p.id=ANY($%d::uuid[])", len(q.args))
 	}
 	from := " FROM ps_products p " + filterJoins(q, false) + " WHERE " + q.where
 	counts, e := s.one(ctx, "SELECT jsonb_build_object('products',count(*),'groups',count(DISTINCT "+reviewTypeKeySQL+"),'pending',count(*) FILTER(WHERE p.review_status='pending'))"+from, q.args...)

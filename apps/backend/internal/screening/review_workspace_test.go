@@ -107,4 +107,34 @@ func TestReviewWorkspace(t *testing.T) {
 	if integer(last["groups"].(Object)["total"]) != 23 {
 		t.Fatal(last)
 	}
+	// Real category paths retain every level; selecting a parent includes descendants.
+	if _, e = db.Exec(ctx, "UPDATE ps_products SET category_path='Home & Kitchen:Kitchen & Dining:Storage:Hooks:Wall Hooks' WHERE tenant_id=801 AND id=ANY($1::uuid[])", ids[:2]); e != nil {
+		t.Fatal(e)
+	}
+	if _, e = db.Exec(ctx, "UPDATE ps_products SET category_path='Home & Kitchen:Bath:Hooks' WHERE tenant_id=801 AND id=$1", ids[2]); e != nil {
+		t.Fatal(e)
+	}
+	req := httptest.NewRequest("GET", "http://screening/api/v1/screening/review-categories", nil).WithContext(context.WithValue(ctx, identityKey{}, identity{Tenant: 801, User: 1, Role: "member"}))
+	tree, e := svc.reviewCategories(req)
+	if e != nil {
+		t.Fatal(e)
+	}
+	var kitchen *reviewCategoryNode
+	for _, node := range tree.(Object)["items"].([]*reviewCategoryNode) {
+		if node.Name == "Home & Kitchen" {
+			kitchen = node
+		}
+	}
+	if kitchen == nil || kitchen.Products != 3 || len(kitchen.Children) != 2 {
+		t.Fatal("invalid tree", tree)
+	}
+	branch := call(url.Values{"category_path": {string(encoded([]string{"Home & Kitchen", "Kitchen & Dining"}))}})
+	if integer(branch["counts"].(Object)["products"]) != 2 {
+		t.Fatal("descendant filter failed", branch)
+	}
+	leaf := call(url.Values{"category_path": {string(encoded([]string{"Home & Kitchen", "Kitchen & Dining", "Storage", "Hooks", "Wall Hooks"}))}})
+	if integer(leaf["counts"].(Object)["products"]) != 2 {
+		t.Fatal("deep category lost", leaf)
+	}
+
 }

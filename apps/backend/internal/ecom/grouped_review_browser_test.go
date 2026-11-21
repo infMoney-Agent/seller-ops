@@ -32,8 +32,8 @@ func TestBrowserGroupedReview(t *testing.T) {
 	seed := `(async()=>{
  const api='/api/ecom/screening/';async function call(path,method='GET',body){const r=await fetch(api+path,{method,headers:{'Idempotency-Key':crypto.randomUUID(),...(body?{'Content-Type':'application/json'}:{})},body:body?JSON.stringify(body):undefined});const v=await r.json();if(!r.ok)throw Error(JSON.stringify(v));return v;}
  const wait=async id=>{for(let i=0;i<100;i++){const j=await call('jobs/'+id);if(j.state==='failed')throw Error(JSON.stringify(j));if(['succeeded','partial'].includes(j.state))return j;await new Promise(r=>setTimeout(r,100));}throw Error('Job timeout')};
- const rows=['ASIN,商品标题,父ASIN,变体数,月销量,子体销量,价格($),商品尺寸（单位换算）,商品主图,卖家ID,卖家所属地,小类目'];
- for(let i=1;i<=6;i++){const title=i===6?'cotton cleaning cloth':'stainless steel storage hook '+['red','blue','black','white','green'][i-1];rows.push(['GROUP0000'+i,title,'PARENT000'+i,'1','800','200+','19.99','22 x 10 x 4 cm','https://m.media-amazon.com/images/I/51Bpnh7KZuL._AC_US600_.jpg','SELLER000'+i,'US',i===6?'Cleaning Cloths':'Utility Hooks'].join(','));}
+ const rows=['ASIN,商品标题,父ASIN,变体数,月销量,子体销量,价格($),商品尺寸（单位换算）,商品主图,卖家ID,卖家所属地,小类目,类目路径'];
+ for(let i=1;i<=6;i++){const title=i===6?'cotton cleaning cloth':'stainless steel storage hook '+['red','blue','black','white','green'][i-1];rows.push(['GROUP0000'+i,title,'PARENT000'+i,'1','800','200+','19.99','22 x 10 x 4 cm','https://m.media-amazon.com/images/I/51Bpnh7KZuL._AC_US600_.jpg','SELLER000'+i,'US',i===6?'Cleaning Cloths':'Utility Hooks',i===6?'Home & Kitchen:Bath:Cleaning:Cloths':'Home & Kitchen:Kitchen & Dining:Storage:Hooks'].join(','));}
  const f=new FormData();f.set('file',new Blob([rows.join('\n')],{type:'text/csv'}),'Product-Tools-US-2026.08-group-review.csv');f.set('source_type','sellersprite');f.set('period_type','calendar_month');const upload=await fetch(api+'imports',{method:'POST',headers:{'Idempotency-Key':crypto.randomUUID()},body:f});const u=await upload.json();if(!upload.ok)throw Error(JSON.stringify(u));await wait(u.job_id);const c=await call('imports/'+u.import_id+'/commit','POST');const done=await wait(c.job_id);if(done.result?.screen?.job_id)await wait(done.result.screen.job_id);
  const all=await call('products?show_merged=true');const products=all.items.filter(p=>p.asin.startsWith('GROUP'));if(products.length!==6)throw Error('Fixture import failed');
  for(let i=0;i<2;i++){const p=products.find(p=>p.asin==='GROUP0000'+(i+1));await call('products/'+p.id+'/review','PATCH',{expected_data_revision:p.data_revision,expected_review_revision:p.review_revision,status:i===0?'kept':'excluded',reason:'已核对材质和结构',note:'隔离分组测试样本'});}
@@ -43,8 +43,28 @@ func TestBrowserGroupedReview(t *testing.T) {
 		t.Fatal("seed", e)
 	}
 	if e := chromedp.Run(ctx,
+		chromedp.Reload(), chromedp.WaitReady(`#main-content`, chromedp.ByQuery),
+		chromedp.Poll(`!!document.querySelector('[data-screening-table] tbody input[type=checkbox]')`, nil),
+		chromedp.Evaluate(`(()=>{const row=[...document.querySelectorAll('[data-screening-table] tbody tr')].find(r=>r.textContent.includes('GROUP00006'));row.querySelector('input[type=checkbox]').click();})()`, nil),
 		chromedp.Evaluate(`[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='批量复核').click()`, nil),
+		chromedp.Poll(`!!document.querySelector('form[aria-label="已选商品批量复核"]')`, nil),
+		chromedp.Evaluate(`document.querySelector('form[aria-label="已选商品批量复核"] button[type=submit]').click()`, nil),
+		chromedp.Poll(`!!document.querySelector('section[aria-label="已选商品批量预览"]')`, nil),
+		chromedp.Evaluate(`document.querySelector('button[aria-label="关闭批量复核已选商品"]').click()`, nil),
+		chromedp.Poll(`!document.querySelector('form[aria-label="已选商品批量复核"]')`, nil),
+		chromedp.Evaluate(`[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='清空').click()`, nil),
+	); e != nil {
+		t.Fatal("direct review from library", e)
+	}
+
+	if e := chromedp.Run(ctx,
+		chromedp.Evaluate(`[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='分组复核').click()`, nil),
 		chromedp.Poll(`document.querySelector('[data-review-workspace]')&&document.querySelectorAll('aside[aria-label="人工参考样本"] article').length===2&&document.querySelectorAll('[aria-label="本组候选商品"] article').length===5`, nil),
+
+		chromedp.Poll(`document.querySelector('nav[aria-label="商品分类目录"]')?.textContent.includes('Kitchen & Dining')`, nil),
+		chromedp.Evaluate(`(()=>{const tree=document.querySelector('nav[aria-label="商品分类目录"]');[...tree.querySelectorAll('button')].find(b=>b.textContent.includes('Kitchen & Dining')).click();})()`, nil),
+		chromedp.Poll(`(()=>{const s=document.querySelector('nav[aria-label="商品分类目录"] button[aria-current="true"]');return s?.textContent.includes('Kitchen & Dining')&&document.querySelectorAll('[aria-label="本组候选商品"] article').length===5})()`, nil),
+
 		chromedp.Evaluate(`(()=>{const refs=document.querySelector('aside[aria-label="人工参考样本"]');refs.querySelector('button').click();const compare=refs.querySelectorAll('input[aria-label^="比较样本"]');compare[0].click();compare[1].click();})()`, nil),
 		chromedp.Poll(`!!document.querySelector('section[aria-label="样本对比"]')`, nil),
 		chromedp.Evaluate(`(()=>{const scroll=document.querySelector('[aria-label="本组候选商品"]');if(scroll.tabIndex!==0)throw Error('Candidate scroll region must accept keyboard focus');scroll.focus();document.querySelector('input[aria-label="全选本页可处理商品"]').click()})()`, nil),
