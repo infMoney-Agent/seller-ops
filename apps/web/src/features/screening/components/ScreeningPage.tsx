@@ -54,15 +54,15 @@ import {
 const minimumColumnWidths: ColumnSizingState = {
   selection: 40,
   asin: 156,
-  price_usd: 84,
-  monthly_sales: 64,
-  rating_reviews: 100,
+  price_usd: 104,
+  monthly_sales: 88,
+  rating_reviews: 132,
   listing_date: 90,
   dimensions: 120,
   seller: 92,
-  decision: 88,
-  review_status: 72,
-  profit: 88,
+  decision: 96,
+  review_status: 88,
+  profit: 132,
   actions: 56
 };
 function fittedColumnWidths(width: number): ColumnSizingState {
@@ -544,10 +544,21 @@ export default function ScreeningPage() {
     ],
     [familyRows, products.isPlaceholderData, today]
   );
+  const sizedColumns = useMemo(
+    () =>
+      columns.map((column) => ({
+        ...column,
+        minSize:
+          minimumColumnWidths[
+            column.id ?? ('accessorKey' in column ? String(column.accessorKey) : '')
+          ] ?? 40
+      })),
+    [columns]
+  );
   // oxlint-disable-next-line react/incompatible-library -- TanStack Table is intentionally kept outside React Compiler memoization.
   const table = useReactTable({
     data: products.data?.items || [],
-    columns,
+    columns: sizedColumns,
     state: { rowSelection: selected, columnSizing: { ...defaultColumnWidths, ...columnSizing } },
     onColumnSizingChange: (updater) =>
       setColumnSizing((old) => {
@@ -880,7 +891,7 @@ export default function ScreeningPage() {
                     data-screening-table
                     ref={setTableContainer}
                     aria-busy={products.isFetching}
-                    className='bg-card w-full min-w-0 max-w-full max-h-[65vh] overflow-x-auto overflow-y-auto overscroll-x-contain rounded-lg border [contain:inline-size] [&_tbody_p]:text-center [&_tbody_p[data-multiline=true]]:text-left [&_tbody_p[data-multiline=true]]:justify-start [&_[data-auto-align]]:text-center [&_[data-auto-align][data-multiline=true]]:text-left'
+                    className='bg-card w-full min-w-0 max-w-full max-h-[65vh] overflow-x-auto overflow-y-auto overscroll-x-contain rounded-lg border [contain:inline-size] [&_td[data-fixed-align=left]]:text-left [&_td[data-fixed-align=left]_p]:text-left [&_tbody_p]:text-center [&_tbody_p[data-multiline=true]]:text-left [&_tbody_p[data-multiline=true]]:justify-start [&_[data-auto-align]]:text-center [&_[data-auto-align][data-multiline=true]]:text-left'
                   >
                     <table
                       className='table-fixed text-center text-xs'
@@ -902,7 +913,7 @@ export default function ScreeningPage() {
                                 scope='col'
                                 key={h.id}
                                 aria-sort={sortDirection(filters.sort, h.column.id)}
-                                className='group relative whitespace-normal p-2 text-center align-middle has-[>button:not([data-column-resize])]:p-0'
+                                className='group relative whitespace-nowrap p-2 text-center align-middle has-[>button:not([data-column-resize])]:p-0'
                               >
                                 {sortFields[h.column.id] ? (
                                   <button
@@ -917,7 +928,7 @@ export default function ScreeningPage() {
                                       setPage(1);
                                     }}
                                   >
-                                    <span data-auto-align className='min-w-0'>
+                                    <span className='min-w-0 whitespace-nowrap'>
                                       {flexRender(h.column.columnDef.header, h.getContext())}
                                     </span>
                                     <span aria-hidden='true' className='text-muted-foreground'>
@@ -926,7 +937,7 @@ export default function ScreeningPage() {
                                     </span>
                                   </button>
                                 ) : (
-                                  <span data-auto-align className='min-w-0'>
+                                  <span className='min-w-0 whitespace-nowrap'>
                                     {flexRender(h.column.columnDef.header, h.getContext())}
                                   </span>
                                 )}
@@ -986,6 +997,11 @@ export default function ScreeningPage() {
                               {row.getVisibleCells().map((cell) => (
                                 <td
                                   key={cell.id}
+                                  data-fixed-align={
+                                    ['asin', 'dimensions'].includes(cell.column.id)
+                                      ? 'left'
+                                      : undefined
+                                  }
                                   className='break-words px-2 py-2 align-middle [&>*]:min-w-0 [&>*]:max-w-full [&_p]:whitespace-normal'
                                 >
                                   {flexRender(cell.column.columnDef.cell, cell.getContext())}
@@ -1259,6 +1275,9 @@ function FamilyChildren({
           {row.getVisibleCells().map((cell) => (
             <td
               key={cell.id}
+              data-fixed-align={
+                ['asin', 'dimensions'].includes(cell.column.id) ? 'left' : undefined
+              }
               className='break-words px-2 py-2 align-middle [&>*]:min-w-0 [&>*]:max-w-full [&_p]:whitespace-normal'
             >
               {flexRender(cell.column.columnDef.cell, cell.getContext())}

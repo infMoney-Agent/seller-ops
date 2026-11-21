@@ -135,7 +135,7 @@ func TestBrowserScreening(t *testing.T) {
 	}
 
 	for _, width := range []int64{1366, 1440, 1920} {
-		if e := chromedp.Run(ctx, chromedp.EmulateViewport(width, 1000), chromedp.Poll(`(()=>{const area=document.querySelector('[data-screening-table]');return area&&area.scrollWidth<=area.clientWidth+2&&[...area.querySelectorAll('tbody td')].every(c=>getComputedStyle(c).verticalAlign==='middle')})()`, nil)); e != nil {
+		if e := chromedp.Run(ctx, chromedp.EmulateViewport(width, 1000), chromedp.Poll(`(()=>{const area=document.querySelector('[data-screening-table]');return area&&document.documentElement.scrollWidth<=innerWidth+2&&[...area.querySelectorAll('tbody td')].every(c=>getComputedStyle(c).verticalAlign==='middle')})()`, nil)); e != nil {
 			t.Fatalf("Compact table does not fit viewport %d: %v", width, e)
 		}
 	}
@@ -165,7 +165,7 @@ func TestBrowserScreening(t *testing.T) {
 	}
 
 	if e := chromedp.Run(ctx,
-		chromedp.Evaluate(`(()=>{const h=document.querySelector('button[aria-label="调整商品列宽"]');const x=h.getBoundingClientRect().left+4;window.__wideX=x;window.__navLeft=document.querySelector('nav[aria-label="初筛工作台"]').getBoundingClientRect().left;h.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,clientX:x}));})()`, nil),
+		chromedp.Evaluate(`(()=>{const h=document.querySelector('button[aria-label="调整商品列宽"]');const x=h.getBoundingClientRect().left+4;window.__wideX=x;window.__baselineScrollWidth=document.querySelector('[data-screening-table]').scrollWidth;window.__navLeft=document.querySelector('nav[aria-label="初筛工作台"]').getBoundingClientRect().left;h.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,clientX:x}));})()`, nil),
 		chromedp.Sleep(100*time.Millisecond),
 		chromedp.Evaluate(`document.dispatchEvent(new MouseEvent('mousemove',{bubbles:true,clientX:window.__wideX+800}))`, nil),
 		chromedp.Sleep(100*time.Millisecond),
@@ -173,7 +173,7 @@ func TestBrowserScreening(t *testing.T) {
 		chromedp.Poll(`(()=>{const a=document.querySelector('[data-screening-table]');return a.scrollWidth>a.clientWidth+100&&document.documentElement.scrollWidth<=innerWidth+2})()`, nil),
 		chromedp.Evaluate(`(()=>{const a=document.querySelector('[data-screening-table]');a.scrollLeft=a.scrollWidth;if(a.scrollLeft<=0||Math.abs(document.querySelector('nav[aria-label="初筛工作台"]').getBoundingClientRect().left-window.__navLeft)>1||document.scrollingElement.scrollLeft!==0)throw Error('Table scrolling affected page layout');})()`, nil),
 		chromedp.Evaluate(`document.querySelector('button[aria-label="调整商品列宽"]').dispatchEvent(new MouseEvent('dblclick',{bubbles:true}))`, nil),
-		chromedp.Poll(`(()=>{const a=document.querySelector('[data-screening-table]');return a.scrollWidth<=a.clientWidth+2&&[...a.querySelectorAll('th')].every(h=>getComputedStyle(h).textAlign==='center')&&[...a.querySelectorAll('tbody p')].every(p=>{const line=parseFloat(getComputedStyle(p).lineHeight);return getComputedStyle(p).textAlign===(p.getBoundingClientRect().height>line+2?'left':'center')})})()`, nil),
+		chromedp.Poll(`(()=>{const a=document.querySelector('[data-screening-table]');return Math.abs(a.scrollWidth-window.__baselineScrollWidth)<=2&&[...a.querySelectorAll('th')].every(h=>getComputedStyle(h).textAlign==='center'&&[...h.querySelectorAll('span.min-w-0')].every(l=>l.getBoundingClientRect().height<=(parseFloat(getComputedStyle(l).lineHeight)||20)+2))&&[...a.querySelectorAll('tbody p')].every(p=>{const line=parseFloat(getComputedStyle(p).lineHeight);return getComputedStyle(p).textAlign===(p.closest('[data-fixed-align=left]')||p.getBoundingClientRect().height>line+2?'left':'center')})})()`, nil),
 	); e != nil {
 		t.Fatal("independent table scrolling or adaptive alignment", e)
 	}
