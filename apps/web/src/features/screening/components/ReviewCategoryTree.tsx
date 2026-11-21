@@ -17,42 +17,15 @@ export default function ReviewCategoryTree({
 }) {
   const tree = useScreeningQuery<{ items: ReviewCategory[] }>('/review-categories?' + query);
   const [height, setHeight] = useState(240);
-  const resizeHandle = useRef<HTMLButtonElement>(null);
   const categoryList = useRef<HTMLUListElement>(null);
   useEffect(() => {
-    const handle = resizeHandle.current;
-    if (!handle) return;
-    let drag: { y: number; height: number } | null = null;
-    function start(event: PointerEvent) {
-      if (event.button !== 0 || !event.isPrimary) return;
-      event.preventDefault();
-      drag = {
-        y: event.clientY,
-        height: categoryList.current?.getBoundingClientRect().height || 240
-      };
-      handle!.setPointerCapture(event.pointerId);
-    }
-    function move(event: PointerEvent) {
-      if (drag && handle!.hasPointerCapture(event.pointerId))
-        setHeight(Math.max(120, Math.min(640, drag.height + event.clientY - drag.y)));
-    }
-    function end(event: PointerEvent) {
-      drag = null;
-      if (handle!.hasPointerCapture(event.pointerId))
-        handle!.releasePointerCapture(event.pointerId);
-    }
-    handle.addEventListener('pointerdown', start);
-    handle.addEventListener('pointermove', move);
-    handle.addEventListener('pointerup', end);
-    handle.addEventListener('pointercancel', end);
-    handle.addEventListener('lostpointercapture', end);
-    return () => {
-      handle.removeEventListener('pointerdown', start);
-      handle.removeEventListener('pointermove', move);
-      handle.removeEventListener('pointerup', end);
-      handle.removeEventListener('pointercancel', end);
-      handle.removeEventListener('lostpointercapture', end);
-    };
+    const list = categoryList.current;
+    if (!list) return;
+    const observer = new ResizeObserver(([entry]) => {
+      if (entry) setHeight(Math.round(entry.contentRect.height));
+    });
+    observer.observe(list);
+    return () => observer.disconnect();
   }, []);
   const [expandedPath, setExpandedPath] = useState<string[] | null>(null);
   const [previousSelection, setPreviousSelection] = useState(JSON.stringify(selected));
@@ -95,7 +68,7 @@ export default function ReviewCategoryTree({
         data-review-category-list
         ref={categoryList}
         style={{ height }}
-        className='space-y-1 overflow-auto overscroll-contain text-xs [scrollbar-gutter:stable]'
+        className='min-h-[120px] max-h-[640px] resize-y space-y-1 overflow-auto overscroll-contain text-xs [scrollbar-gutter:stable]'
       >
         {tree.data?.items.map((node) => (
           <CategoryBranch
@@ -119,26 +92,9 @@ export default function ReviewCategoryTree({
         >
           −
         </button>
-        <button
-          type='button'
-          aria-label='调整分类高度，可拖动或使用上下方向键'
-          className='flex h-7 flex-1 touch-none cursor-row-resize select-none items-center justify-center rounded hover:bg-muted focus-visible:outline-2 [-webkit-user-select:none]'
-          ref={resizeHandle}
-          onKeyDown={(e) => {
-            if (['ArrowUp', 'ArrowDown', 'Home', 'End'].includes(e.key)) {
-              e.preventDefault();
-              resizeHeight(
-                e.key === 'Home'
-                  ? 120
-                  : e.key === 'End'
-                    ? 640
-                    : height + (e.key === 'ArrowUp' ? -20 : 20)
-              );
-            }
-          }}
-        >
-          <span aria-hidden='true' className='h-1 w-10 rounded-full bg-muted-foreground/40' />
-        </button>
+        <span className='flex-1 text-center text-[11px] text-muted-foreground'>
+          拖动右下角调整高度
+        </span>
         <button
           type='button'
           aria-label='增加分类高度'
