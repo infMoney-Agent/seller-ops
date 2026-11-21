@@ -51,6 +51,7 @@ import {
 const sortFields: Record<string, string> = {
   price_usd: 'price_usd',
   monthly_sales: 'monthly_sales',
+  rating_reviews: 'rating',
   profit: 'profit_usd'
 };
 function sortDirection(
@@ -421,7 +422,7 @@ export default function ScreeningPage() {
         id: 'actions',
         header: '操作',
         cell: ({ row }) => (
-          <div className='flex gap-1'>
+          <div className='flex flex-col items-stretch gap-1'>
             <Button size='sm' variant='ghost' onClick={() => setFocus(row.original)}>
               复核
             </Button>

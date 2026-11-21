@@ -127,7 +127,7 @@ func (s *service) products(r *http.Request) (any, error) {
 		field = strings.TrimPrefix(field, "-")
 		direction = "DESC"
 	}
-	column := map[string]string{"price_usd": "m.price_usd", "monthly_sales": displayChildSalesSQL, "updated_at": "p.updated_at", "asin": "p.asin", "profit_usd": "(q.output->>'profit_usd')::numeric"}[field]
+	column := map[string]string{"price_usd": "m.price_usd", "monthly_sales": displayChildSalesSQL, "rating": "m.rating", "updated_at": "p.updated_at", "asin": "p.asin", "profit_usd": "(q.output->>'profit_usd')::numeric"}[field]
 	if column == "" {
 		return nil, fail(422, "不支持的排序字段")
 	}
