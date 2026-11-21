@@ -86,12 +86,13 @@ export default function ReviewCategoryTree({
           type='button'
           aria-label='调整分类高度，可拖动或使用上下方向键'
           className='flex h-7 flex-1 touch-none cursor-row-resize select-none items-center justify-center rounded hover:bg-muted focus-visible:outline-2 [-webkit-user-select:none]'
-          onPointerDown={(e) => {
-            if (e.button !== 0 || !e.isPrimary) return;
+          onPointerDownCapture={(e) => {
+            if (e.nativeEvent.button !== 0 || !e.nativeEvent.isPrimary) return;
+            e.preventDefault();
             drag.current = { y: e.clientY, height };
             e.currentTarget.setPointerCapture(e.pointerId);
           }}
-          onPointerMove={(e) => {
+          onPointerMoveCapture={(e) => {
             if (drag.current && e.currentTarget.hasPointerCapture(e.pointerId))
               resizeHeight(drag.current.height + e.clientY - drag.current.y);
           }}

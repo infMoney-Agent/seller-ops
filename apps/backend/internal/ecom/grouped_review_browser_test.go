@@ -50,15 +50,21 @@ func TestBrowserGroupedReview(t *testing.T) {
 	if e := chromedp.Run(ctx,
 		chromedp.Reload(), chromedp.WaitReady(`#main-content`, chromedp.ByQuery),
 		chromedp.Evaluate(`window.__groupApi=async path=>{const r=await fetch('/api/ecom/screening/'+path);if(!r.ok)throw Error('API '+r.status);return await r.json()}`, nil),
+		chromedp.Evaluate(`window.__reviewStep=1`, nil),
 		chromedp.Poll(`!!document.querySelector('[data-screening-table] tbody input[type=checkbox]')`, nil),
 		chromedp.Evaluate(`(()=>{const row=[...document.querySelectorAll('[data-screening-table] tbody tr')].find(r=>r.textContent.includes('GROUP00006'));row.querySelector('input[type=checkbox]').click();})()`, nil),
+		chromedp.Evaluate(`window.__reviewStep=2`, nil),
 		chromedp.Poll(`[...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='批量复核'&&!b.disabled)`, nil),
 		chromedp.Evaluate(`window.__categoryStep='open-direct';[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='批量复核').click()`, nil),
+		chromedp.Evaluate(`window.__reviewStep=3`, nil),
 		chromedp.Poll(`!!document.querySelector('form[aria-label="已选商品批量复核"]')`, nil),
 		chromedp.Evaluate(`window.__categoryStep='preview-direct';document.querySelector('form[aria-label="已选商品批量复核"] button[type=submit]').click()`, nil),
+		chromedp.Evaluate(`window.__reviewStep=4`, nil),
 		chromedp.Poll(`!!document.querySelector('section[aria-label="已选商品批量预览"]')`, nil),
+		chromedp.Evaluate(`window.__reviewStep=5`, nil),
 		chromedp.Poll(`!!document.querySelector('button[aria-label="关闭批量复核已选商品"]:not(:disabled)')`, nil),
 		chromedp.Evaluate(`window.__categoryStep='close-direct';document.querySelector('button[aria-label="关闭批量复核已选商品"]').click()`, nil),
+		chromedp.Evaluate(`window.__reviewStep=6`, nil),
 		chromedp.Poll(`!document.querySelector('form[aria-label="已选商品批量复核"]')`, nil),
 		chromedp.Evaluate(`[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='清空').click()`, nil),
 	); e != nil {
@@ -69,12 +75,14 @@ func TestBrowserGroupedReview(t *testing.T) {
 
 	if e := chromedp.Run(ctx,
 		chromedp.Evaluate(`[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='分组复核').click()`, nil),
+		chromedp.Evaluate(`window.__reviewStep=7`, nil),
 		chromedp.Poll(`document.querySelector('[data-review-workspace]')&&document.querySelectorAll('aside[aria-label="人工参考样本"] article').length===2&&document.querySelectorAll('[aria-label="本类目候选商品"] article').length===6`, nil),
 
 		chromedp.Evaluate(`if(document.querySelector('select[aria-label="类型组"]')||[...document.querySelectorAll('button')].some(b=>['前20组','后20组','下一类型组'].includes(b.textContent.trim())))throw Error('Type group controls remain')`, nil),
+		chromedp.Evaluate(`window.__reviewStep=8`, nil),
 		chromedp.Poll(`document.querySelector('nav[aria-label="商品分类目录"]')?.textContent.includes('Kitchen & Dining')&&document.querySelector('nav[aria-label="商品分类目录"]').getBoundingClientRect().right<=document.querySelector('[data-review-content]').getBoundingClientRect().left`, nil),
 
-		chromedp.Evaluate(`(()=>{const tree=document.querySelector('nav[aria-label="商品分类目录"]');const button=[...tree.querySelectorAll('button[aria-expanded]')].find(b=>b.getAttribute('aria-label').includes('Bath'));button.click();window.__categoryHeight=tree.querySelector('[data-review-category-list]').getBoundingClientRect().height;const handle=tree.querySelector('button[aria-label^="调整分类高度"]');handle.scrollIntoView({block:'center'});const r=handle.getBoundingClientRect();return {X:r.x+r.width/2,Y:r.y+r.height/2}})()`, &resizePoint),
+		chromedp.Evaluate(`(()=>{const tree=document.querySelector('nav[aria-label="商品分类目录"]');const button=[...tree.querySelectorAll('button[aria-expanded]')].find(b=>b.getAttribute('aria-label').includes('Bath'));button.click();window.__categoryHeight=tree.querySelector('[data-review-category-list]').getBoundingClientRect().height;const handle=tree.querySelector('button[aria-label^="调整分类高度"]');handle.scrollIntoView({block:'center'});const r=handle.getBoundingClientRect();window.__dragEvents=[];for(const t of ['pointerdown','pointermove','gotpointercapture','lostpointercapture'])document.addEventListener(t,e=>window.__dragEvents.push([t,e.target.getAttribute?.('aria-label'),e.isPrimary,e.button,e.clientX,e.clientY]),true);window.__dragHit=document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)?.outerHTML;return {X:r.x+r.width/2,Y:r.y+r.height/2}})()`, &resizePoint),
 		chromedp.ActionFunc(func(ctx context.Context) error {
 			if e := input.DispatchMouseEvent(input.MousePressed, resizePoint.X, resizePoint.Y).WithButton(input.Left).WithButtons(1).Do(ctx); e != nil {
 				return e
@@ -84,30 +92,43 @@ func TestBrowserGroupedReview(t *testing.T) {
 			}
 			return input.DispatchMouseEvent(input.MouseReleased, resizePoint.X, resizePoint.Y+90).WithButton(input.Left).Do(ctx)
 		}),
+		chromedp.Evaluate(`window.__reviewStep=9`, nil),
 		chromedp.Poll(`document.querySelector('[data-review-category-list]').getBoundingClientRect().height>window.__categoryHeight+60`, nil),
 		chromedp.Evaluate(`(()=>{const tree=document.querySelector('nav[aria-label="商品分类目录"]');const b=[...tree.querySelectorAll('button[aria-expanded]')].find(b=>b.getAttribute('aria-label').includes('Kitchen & Dining'));b.click()})()`, nil),
+		chromedp.Evaluate(`window.__reviewStep=10`, nil),
 		chromedp.Poll(`(()=>{const tree=document.querySelector('nav[aria-label="商品分类目录"]');const buttons=[...tree.querySelectorAll('button[aria-expanded]')];return buttons.find(b=>b.getAttribute('aria-label').includes('Bath')).getAttribute('aria-expanded')==='false'&&buttons.find(b=>b.getAttribute('aria-label').includes('Kitchen & Dining')).getAttribute('aria-expanded')==='true'})()`, nil),
 		chromedp.Evaluate(`(()=>{const tree=document.querySelector('nav[aria-label="商品分类目录"]');[...tree.querySelectorAll('button')].find(b=>b.textContent.includes('Kitchen & Dining')).click();})()`, nil),
+		chromedp.Evaluate(`window.__reviewStep=11`, nil),
 		chromedp.Poll(`(()=>{const s=document.querySelector('nav[aria-label="商品分类目录"] button[aria-current="true"]');return s?.textContent.includes('Kitchen & Dining')&&document.querySelectorAll('[aria-label="本类目候选商品"] article').length===5})()`, nil),
 
 		chromedp.Evaluate(`(()=>{const sidebar=document.querySelector('[data-review-category-sidebar]');if(sidebar.hidden)throw Error('Selection collapsed category tree');const refs=document.querySelector('aside[aria-label="人工参考样本"]'),candidates=document.querySelector('[aria-label="本类目候选商品"]');if(!sidebar.contains(refs)||refs.getBoundingClientRect().top<sidebar.querySelector('nav').getBoundingClientRect().bottom||candidates.getBoundingClientRect().left<refs.getBoundingClientRect().right)throw Error('References must be below categories in left sidebar');const content=document.querySelector('[data-review-content]');window.__reviewWidth=content.getBoundingClientRect().width;[...content.querySelectorAll('button')].find(b=>b.textContent==='收起分类').click()})()`, nil),
+		chromedp.Evaluate(`window.__reviewStep=12`, nil),
 		chromedp.Poll(`document.querySelector('[data-review-category-sidebar]').hidden&&document.querySelector('[data-review-content]').getBoundingClientRect().width>window.__reviewWidth`, nil),
 		chromedp.Evaluate(`[...document.querySelectorAll('[data-review-content] button')].find(b=>b.textContent==='展开分类').click()`, nil),
+		chromedp.Evaluate(`window.__reviewStep=13`, nil),
 		chromedp.Poll(`!document.querySelector('[data-review-category-sidebar]').hidden&&document.querySelector('nav button[aria-current=true]').textContent.includes('Kitchen')`, nil),
 		chromedp.Evaluate(`[...document.querySelectorAll('[data-review-content] button')].find(b=>b.textContent==='上一组').click()`, nil),
+		chromedp.Evaluate(`window.__reviewStep=14`, nil),
 		chromedp.Poll(`document.querySelector('[data-review-category-title]').textContent.includes('Cloths')&&document.querySelectorAll('[aria-label="本类目候选商品"] article').length===1`, nil),
 		chromedp.Evaluate(`if(![...document.querySelectorAll('[data-review-content] button')].find(b=>b.textContent==='上一组').disabled)throw Error('First group previous button enabled');[...document.querySelectorAll('[data-review-content] button')].find(b=>b.textContent==='下一组').click()`, nil),
+		chromedp.Evaluate(`window.__reviewStep=15`, nil),
 		chromedp.Poll(`document.querySelector('[data-review-category-title]').textContent.includes('Hooks')&&document.querySelectorAll('[aria-label="本类目候选商品"] article').length===5`, nil),
 		chromedp.Evaluate(`if(![...document.querySelectorAll('[data-review-content] button')].find(b=>b.textContent==='下一组').disabled)throw Error('Last group next button enabled');[...document.querySelectorAll('[data-review-content] button')].find(b=>b.textContent==='上一组').click()`, nil),
+		chromedp.Evaluate(`window.__reviewStep=16`, nil),
 		chromedp.Poll(`document.querySelector('[data-review-category-title]').textContent.includes('Cloths')&&document.querySelectorAll('[aria-label="本类目候选商品"] article').length===1`, nil),
 		chromedp.Evaluate(`[...document.querySelectorAll('nav[aria-label="商品分类目录"] button')].find(b=>b.textContent.includes('Kitchen & Dining')).click()`, nil),
+		chromedp.Evaluate(`window.__reviewStep=17`, nil),
 		chromedp.Poll(`document.querySelector('[data-review-category-title]').textContent.endsWith('Kitchen & Dining')&&document.querySelectorAll('[aria-label="本类目候选商品"] article').length===5`, nil),
 		chromedp.Evaluate(`(()=>{const refs=document.querySelector('aside[aria-label="人工参考样本"]');refs.querySelector('button').click();const compare=refs.querySelectorAll('input[aria-label^="比较样本"]');compare[0].click();compare[1].click();})()`, nil),
+		chromedp.Evaluate(`window.__reviewStep=18`, nil),
 		chromedp.Poll(`!!document.querySelector('section[aria-label="样本对比"]')`, nil),
 		chromedp.Evaluate(`(()=>{const scroll=document.querySelector('[aria-label="本类目候选商品"]');if(scroll.tabIndex!==0)throw Error('Candidate scroll region must accept keyboard focus');scroll.focus();document.querySelector('input[aria-label="全选本页可处理商品"]').click()})()`, nil),
+		chromedp.Evaluate(`window.__reviewStep=19`, nil),
 		chromedp.Poll(`document.querySelector('[data-review-toolbar]').textContent.includes('已选 3 / 100 项')`, nil),
 	); e != nil {
-		t.Fatal("group cards and sample selection", e)
+		var debug string
+		chromedp.Run(ctx, chromedp.Evaluate(`JSON.stringify({events:window.__dragEvents,hit:window.__dragHit,step:window.__reviewStep,height:document.querySelector("[data-review-category-list]")?.getBoundingClientRect().height,initial:window.__categoryHeight,tree:document.querySelector("nav[aria-label=商品分类目录]")?.innerText})`, &debug))
+		t.Fatal("group cards and sample selection", e, debug)
 	}
 	var screenshot []byte
 	if e := chromedp.Run(ctx, chromedp.Evaluate(`document.querySelector('[data-review-workspace]').scrollIntoView({block:'start'})`, nil), chromedp.FullScreenshot(&screenshot, 90)); e != nil {
@@ -118,15 +139,21 @@ func TestBrowserGroupedReview(t *testing.T) {
 	}
 	if e := chromedp.Run(ctx,
 		chromedp.Evaluate(`[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='预览批量复核').click()`, nil),
+		chromedp.Evaluate(`window.__reviewStep=20`, nil),
 		chromedp.Poll(`!!document.querySelector('[data-review-preview]')`, nil),
+		chromedp.Evaluate(`window.__reviewStep=21`, nil),
 		chromedp.Poll(`(()=>{const b=[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='确认保存本批修改');return b&&!b.disabled})()`, nil),
 		chromedp.Evaluate(`[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='确认保存本批修改').click()`, nil),
+		chromedp.Evaluate(`window.__reviewStep=22`, nil),
 		chromedp.Poll(`(async()=>{const p=await window.__groupApi('products?show_merged=true');return p.items.filter(p=>['GROUP00003','GROUP00004','GROUP00005'].includes(p.asin)).every(p=>p.review_status!=='pending')})()`, nil),
 		chromedp.Evaluate(`[...document.querySelectorAll('summary')].find(s=>s.textContent.trim()==='批量操作历史').click()`, nil),
+		chromedp.Evaluate(`window.__reviewStep=23`, nil),
 		chromedp.Poll(`[...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='撤销此批次'&&!b.disabled)`, nil),
 		chromedp.Evaluate(`[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='撤销此批次').click()`, nil),
+		chromedp.Evaluate(`window.__reviewStep=24`, nil),
 		chromedp.Poll(`(async()=>{const p=await window.__groupApi('products?show_merged=true');return p.items.filter(p=>['GROUP00003','GROUP00004','GROUP00005'].includes(p.asin)).every(p=>p.review_status==='pending')})()`, nil),
 		chromedp.EmulateViewport(390, 844),
+		chromedp.Evaluate(`window.__reviewStep=25`, nil),
 		chromedp.Poll(`document.querySelector('[data-review-workspace]')&&document.documentElement.scrollWidth<=window.innerWidth+1`, nil),
 		chromedp.Evaluate(`document.querySelector('[data-review-workspace]').scrollIntoView({block:'start'})`, nil), chromedp.FullScreenshot(&screenshot, 90),
 	); e != nil {
