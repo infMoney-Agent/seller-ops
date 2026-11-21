@@ -18,15 +18,41 @@ export default function ReviewCategoryTree({
   const tree = useScreeningQuery<{ items: ReviewCategory[] }>('/review-categories?' + query);
   const [height, setHeight] = useState(240);
   const categoryList = useRef<HTMLUListElement>(null);
-  useEffect(() => {
-    const list = categoryList.current;
-    if (!list) return;
-    const observer = new ResizeObserver(([entry]) => {
-      if (entry) setHeight(Math.round(entry.contentRect.height));
-    });
-    observer.observe(list);
-    return () => observer.disconnect();
-  }, []);
+  const stopResize = useRef<() => void>(() => {});
+  useEffect(() => () => stopResize.current(), []);
+  function startResize(startY: number, doc: Document) {
+    stopResize.current();
+    const initialHeight = categoryList.current?.getBoundingClientRect().height || height;
+    const previousSelection = doc.documentElement.style.userSelect;
+    const previousCursor = doc.documentElement.style.cursor;
+    doc.documentElement.style.userSelect = 'none';
+    doc.documentElement.style.cursor = 'row-resize';
+    const move = (event: MouseEvent) => resizeHeight(initialHeight + event.clientY - startY);
+    const touchMove = (event: TouchEvent) => {
+      if (event.touches.length === 1) {
+        event.preventDefault();
+        resizeHeight(initialHeight + event.touches[0].clientY - startY);
+      }
+    };
+    const end = () => {
+      doc.removeEventListener('mousemove', move);
+      doc.removeEventListener('mouseup', end);
+      doc.removeEventListener('touchmove', touchMove);
+      doc.removeEventListener('touchend', end);
+      doc.removeEventListener('touchcancel', end);
+      doc.defaultView?.removeEventListener('blur', end);
+      doc.documentElement.style.userSelect = previousSelection;
+      doc.documentElement.style.cursor = previousCursor;
+      stopResize.current = () => {};
+    };
+    doc.addEventListener('mousemove', move);
+    doc.addEventListener('mouseup', end);
+    doc.addEventListener('touchmove', touchMove, { passive: false });
+    doc.addEventListener('touchend', end);
+    doc.addEventListener('touchcancel', end);
+    doc.defaultView?.addEventListener('blur', end);
+    stopResize.current = end;
+  }
   const [expandedPath, setExpandedPath] = useState<string[] | null>(null);
   const [previousSelection, setPreviousSelection] = useState(JSON.stringify(selected));
   if (previousSelection !== JSON.stringify(selected)) {
@@ -68,7 +94,7 @@ export default function ReviewCategoryTree({
         data-review-category-list
         ref={categoryList}
         style={{ height }}
-        className='min-h-[120px] max-h-[640px] resize-y space-y-1 overflow-auto overscroll-contain text-xs [scrollbar-gutter:stable]'
+        className='min-h-[120px] max-h-[640px] space-y-1 overflow-auto overscroll-contain text-xs [scrollbar-gutter:stable]'
       >
         {tree.data?.items.map((node) => (
           <CategoryBranch
@@ -82,29 +108,35 @@ export default function ReviewCategoryTree({
           />
         ))}
       </ul>
-      <div className='mt-2 flex items-center gap-1'>
-        <button
-          type='button'
-          aria-label='降低分类高度'
-          className='size-7 shrink-0 rounded hover:bg-muted focus-visible:outline-2'
-          disabled={height <= 120}
-          onClick={() => resizeHeight(height - 40)}
-        >
-          −
-        </button>
-        <span className='flex-1 text-center text-[11px] text-muted-foreground'>
-          拖动右下角调整高度
-        </span>
-        <button
-          type='button'
-          aria-label='增加分类高度'
-          className='size-7 shrink-0 rounded hover:bg-muted focus-visible:outline-2'
-          disabled={height >= 640}
-          onClick={() => resizeHeight(height + 40)}
-        >
-          +
-        </button>
-      </div>
+      <button
+        type='button'
+        data-category-resize
+        aria-label='拖动调整分类高度，上下方向键微调'
+        title='上下拖动调整高度；双击还原'
+        className='mt-1 flex h-4 w-full touch-none cursor-row-resize select-none items-center justify-center rounded border-b-2 border-transparent hover:border-primary focus-visible:border-primary focus-visible:outline-2 [-webkit-user-select:none]'
+        onMouseDown={(event) => {
+          if (event.button === 0) {
+            event.preventDefault();
+            startResize(event.clientY, event.currentTarget.ownerDocument);
+          }
+        }}
+        onTouchStart={(event) => {
+          if (event.touches.length === 1)
+            startResize(event.touches[0].clientY, event.currentTarget.ownerDocument);
+        }}
+        onDoubleClick={() => resizeHeight(240)}
+        onKeyDown={(event) => {
+          if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+            event.preventDefault();
+            resizeHeight(height + (event.key === 'ArrowDown' ? 20 : -20));
+          } else if (event.key === 'Home') {
+            event.preventDefault();
+            resizeHeight(240);
+          }
+        }}
+      >
+        <span aria-hidden='true' className='h-0.5 w-10 rounded bg-muted-foreground/30' />
+      </button>
       <span className='sr-only' role='status'>
         分类区域高度 {Math.round(height)} 像素
       </span>
