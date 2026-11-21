@@ -4,14 +4,15 @@ import { Dialog } from '@/components/ui/dialog';
 import DataDialogContent from './DataDialogContent';
 import { Badge, Button, Field, Input, type Action } from './shared';
 import { request } from '../service';
-import type { BatchPreview, BatchResult } from '../types';
+import type { BatchPreview, BatchResult, Product } from '../types';
 export default function BatchReviewDialog({
   open,
   onClose,
   selected,
   act,
   busy,
-  onApplied
+  onApplied,
+  reference
 }: {
   open: boolean;
   onClose: () => void;
@@ -19,6 +20,7 @@ export default function BatchReviewDialog({
   act: Action;
   busy: boolean;
   onApplied: () => void;
+  reference?: Product | null;
 }) {
   if (!open) return null;
   return (
@@ -35,6 +37,7 @@ export default function BatchReviewDialog({
       >
         <BatchReviewForm
           selected={selected}
+          reference={reference}
           act={act}
           busy={busy}
           done={() => {
@@ -50,13 +53,16 @@ function BatchReviewForm({
   selected,
   act,
   busy,
-  done
+  done,
+  reference
 }: {
   selected: string[];
   act: Action;
   busy: boolean;
   done: () => void;
+  reference?: Product | null;
 }) {
+  const [mode, setMode] = useState(reference ? 'reference' : 'direct');
   const [status, setStatus] = useState('kept'),
     [reason, setReason] = useState(''),
     [note, setNote] = useState('');
@@ -73,7 +79,8 @@ function BatchReviewForm({
               await request<BatchPreview>('/review-batches/preview', 'POST', {
                 product_ids: selected,
                 scope: 'selected',
-                mode: 'direct',
+                mode,
+                reference_product_id: mode === 'reference' ? reference?.id : null,
                 action: 'review',
                 status,
                 reason,
@@ -83,11 +90,28 @@ function BatchReviewForm({
           }, '请核对批量预览');
         }}
       >
+        {reference && (
+          <Field label='复核方式'>
+            <select
+              aria-label='批量复核方式'
+              className='h-10 rounded border bg-background px-3'
+              disabled={busy}
+              value={mode}
+              onChange={(event) => {
+                setMode(event.target.value);
+                setPreview(null);
+              }}
+            >
+              <option value='direct'>填写复核结论</option>
+              <option value='reference'>采用参考样本 {reference.asin}</option>
+            </select>
+          </Field>
+        )}
         <Field label='结论'>
           <select
             className='h-10 rounded border bg-background px-3'
-            value={status}
-            disabled={busy}
+            value={mode === 'reference' ? reference?.review_status : status}
+            disabled={busy || mode === 'reference'}
             onChange={(e) => {
               setStatus(e.target.value);
               setPreview(null);
@@ -98,11 +122,11 @@ function BatchReviewForm({
             <option value='unsure'>待确认</option>
           </select>
         </Field>
-        <Field label={status === 'kept' ? '原因' : '原因（必填）'}>
+        <Field label={mode === 'reference' || status === 'kept' ? '原因' : '原因（必填）'}>
           <Input
-            required={status !== 'kept'}
-            disabled={busy}
-            value={reason}
+            required={mode === 'direct' && status !== 'kept'}
+            disabled={busy || mode === 'reference'}
+            value={mode === 'reference' ? reference?.review_reason || '' : reason}
             onChange={(e) => {
               setReason(e.target.value);
               setPreview(null);
@@ -111,8 +135,8 @@ function BatchReviewForm({
         </Field>
         <Field label='备注'>
           <Input
-            disabled={busy}
-            value={note}
+            disabled={busy || mode === 'reference'}
+            value={mode === 'reference' ? reference?.review_note || '' : note}
             onChange={(e) => {
               setNote(e.target.value);
               setPreview(null);

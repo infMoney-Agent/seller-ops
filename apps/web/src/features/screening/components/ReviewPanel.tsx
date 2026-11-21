@@ -1,10 +1,9 @@
 'use client';
-import { useEffect, useId, useRef, useState } from 'react';
+import { useId, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useScreeningQuery } from '../queries';
 import { request } from '../service';
 import type {
-  BatchPreview,
   BatchRecord,
   BatchResult,
   PageResult,
@@ -12,9 +11,10 @@ import type {
   ReviewWorkspace,
   ReviewCategory
 } from '../types';
-import { Badge, Button, Field, Input, TableScroll, type Action } from './shared';
+import { Badge, Button, Field, TableScroll, type Action } from './shared';
 import ReviewProductCard from './ReviewProductCard';
 import ReviewCategoryTree from './ReviewCategoryTree';
+import BatchReviewDialog from './BatchReviewDialog';
 
 export default function ReviewPanel({
   selected,
@@ -225,176 +225,21 @@ function GroupReview({
   const [selected, setSelected] = useState<string[]>(() =>
     data.items.filter((p) => seed.includes(p.id) && p.review_status === 'pending').map((p) => p.id)
   );
-  const [action, setAction] = useState('review');
-  const [mode, setMode] = useState('direct');
-  const [status, setStatus] = useState('kept');
-  const [reason, setReason] = useState('');
-  const [note, setNote] = useState('');
-  const [category, setCategory] = useState('');
   const [reference, setReference] = useState<Product | null>(null);
   const [compare, setCompare] = useState<Product[]>([]);
-  const [preview, setPreview] = useState<BatchPreview | null>(null);
-  const [result, setResult] = useState<BatchResult | null>(null);
-  const [validation, setValidation] = useState('');
-  const formID = useId();
-  const form = useRef<HTMLFormElement>(null);
-  const confirm = useRef<HTMLButtonElement>(null);
-  useEffect(() => {
-    if (preview && !busy) {
-      confirm.current?.scrollIntoView({ block: 'center' });
-      confirm.current?.focus();
-    }
-  }, [preview, busy]);
+  const [reviewOpen, setReviewOpen] = useState(false);
   const items = data.items || [],
     samples = data.samples.items || [];
   const currentReference = samples.find((p) => p.id === reference?.id) || reference;
-  const eligible = items.filter((p) => action === 'categorize' || p.review_status === 'pending');
+  const eligible = items.filter((p) => p.review_status === 'pending');
   const allChecked = eligible.length > 0 && eligible.every((p) => selected.includes(p.id));
-  const canProcess = (p: Product) => action === 'categorize' || p.review_status === 'pending';
-  function change() {
-    setPreview(null);
-    setValidation('');
-  }
   function toggle(id: string, checked: boolean) {
-    change();
     setSelected((old) =>
       checked ? [...old.filter((x) => x !== id), id].slice(0, 100) : old.filter((x) => x !== id)
     );
   }
-  async function generate() {
-    if (!selected.length) {
-      setValidation('请先勾选商品。');
-      return;
-    }
-    if (mode === 'reference' && !currentReference) {
-      setValidation('请先从左侧选择参考样本。');
-      return;
-    }
-    if (!form.current?.reportValidity()) return;
-    await act(async () => {
-      const value = await request<BatchPreview>('/review-batches/preview', 'POST', {
-        product_ids: selected,
-        scope: 'selected',
-        action,
-        category: action === 'categorize' ? category : null,
-        mode,
-        reference_product_id: mode === 'reference' ? currentReference?.id : null,
-        status,
-        reason,
-        note
-      });
-      setPreview(value);
-      setResult(null);
-    }, '预览已生成，请核对后确认');
-  }
   return (
     <div className='space-y-4' data-review-group={data.group?.id}>
-      <form
-        id={formID}
-        method='post'
-        ref={form}
-        aria-label='批量复核设置'
-        onSubmit={(e) => {
-          e.preventDefault();
-          void generate();
-        }}
-        className='rounded-xl border bg-background p-4'
-      >
-        <fieldset className='space-y-3' disabled={busy}>
-          <legend className='px-1 text-sm font-semibold'>批量处理</legend>
-          <div className='grid gap-3 @xl:grid-cols-2 @4xl:grid-cols-4'>
-            <Field label='处理动作'>
-              <select
-                className='h-10 rounded-md border bg-background px-3'
-                value={action}
-                onChange={(e) => {
-                  setAction(e.target.value);
-                  setSelected([]);
-                  setMode('direct');
-                  change();
-                }}
-              >
-                <option value='review'>人工复核</option>
-                <option value='categorize'>人工归类</option>
-              </select>
-            </Field>
-            <Field label='复核方式'>
-              <select
-                className='h-10 rounded-md border bg-background px-3'
-                value={mode}
-                onChange={(e) => {
-                  setMode(e.target.value);
-                  change();
-                }}
-              >
-                <option value='direct'>直接人工复核</option>
-                <option value='reference'>采用参考样本</option>
-              </select>
-            </Field>
-            {action === 'categorize' ? (
-              <Field label='人工分类'>
-                <Input
-                  name='category'
-                  required={mode === 'direct'}
-                  disabled={mode === 'reference'}
-                  value={mode === 'reference' ? currentReference?.manual_category || '' : category}
-                  onChange={(e) => {
-                    setCategory(e.target.value);
-                    change();
-                  }}
-                />
-              </Field>
-            ) : (
-              <Field label='人工结论'>
-                <select
-                  className='h-10 rounded-md border bg-background px-3'
-                  disabled={mode === 'reference'}
-                  value={mode === 'reference' ? currentReference?.review_status || 'kept' : status}
-                  onChange={(e) => {
-                    setStatus(e.target.value);
-                    change();
-                  }}
-                >
-                  <option value='kept'>保留</option>
-                  <option value='excluded'>排除</option>
-                  <option value='unsure'>待确认</option>
-                </select>
-              </Field>
-            )}
-            <Field
-              label={
-                action === 'review' && status !== 'kept' && mode === 'direct'
-                  ? '原因（必填）'
-                  : '共同原因'
-              }
-            >
-              <Input
-                name='reason'
-                required={action === 'review' && status !== 'kept' && mode === 'direct'}
-                disabled={mode === 'reference'}
-                value={mode === 'reference' ? currentReference?.review_reason || '' : reason}
-                onChange={(e) => {
-                  setReason(e.target.value);
-                  change();
-                }}
-              />
-            </Field>
-            <div className='@xl:col-span-2 @4xl:col-span-4'>
-              <Field label='备注'>
-                <Input
-                  name='note'
-                  disabled={mode === 'reference'}
-                  value={mode === 'reference' ? currentReference?.review_note || '' : note}
-                  onChange={(e) => {
-                    setNote(e.target.value);
-                    change();
-                  }}
-                />
-              </Field>
-            </div>
-          </div>
-        </fieldset>
-      </form>
       <div className='flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-2'>
         <div className='flex flex-wrap items-center gap-4'>
           <label className='flex min-h-10 items-center gap-2 text-sm'>
@@ -409,7 +254,6 @@ function GroupReview({
                   node.indeterminate = !allChecked && eligible.some((p) => selected.includes(p.id));
               }}
               onChange={(e) => {
-                change();
                 setSelected((old) =>
                   e.target.checked
                     ? [...new Set([...old, ...eligible.map((p) => p.id)])].slice(0, 100)
@@ -425,7 +269,6 @@ function GroupReview({
             disabled={!selected.length || busy}
             onClick={() => {
               setSelected([]);
-              change();
             }}
           >
             清空勾选
@@ -466,8 +309,6 @@ function GroupReview({
                         disabled={busy}
                         onClick={() => {
                           setReference(p);
-                          setMode('reference');
-                          change();
                         }}
                       >
                         {currentReference?.id === p.id ? '当前参考样本' : '采用此样本'}
@@ -544,7 +385,7 @@ function GroupReview({
               </div>
             </section>
           )}
-          {mode === 'reference' && currentReference && (
+          {currentReference && (
             <section className='space-y-2 rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-3'>
               <h4 className='text-sm font-semibold text-emerald-700 dark:text-emerald-300'>
                 当前参考样本
@@ -558,7 +399,9 @@ function GroupReview({
               product={p}
               checked={selected.includes(p.id)}
               disabled={
-                busy || !canProcess(p) || (selected.length >= 100 && !selected.includes(p.id))
+                busy ||
+                p.review_status !== 'pending' ||
+                (selected.length >= 100 && !selected.includes(p.id))
               }
               onCheck={(checked) => toggle(p.id, checked)}
             />
@@ -585,77 +428,15 @@ function GroupReview({
           </div>
         </TableScroll>
       </div>
-      {preview && (
-        <section
-          className='space-y-3 rounded-xl border border-primary/30 bg-primary/5 p-4'
-          aria-label='批量复核预览'
-          data-review-preview
-        >
-          <h3 className='font-semibold'>核对本次修改</h3>
-          <p className='flex flex-wrap items-center gap-2 text-sm'>
-            {preview.action === 'categorize' ? (
-              '归类为 ' + preview.category
-            ) : (
-              <>
-                <Badge value={preview.status} />
-                {preview.reason || '无共同原因'}
-              </>
-            )}
-          </p>
-          <p className='text-xs text-muted-foreground'>
-            将保存 {preview.targets.filter((p) => p.eligible).length} 项 · 跳过{' '}
-            {preview.targets.filter((p) => !p.eligible).length} 项 · 有效至{' '}
-            {new Date(preview.expires_at).toLocaleTimeString()}
-          </p>
-          <ul className='max-h-64 space-y-2 overflow-y-auto text-sm'>
-            {preview.targets.map((p) => (
-              <li key={p.id} className='flex flex-wrap gap-2'>
-                <strong>{p.asin}</strong>
-                <span className='flex-1'>{p.title}</span>
-                <span>{p.eligible ? '将保存' : p.skip_reason}</span>
-              </li>
-            ))}
-          </ul>
-          <div className='flex flex-wrap gap-2'>
-            <Button
-              ref={confirm}
-              disabled={busy || !preview.targets.some((p) => p.eligible)}
-              onClick={() =>
-                void act(async () => {
-                  const value = await request<BatchResult>(
-                    '/review-batches/' + preview.id + '/apply',
-                    'POST'
-                  );
-                  setResult(value);
-                  setPreview(null);
-                  setSelected([]);
-                }, '批量复核已保存')
-              }
-            >
-              确认保存本批修改
-            </Button>
-            <Button variant='outline' disabled={busy} onClick={() => setPreview(null)}>
-              返回调整
-            </Button>
-          </div>
-        </section>
-      )}
-      {result && (
-        <div role='status' className='rounded-xl border bg-muted/30 p-4 text-sm'>
-          已处理：成功 {result.success} 项，跳过 {result.skipped} 项。
-          {result.skipped > 0 && (
-            <ul className='mt-2 space-y-1 text-muted-foreground'>
-              {result.items
-                .filter((p) => !p.success)
-                .map((p) => (
-                  <li key={p.id}>
-                    {p.asin || p.id} · {p.reason || p.skip_reason || '数据已变化'}
-                  </li>
-                ))}
-            </ul>
-          )}
-        </div>
-      )}
+      <BatchReviewDialog
+        open={reviewOpen}
+        onClose={() => setReviewOpen(false)}
+        selected={selected}
+        reference={currentReference}
+        act={act}
+        busy={busy}
+        onApplied={() => setSelected([])}
+      />
       <div
         className='sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-background/95 px-4 py-3 shadow-lg backdrop-blur-sm'
         data-review-toolbar
@@ -664,14 +445,9 @@ function GroupReview({
           <p className='font-semibold' role='status'>
             已选 {selected.length} / 100 项
           </p>
-          {validation && (
-            <p role='alert' className='mt-1 text-xs text-destructive'>
-              {validation}
-            </p>
-          )}
         </div>
-        <Button type='submit' form={formID} disabled={busy || !selected.length}>
-          预览批量复核
+        <Button disabled={busy || !selected.length} onClick={() => setReviewOpen(true)}>
+          批量复核
         </Button>
       </div>
     </div>

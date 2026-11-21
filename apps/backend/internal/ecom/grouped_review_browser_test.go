@@ -78,7 +78,7 @@ func TestBrowserGroupedReview(t *testing.T) {
 		chromedp.Evaluate(`window.__reviewStep=7`, nil),
 		chromedp.Poll(`document.querySelector('[data-review-workspace]')&&document.querySelectorAll('aside[aria-label="人工参考样本"] article').length===2&&document.querySelectorAll('[aria-label="本类目候选商品"] article').length===6`, nil),
 
-		chromedp.Evaluate(`if(document.querySelector('select[aria-label="类型组"]')||[...document.querySelectorAll('button')].some(b=>['前20组','后20组','下一类型组'].includes(b.textContent.trim())))throw Error('Type group controls remain')`, nil),
+		chromedp.Evaluate(`if(document.querySelector('form[aria-label="批量复核设置"]')||document.body.innerText.includes('人工归类'))throw Error('Review form or categorize action remains before selection');if(document.querySelector('select[aria-label="类型组"]')||[...document.querySelectorAll('button')].some(b=>['前20组','后20组','下一类型组'].includes(b.textContent.trim())))throw Error('Type group controls remain')`, nil),
 		chromedp.Evaluate(`window.__reviewStep=8`, nil),
 		chromedp.Poll(`document.querySelector('nav[aria-label="商品分类目录"]')?.textContent.includes('Kitchen & Dining')&&document.querySelector('nav[aria-label="商品分类目录"]').getBoundingClientRect().right<=document.querySelector('[data-review-content]').getBoundingClientRect().left`, nil),
 
@@ -140,9 +140,11 @@ func TestBrowserGroupedReview(t *testing.T) {
 		os.WriteFile(filepath.Join(dir, "grouped-review-desktop.png"), screenshot, 0600)
 	}
 	if e := chromedp.Run(ctx,
-		chromedp.Evaluate(`[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='预览批量复核').click()`, nil),
+		chromedp.Evaluate(`document.querySelector('[data-review-toolbar] button').click()`, nil),
+		chromedp.Poll(`!!document.querySelector('form[aria-label="已选商品批量复核"]')&&document.querySelector('select[aria-label="批量复核方式"]').value==='reference'`, nil),
+		chromedp.Evaluate(`document.querySelector('form[aria-label="已选商品批量复核"] button[type=submit]').click()`, nil),
 		chromedp.Evaluate(`window.__reviewStep=20`, nil),
-		chromedp.Poll(`!!document.querySelector('[data-review-preview]')`, nil),
+		chromedp.Poll(`!!document.querySelector('section[aria-label="已选商品批量预览"]')`, nil),
 		chromedp.Evaluate(`window.__reviewStep=21`, nil),
 		chromedp.Poll(`(()=>{const b=[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='确认保存本批修改');return b&&!b.disabled})()`, nil),
 		chromedp.Evaluate(`[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='确认保存本批修改').click()`, nil),
