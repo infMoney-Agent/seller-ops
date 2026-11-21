@@ -25,6 +25,8 @@ export default function ReviewPanel({
   act: Action;
   busy: boolean;
 }) {
+  const categoryPicker = useRef<HTMLDetailsElement>(null);
+  const categoryTrigger = useRef<HTMLElement>(null);
   const [seed] = useState(selected);
   const [scope, setScope] = useState(seed.length ? 'selected' : 'filtered');
   const [categoryPath, setCategoryPath] = useState<string[]>([]);
@@ -48,17 +50,31 @@ export default function ReviewPanel({
     <div className='@container min-w-0'>
       <div className='min-w-0 space-y-4' data-review-workspace>
         <div className='@container min-w-0 space-y-4'>
-          <section className='space-y-3 rounded-xl border bg-muted/30 p-4'>
-            <ReviewCategoryTree
-              query={categoryParams.toString()}
-              selected={categoryPath}
-              busy={busy}
-              onSelect={(path) => {
-                setCategoryPath(path);
-                setMemberPage(1);
-                setSamplePage(1);
-              }}
-            />
+          <section className='space-y-2 rounded-xl border bg-muted/30 p-3'>
+            <details ref={categoryPicker} data-review-category-picker>
+              <summary
+                ref={categoryTrigger}
+                className='cursor-pointer rounded-md px-1 py-2 text-sm font-medium focus-visible:outline-2'
+              >
+                商品分类：
+                {categoryPath.length ? data?.group?.title || categoryPath.join(' / ') : '全部商品'}
+                <span className='ms-2 text-xs font-normal text-muted-foreground'>切换类目</span>
+              </summary>
+              <div className='mt-2 rounded-lg border bg-background p-3'>
+                <ReviewCategoryTree
+                  query={categoryParams.toString()}
+                  selected={categoryPath}
+                  busy={busy}
+                  onSelect={(path) => {
+                    setCategoryPath(path);
+                    setMemberPage(1);
+                    setSamplePage(1);
+                    if (categoryPicker.current) categoryPicker.current.open = false;
+                    categoryTrigger.current?.focus({ preventScroll: true });
+                  }}
+                />
+              </div>
+            </details>
             <div className='flex flex-wrap items-center justify-between gap-3'>
               <p className='text-sm text-muted-foreground' role='status'>
                 {data
@@ -68,11 +84,6 @@ export default function ReviewPanel({
                   : '正在加载类目商品…'}
               </p>
             </div>
-            {categoryPath.length > 0 && (
-              <p className='break-words text-xs text-muted-foreground'>
-                {data?.group?.title || '正在加载分类…'}
-              </p>
-            )}
             <div className='flex flex-wrap items-end gap-3'>
               {seed.length > 0 && (
                 <Field label='商品范围'>
