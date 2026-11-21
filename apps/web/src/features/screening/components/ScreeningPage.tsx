@@ -8,6 +8,7 @@ import {
   getCoreRowModel,
   useReactTable,
   type ColumnDef,
+  type ColumnSizingState,
   type OnChangeFn,
   type RowSelectionState
 } from '@tanstack/react-table';
@@ -48,6 +49,21 @@ import {
   type Action
 } from './shared';
 
+const defaultColumnWidths: ColumnSizingState = {
+  selection: 48,
+  asin: 360,
+  price_usd: 145,
+  monthly_sales: 125,
+  rating_reviews: 155,
+  listing_date: 145,
+  dimensions: 240,
+  seller: 185,
+  decision: 200,
+  review_status: 155,
+  profit: 155,
+  actions: 90
+};
+
 const sortFields: Record<string, string> = {
   price_usd: 'price_usd',
   monthly_sales: 'monthly_sales',
@@ -81,6 +97,7 @@ export default function ScreeningPage() {
   const [page, setPage] = useState(1);
   const [filters, setFilters] = useState<Record<string, string>>({ show_merged: 'false' });
   const [selected, setSelected] = useState<RowSelectionState>({});
+  const [columnSizing, setColumnSizing] = useState<ColumnSizingState>(defaultColumnWidths);
   const [familyRows, setFamilyRows] = useState<Record<string, boolean>>({});
   const [focus, setFocus] = useState<Product | null>(null);
   const [group, setGroup] = useState<string | null>(null);
@@ -220,6 +237,10 @@ export default function ScreeningPage() {
     () => [
       {
         id: 'selection',
+        enableResizing: false,
+        size: 48,
+        minSize: 48,
+        maxSize: 48,
         header: ({ table }) => (
           <input
             aria-label='选择当前页代表商品'
@@ -458,7 +479,11 @@ export default function ScreeningPage() {
   const table = useReactTable({
     data: products.data?.items || [],
     columns,
-    state: { rowSelection: selected },
+    state: { rowSelection: selected, columnSizing },
+    onColumnSizingChange: setColumnSizing,
+    defaultColumn: { minSize: 90, maxSize: 900 },
+    columnResizeMode: 'onChange',
+    enableColumnResizing: true,
     onRowSelectionChange: setSelected,
     getRowId: (row) => row.id,
     getCoreRowModel: getCoreRowModel(),
@@ -780,7 +805,15 @@ export default function ScreeningPage() {
                     aria-busy={products.isFetching}
                     className='bg-card max-h-[65vh] overflow-auto rounded-lg border'
                   >
-                    <table className='w-full min-w-[1450px] text-left text-sm'>
+                    <table
+                      className='table-fixed text-left text-sm'
+                      style={{ width: table.getTotalSize() }}
+                    >
+                      <colgroup>
+                        {table.getVisibleLeafColumns().map((column) => (
+                          <col key={column.id} style={{ width: column.getSize() }} />
+                        ))}
+                      </colgroup>
                       <caption className='sr-only'>
                         商品列表：商品信息、价格销量、尺寸重量、卖家、筛选与复核结果
                       </caption>
@@ -792,7 +825,7 @@ export default function ScreeningPage() {
                                 scope='col'
                                 key={h.id}
                                 aria-sort={sortDirection(filters.sort, h.column.id)}
-                                className='group whitespace-nowrap p-3 has-[>button]:p-0'
+                                className='group relative whitespace-nowrap p-3 has-[>button:not([data-column-resize])]:p-0'
                               >
                                 {sortFields[h.column.id] ? (
                                   <button
@@ -816,6 +849,52 @@ export default function ScreeningPage() {
                                 ) : (
                                   flexRender(h.column.columnDef.header, h.getContext())
                                 )}
+                                {h.column.getCanResize() && (
+                                  <button
+                                    type='button'
+                                    data-column-resize
+                                    aria-label={
+                                      '调整' +
+                                      (typeof h.column.columnDef.header === 'string'
+                                        ? h.column.columnDef.header
+                                        : h.column.id) +
+                                      '列宽'
+                                    }
+                                    title='拖动调整列宽；双击还原；左右方向键微调'
+                                    className='absolute inset-y-0 right-0 z-20 w-3 touch-none cursor-col-resize select-none border-r-2 border-transparent hover:border-primary focus-visible:border-primary focus-visible:outline-2 focus-visible:outline-primary'
+                                    onClick={(e) => e.stopPropagation()}
+                                    onMouseDown={h.getResizeHandler()}
+                                    onTouchStart={h.getResizeHandler()}
+                                    onDoubleClick={() =>
+                                      setColumnSizing((old) => ({
+                                        ...old,
+                                        [h.column.id]: defaultColumnWidths[h.column.id] ?? 150
+                                      }))
+                                    }
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+                                        e.preventDefault();
+                                        setColumnSizing((old) => ({
+                                          ...old,
+                                          [h.column.id]: Math.max(
+                                            90,
+                                            Math.min(
+                                              900,
+                                              h.column.getSize() +
+                                                (e.key === 'ArrowRight' ? 16 : -16)
+                                            )
+                                          )
+                                        }));
+                                      } else if (e.key === 'Home') {
+                                        e.preventDefault();
+                                        setColumnSizing((old) => ({
+                                          ...old,
+                                          [h.column.id]: defaultColumnWidths[h.column.id] ?? 150
+                                        }));
+                                      }
+                                    }}
+                                  />
+                                )}
                               </th>
                             ))}
                           </tr>
@@ -832,7 +911,10 @@ export default function ScreeningPage() {
                               )}
                             >
                               {row.getVisibleCells().map((cell) => (
-                                <td key={cell.id} className='px-3 py-2.5 align-top'>
+                                <td
+                                  key={cell.id}
+                                  className='break-words px-3 py-2.5 align-top [&>*]:min-w-0 [&>*]:max-w-full'
+                                >
                                   {flexRender(cell.column.columnDef.cell, cell.getContext())}
                                 </td>
                               ))}
@@ -1102,7 +1184,10 @@ function FamilyChildren({
           className={cn('border-t bg-primary/[0.035]', row.getIsSelected() && 'bg-muted/50')}
         >
           {row.getVisibleCells().map((cell) => (
-            <td key={cell.id} className='px-3 py-2.5 align-top'>
+            <td
+              key={cell.id}
+              className='break-words px-3 py-2.5 align-top [&>*]:min-w-0 [&>*]:max-w-full'
+            >
               {flexRender(cell.column.columnDef.cell, cell.getContext())}
             </td>
           ))}
