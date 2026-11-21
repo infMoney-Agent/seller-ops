@@ -79,24 +79,24 @@ func TestReviewWorkspace(t *testing.T) {
 	out := call(url.Values{"review_status": {"pending"}})
 	groups := out["groups"].(Object)
 	g := out["group"].(Object)
-	if integer(groups["total"]) != 23 || len(groups["items"].([]Object)) != 20 || integer(g["products"]) != 51 || integer(g["samples"]) != 51 || len(out["items"].([]Object)) != 50 {
+	if integer(groups["total"]) != 0 || integer(g["products"]) != 73 || integer(g["samples"]) != 52 || len(out["items"].([]Object)) != 50 {
 		t.Fatal(out)
 	}
 	samples := out["samples"].(Object)
-	if integer(samples["total"]) != 51 || len(samples["items"].([]Object)) != 50 {
+	if integer(samples["total"]) != 52 || len(samples["items"].([]Object)) != 50 {
 		t.Fatal(samples)
 	}
 	key := str(g["id"])
 	next := call(url.Values{"review_status": {"pending"}, "group_id": {key}, "member_page": {"2"}, "sample_page": {"2"}})
-	if len(next["items"].([]Object)) != 1 || len(next["samples"].(Object)["items"].([]Object)) != 1 {
+	if len(next["items"].([]Object)) != 23 || len(next["samples"].(Object)["items"].([]Object)) != 2 {
 		t.Fatal(next)
 	}
 	last := call(url.Values{"review_status": {"pending"}, "group_page": {"2"}})
-	if len(last["groups"].(Object)["items"].([]Object)) != 3 {
+	if len(last["groups"].(Object)["items"].([]Object)) != 0 {
 		t.Fatal(last)
 	}
 	subset := call(url.Values{"selected_ids": {strings.Join(ids[:2], ",")}, "review_status": {"pending"}})
-	if integer(subset["counts"].(Object)["products"]) != 2 || integer(subset["group"].(Object)["samples"]) != 51 {
+	if integer(subset["counts"].(Object)["products"]) != 2 || integer(subset["group"].(Object)["samples"]) != 52 {
 		t.Fatal(subset)
 	}
 	isolated := call(url.Values{"selected_ids": {otherTenant}})
@@ -104,8 +104,12 @@ func TestReviewWorkspace(t *testing.T) {
 		t.Fatal("tenant leaked", isolated)
 	}
 	// Independently unclassified products must not become one enormous type group.
-	if integer(last["groups"].(Object)["total"]) != 23 {
+	if integer(last["groups"].(Object)["total"]) != 0 {
 		t.Fatal(last)
+	}
+	mixed := add(801, "不同用途 / 不同材质", "pending")
+	if _, e = db.Exec(ctx, "UPDATE ps_products SET category_path='Home & Kitchen:Kitchen & Dining:Storage:Hooks:Wall Hooks' WHERE tenant_id=801 AND id=$1", mixed); e != nil {
+		t.Fatal(e)
 	}
 	// Real category paths retain every level; selecting a parent includes descendants.
 	if _, e = db.Exec(ctx, "UPDATE ps_products SET category_path='Home & Kitchen:Kitchen & Dining:Storage:Hooks:Wall Hooks' WHERE tenant_id=801 AND id=ANY($1::uuid[])", ids[:2]); e != nil {
@@ -125,15 +129,15 @@ func TestReviewWorkspace(t *testing.T) {
 			kitchen = node
 		}
 	}
-	if kitchen == nil || kitchen.Products != 3 || len(kitchen.Children) != 2 {
+	if kitchen == nil || kitchen.Products != 4 || len(kitchen.Children) != 2 {
 		t.Fatal("invalid tree", tree)
 	}
 	branch := call(url.Values{"category_path": {string(encoded([]string{"Home & Kitchen", "Kitchen & Dining"}))}})
-	if integer(branch["counts"].(Object)["products"]) != 2 {
+	if integer(branch["counts"].(Object)["products"]) != 3 || len(branch["items"].([]Object)) != 3 {
 		t.Fatal("descendant filter failed", branch)
 	}
 	leaf := call(url.Values{"category_path": {string(encoded([]string{"Home & Kitchen", "Kitchen & Dining", "Storage", "Hooks", "Wall Hooks"}))}})
-	if integer(leaf["counts"].(Object)["products"]) != 2 {
+	if integer(leaf["counts"].(Object)["products"]) != 3 || len(leaf["items"].([]Object)) != 3 {
 		t.Fatal("deep category lost", leaf)
 	}
 

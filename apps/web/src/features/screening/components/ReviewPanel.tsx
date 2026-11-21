@@ -28,8 +28,6 @@ export default function ReviewPanel({
   const [seed] = useState(selected);
   const [scope, setScope] = useState(seed.length ? 'selected' : 'filtered');
   const [categoryPath, setCategoryPath] = useState<string[]>([]);
-  const [groupPage, setGroupPage] = useState(1);
-  const [groupID, setGroupID] = useState('');
   const [memberPage, setMemberPage] = useState(1);
   const [samplePage, setSamplePage] = useState(1);
   const params = new URLSearchParams(filters);
@@ -37,8 +35,6 @@ export default function ReviewPanel({
   params.delete('page_size');
   params.delete('show_merged');
   params.delete('sort');
-  params.set('group_page', String(groupPage));
-  params.set('group_id', groupID);
   params.set('member_page', String(memberPage));
   params.set('sample_page', String(samplePage));
   if (scope === 'selected') params.set('selected_ids', seed.join(','));
@@ -48,35 +44,6 @@ export default function ReviewPanel({
   if (categoryPath.length) params.set('category_path', JSON.stringify(categoryPath));
   const workspace = useScreeningQuery<ReviewWorkspace>('/review-workspace?' + params);
   const data = workspace.data;
-  const navigation = useRef<HTMLSelectElement>(null);
-  const previousGroup = useRef<string | null>(null);
-  useEffect(() => {
-    const id = data?.group?.id;
-    if (id && previousGroup.current && previousGroup.current !== id) {
-      if (document.activeElement?.closest('nav[aria-label="商品分类目录"]')) {
-        previousGroup.current = id;
-        return;
-      }
-      navigation.current?.focus({ preventScroll: true });
-      navigation.current?.scrollIntoView({ block: 'center' });
-    }
-    if (id) previousGroup.current = id;
-  }, [data?.group?.id]);
-  const groups = data?.groups.items || [];
-  const index = groups.findIndex((g) => g.id === data?.group?.id);
-  function choose(id: string) {
-    setGroupID(id);
-    setMemberPage(1);
-    setSamplePage(1);
-  }
-  function groupPages(page: number) {
-    setGroupPage(page);
-    choose('');
-  }
-  function next() {
-    if (index >= 0 && index < groups.length - 1) choose(groups[index + 1].id);
-    else groupPages((data?.groups.page || 1) + 1);
-  }
   return (
     <div className='@container min-w-0'>
       <div
@@ -89,7 +56,8 @@ export default function ReviewPanel({
           busy={busy}
           onSelect={(path) => {
             setCategoryPath(path);
-            groupPages(1);
+            setMemberPage(1);
+            setSamplePage(1);
           }}
         />
         <div className='@container min-w-0 space-y-4'>
@@ -98,12 +66,10 @@ export default function ReviewPanel({
               <h3 className='font-semibold'>分组复核</h3>
               <p className='text-sm text-muted-foreground' role='status'>
                 {data
-                  ? data.counts.groups.toLocaleString() +
-                    ' 个类型组 · ' +
-                    data.counts.products.toLocaleString() +
+                  ? data.counts.products.toLocaleString() +
                     ' 个子体 · 待复核 ' +
                     data.counts.pending.toLocaleString()
-                  : '正在加载类型组…'}
+                  : '正在加载类目商品…'}
               </p>
             </div>
             {categoryPath.length > 0 && (
@@ -120,7 +86,8 @@ export default function ReviewPanel({
                     value={scope}
                     onChange={(e) => {
                       setScope(e.target.value);
-                      groupPages(1);
+                      setMemberPage(1);
+                      setSamplePage(1);
                     }}
                   >
                     <option value='selected'>商品库已选 {seed.length} 项</option>
@@ -128,65 +95,6 @@ export default function ReviewPanel({
                   </select>
                 </Field>
               )}
-              <div className='min-w-0 flex-1 basis-80'>
-                <Field label='类型组'>
-                  <select
-                    ref={navigation}
-                    aria-label='类型组'
-                    className='h-10 w-full min-w-0 rounded-md border bg-background px-3 text-sm'
-                    disabled={!groups.length || workspace.isFetching || busy}
-                    value={data?.group?.id || ''}
-                    onChange={(e) => choose(e.target.value)}
-                  >
-                    {groups.length ? (
-                      groups.map((g) => (
-                        <option key={g.id} value={g.id}>
-                          {g.title}（{g.products} 项 · 待复核 {g.pending} · 样本 {g.samples}）
-                        </option>
-                      ))
-                    ) : (
-                      <option value=''>暂无类型组</option>
-                    )}
-                  </select>
-                </Field>
-              </div>
-              <div className='flex flex-wrap items-center gap-2'>
-                <Button
-                  variant='outline'
-                  disabled={busy || workspace.isFetching || !data || data.groups.page <= 1}
-                  onClick={() => groupPages((data?.groups.page || 1) - 1)}
-                >
-                  前20组
-                </Button>
-                <span className='text-xs text-muted-foreground'>
-                  第 {data?.groups.page || 1} /{' '}
-                  {Math.max(1, Math.ceil((data?.groups.total || 0) / 20))} 页
-                </span>
-                <Button
-                  variant='outline'
-                  disabled={
-                    busy ||
-                    workspace.isFetching ||
-                    !data ||
-                    data.groups.page * 20 >= data.groups.total
-                  }
-                  onClick={() => groupPages((data?.groups.page || 1) + 1)}
-                >
-                  后20组
-                </Button>
-                <Button
-                  variant='secondary'
-                  disabled={
-                    busy ||
-                    workspace.isFetching ||
-                    !data?.group ||
-                    (index >= groups.length - 1 && data.groups.page * 20 >= data.groups.total)
-                  }
-                  onClick={next}
-                >
-                  下一类型组
-                </Button>
-              </div>
             </div>
           </section>
           {workspace.isError && (
@@ -447,8 +355,8 @@ function GroupReview({
           </Button>
         </div>
         <p className='text-xs text-muted-foreground'>
-          本组 {data.group?.products} 项 · 待复核 {data.group?.pending} · 本页可选 {eligible.length}{' '}
-          项
+          本类目 {data.group?.products} 项 · 待复核 {data.group?.pending} · 本页可选{' '}
+          {eligible.length} 项
         </p>
       </div>
       <div className='grid min-w-0 items-start gap-4 @4xl:grid-cols-[18rem_minmax(0,1fr)]'>
@@ -465,7 +373,7 @@ function GroupReview({
             </summary>
             {!samples.length && (
               <p className='py-5 text-sm leading-relaxed text-muted-foreground'>
-                本类型组暂无参考样本，可直接看图填写共同结论。
+                本类目暂无参考样本，可直接看图填写共同结论。
               </p>
             )}
             <div className='max-h-[55dvh] space-y-3 overflow-y-auto overscroll-contain pt-3 [scrollbar-gutter:stable]'>
@@ -534,7 +442,7 @@ function GroupReview({
           </details>
         </aside>
         <TableScroll
-          label='本组候选商品'
+          label='本类目候选商品'
           className='max-h-[62dvh] min-w-0 space-y-4 overscroll-contain border-0 pe-2 [scrollbar-gutter:stable]'
         >
           <div>

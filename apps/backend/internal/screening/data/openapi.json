@@ -6401,16 +6401,9 @@
     },
     "/api/v1/screening/review-workspace": {
       "get": {
-        "summary": "按类型组浏览批量复核候选与人工样本",
-        "description": "继承商品筛选。类型组每页20组，商品和样本分别每页50项；样本为同租户同类型组已复核商品，不受候选筛选影响。selected_ids为最多100个明确商品UUID；不会写入复核结论。",
+        "summary": "按类目浏览全部商品与参考样本",
+        "description": "选择父类目包含全部子类目；商品和样本独立分页，每页50项。不按机器类型二次分组。",
         "parameters": [
-          {
-            "name": "group_page",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          },
           {
             "name": "member_page",
             "in": "query",
@@ -6420,13 +6413,6 @@
           },
           {
             "name": "sample_page",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "group_id",
             "in": "query",
             "schema": {
               "type": "string"
