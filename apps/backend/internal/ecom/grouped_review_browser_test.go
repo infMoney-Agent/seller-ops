@@ -46,15 +46,19 @@ func TestBrowserGroupedReview(t *testing.T) {
 		chromedp.Reload(), chromedp.WaitReady(`#main-content`, chromedp.ByQuery),
 		chromedp.Poll(`!!document.querySelector('[data-screening-table] tbody input[type=checkbox]')`, nil),
 		chromedp.Evaluate(`(()=>{const row=[...document.querySelectorAll('[data-screening-table] tbody tr')].find(r=>r.textContent.includes('GROUP00006'));row.querySelector('input[type=checkbox]').click();})()`, nil),
-		chromedp.Evaluate(`[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='批量复核').click()`, nil),
+		chromedp.Poll(`[...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='批量复核'&&!b.disabled)`, nil),
+		chromedp.Evaluate(`window.__categoryStep='open-direct';[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='批量复核').click()`, nil),
 		chromedp.Poll(`!!document.querySelector('form[aria-label="已选商品批量复核"]')`, nil),
-		chromedp.Evaluate(`document.querySelector('form[aria-label="已选商品批量复核"] button[type=submit]').click()`, nil),
+		chromedp.Evaluate(`window.__categoryStep='preview-direct';document.querySelector('form[aria-label="已选商品批量复核"] button[type=submit]').click()`, nil),
 		chromedp.Poll(`!!document.querySelector('section[aria-label="已选商品批量预览"]')`, nil),
-		chromedp.Evaluate(`document.querySelector('button[aria-label="关闭批量复核已选商品"]').click()`, nil),
+		chromedp.Poll(`!!document.querySelector('button[aria-label="关闭批量复核已选商品"]:not(:disabled)')`, nil),
+		chromedp.Evaluate(`window.__categoryStep='close-direct';document.querySelector('button[aria-label="关闭批量复核已选商品"]').click()`, nil),
 		chromedp.Poll(`!document.querySelector('form[aria-label="已选商品批量复核"]')`, nil),
 		chromedp.Evaluate(`[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='清空').click()`, nil),
 	); e != nil {
-		t.Fatal("direct review from library", e)
+		var detail string
+		chromedp.Run(ctx, chromedp.Evaluate(`window.__categoryStep+"\n"+document.body.innerText`, &detail))
+		t.Fatal("direct review from library", e, detail)
 	}
 
 	if e := chromedp.Run(ctx,

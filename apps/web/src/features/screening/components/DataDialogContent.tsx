@@ -8,11 +8,13 @@ export default function DataDialogContent({
   title,
   description,
   wide = false,
+  closeDisabled = false,
   children
 }: {
   title: string;
   description: string;
   wide?: boolean;
+  closeDisabled?: boolean;
   children: ReactNode;
 }) {
   return (
@@ -29,6 +31,7 @@ export default function DataDialogContent({
           <DialogDescription className='line-clamp-2 break-words'>{description}</DialogDescription>
         </div>
         <DialogClose
+          disabled={closeDisabled}
           render={<Button size='sm' variant='ghost' className='shrink-0' />}
           aria-label={'关闭' + title}
         >

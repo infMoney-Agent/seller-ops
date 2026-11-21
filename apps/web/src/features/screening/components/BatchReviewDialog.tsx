@@ -29,6 +29,7 @@ export default function BatchReviewDialog({
       }}
     >
       <DataDialogContent
+        closeDisabled={busy}
         title='批量复核已选商品'
         description={'已选 ' + selected.length + ' 项；仅修改待复核商品'}
       >
