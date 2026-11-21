@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useId, useState } from 'react';
+import { useMutation } from '@tanstack/react-query';
 import { Icons } from '@/components/icons';
 import { productResearchApi } from '../api';
 import { cn } from '@/lib/utils';
@@ -9,7 +9,6 @@ import type { ProductScore } from '../types';
 
 const {
   ecomSearch: Search,
-  ecomTrendingUp: TrendingUp,
   ecomStar: Star,
   ecomDollarSign: DollarSign,
   ecomBarChart3: BarChart3,
@@ -46,6 +45,7 @@ function ScoreBadge({ score }: { score: number }) {
 }
 
 export default function ProductResearchPage() {
+  const fieldId = useId();
   const [category, setCategory] = useState('electronics');
   const [limit, setLimit] = useState(30);
   const [minScore, setMinScore] = useState(6);
@@ -69,8 +69,16 @@ export default function ProductResearchPage() {
       {/* Controls */}
       <div className='flex flex-wrap gap-4 mb-6 p-5 bg-slate-900 rounded-xl border border-slate-800'>
         <div className='flex flex-col gap-1'>
-          <label className='text-xs text-slate-400 font-medium'>商品类目</label>
+          <label
+            id={fieldId + '-ecom-field-1-label'}
+            htmlFor={fieldId + '-ecom-field-1'}
+            className='text-xs text-slate-400 font-medium'
+          >
+            商品类目
+          </label>
           <select
+            aria-labelledby={fieldId + '-ecom-field-1-label'}
+            id={fieldId + '-ecom-field-1'}
             value={category}
             onChange={(e) => setCategory(e.target.value)}
             className='bg-slate-800 border border-slate-700 text-white text-sm rounded-lg px-3 py-2 focus:ring-1 focus:ring-blue-500 outline-none'
@@ -83,8 +91,16 @@ export default function ProductResearchPage() {
           </select>
         </div>
         <div className='flex flex-col gap-1'>
-          <label className='text-xs text-slate-400 font-medium'>扫描商品数</label>
+          <label
+            id={fieldId + '-ecom-field-2-label'}
+            htmlFor={fieldId + '-ecom-field-2'}
+            className='text-xs text-slate-400 font-medium'
+          >
+            扫描商品数
+          </label>
           <select
+            aria-labelledby={fieldId + '-ecom-field-2-label'}
+            id={fieldId + '-ecom-field-2'}
             value={limit}
             onChange={(e) => setLimit(Number(e.target.value))}
             className='bg-slate-800 border border-slate-700 text-white text-sm rounded-lg px-3 py-2 focus:ring-1 focus:ring-blue-500 outline-none'
@@ -97,8 +113,16 @@ export default function ProductResearchPage() {
           </select>
         </div>
         <div className='flex flex-col gap-1'>
-          <label className='text-xs text-slate-400 font-medium'>最低综合评分</label>
+          <label
+            id={fieldId + '-ecom-field-3-label'}
+            htmlFor={fieldId + '-ecom-field-3'}
+            className='text-xs text-slate-400 font-medium'
+          >
+            最低综合评分
+          </label>
           <select
+            aria-labelledby={fieldId + '-ecom-field-3-label'}
+            id={fieldId + '-ecom-field-3'}
             value={minScore}
             onChange={(e) => setMinScore(Number(e.target.value))}
             className='bg-slate-800 border border-slate-700 text-white text-sm rounded-lg px-3 py-2 focus:ring-1 focus:ring-blue-500 outline-none'

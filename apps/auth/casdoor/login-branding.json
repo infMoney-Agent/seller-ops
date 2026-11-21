@@ -1,0 +1,11 @@
+{
+  "displayName": "Seller Ops 电商运营工作台",
+  "title": "登录 · Seller Ops 电商运营工作台",
+  "description": "选品、分组复核与利润测算的一体化电商运营工作台",
+  "logo": "/branding/seller-ops-logo.svg",
+  "logoDark": "/branding/seller-ops-logo-dark.svg",
+  "favicon": "/branding/seller-ops-icon.svg",
+  "footerHtml": "<p>Seller Ops · 电商运营工作台</p>",
+  "introHtml": "<section class=\"seller-login-intro\"><h1>登录电商运营工作台</h1><p>统一管理选品、商品复核与利润测算</p></section>",
+  "formCss": ".seller-login-intro { margin: 0 0 20px; text-align: center; } .seller-login-intro h1 { margin: 0 0 8px; font-size: 22px; font-weight: 650; line-height: 1.4; } .seller-login-intro p { margin: 0; font-size: 14px; line-height: 1.6; opacity: .65; } .login-panel { border-radius: 18px; } .login-logo-box { margin-bottom: 18px; }"
+}

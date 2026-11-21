@@ -1,0 +1,332 @@
+[
+  {
+    "key": "product_url",
+    "label": "商品详情页链接",
+    "table": "product",
+    "type": "text"
+  },
+  {
+    "key": "brand_url",
+    "label": "品牌链接",
+    "table": "product",
+    "type": "text"
+  },
+  {
+    "key": "seller_url",
+    "label": "卖家首页",
+    "table": "product",
+    "type": "text"
+  },
+  {
+    "key": "seller_info",
+    "label": "卖家信息",
+    "table": "product",
+    "type": "text"
+  },
+  {
+    "key": "sku",
+    "label": "SKU",
+    "table": "product",
+    "type": "text"
+  },
+  {
+    "key": "main_category",
+    "label": "大类目",
+    "table": "product",
+    "type": "text"
+  },
+  {
+    "key": "category_path",
+    "label": "类目路径",
+    "table": "product",
+    "type": "text"
+  },
+  {
+    "key": "listing_date",
+    "label": "上架时间",
+    "table": "product",
+    "type": "text"
+  },
+  {
+    "key": "variant_count",
+    "label": "变体数",
+    "table": "product",
+    "type": "bigint"
+  },
+  {
+    "key": "detail_parameters",
+    "label": "详细参数",
+    "table": "product",
+    "type": "text"
+  },
+  {
+    "key": "product_dimensions_original",
+    "label": "商品尺寸",
+    "table": "product",
+    "type": "text"
+  },
+  {
+    "key": "product_dimensions",
+    "label": "商品尺寸（单位换算）",
+    "table": "product",
+    "type": "text"
+  },
+  {
+    "key": "product_weight_original",
+    "label": "商品重量",
+    "table": "product",
+    "type": "text"
+  },
+  {
+    "key": "product_weight_converted",
+    "label": "商品重量（单位换算）",
+    "table": "product",
+    "type": "text"
+  },
+  {
+    "key": "package_dimensions_original",
+    "label": "包装尺寸",
+    "table": "product",
+    "type": "text"
+  },
+  {
+    "key": "package_dimensions",
+    "label": "包装尺寸（单位换算）",
+    "table": "product",
+    "type": "text"
+  },
+  {
+    "key": "package_weight_original",
+    "label": "包装重量",
+    "table": "product",
+    "type": "text"
+  },
+  {
+    "key": "package_weight_converted",
+    "label": "包装重量（单位换算）",
+    "table": "product",
+    "type": "text"
+  },
+  {
+    "key": "package_size_tier",
+    "label": "包装尺寸分段",
+    "table": "product",
+    "type": "text"
+  },
+  {
+    "key": "product_length_cm",
+    "label": "商品长(cm)",
+    "table": "product",
+    "type": "numeric(18,6)"
+  },
+  {
+    "key": "product_width_cm",
+    "label": "商品宽(cm)",
+    "table": "product",
+    "type": "numeric(18,6)"
+  },
+  {
+    "key": "product_height_cm",
+    "label": "商品高(cm)",
+    "table": "product",
+    "type": "numeric(18,6)"
+  },
+  {
+    "key": "small_bsr",
+    "label": "小类BSR",
+    "table": "monthly",
+    "type": "text"
+  },
+  {
+    "key": "bsr_change",
+    "label": "大类BSR增长数",
+    "table": "monthly",
+    "type": "text"
+  },
+  {
+    "key": "bsr_growth_rate",
+    "label": "大类BSR增长率",
+    "table": "monthly",
+    "type": "text"
+  },
+  {
+    "key": "sales_yoy",
+    "label": "销量同比增长率",
+    "table": "monthly",
+    "type": "text"
+  },
+  {
+    "key": "sales_mom",
+    "label": "销量环比增长率",
+    "table": "monthly",
+    "type": "text"
+  },
+  {
+    "key": "prime_price",
+    "label": "prime价格($)",
+    "table": "monthly",
+    "type": "text"
+  },
+  {
+    "key": "shipping_price",
+    "label": "买家运费($)",
+    "table": "monthly",
+    "type": "text"
+  },
+  {
+    "key": "new_reviews",
+    "label": "月新增评分数",
+    "table": "monthly",
+    "type": "text"
+  },
+  {
+    "key": "review_rate",
+    "label": "留评率",
+    "table": "monthly",
+    "type": "text"
+  },
+  {
+    "key": "seller_count",
+    "label": "卖家数",
+    "table": "monthly",
+    "type": "text"
+  },
+  {
+    "key": "buybox_type",
+    "label": "BuyBox类型",
+    "table": "monthly",
+    "type": "text"
+  },
+  {
+    "key": "fulfillment",
+    "label": "配送方式",
+    "table": "monthly",
+    "type": "text"
+  },
+  {
+    "key": "coupon",
+    "label": "Coupon",
+    "table": "monthly",
+    "type": "text"
+  },
+  {
+    "key": "deal",
+    "label": "秒杀",
+    "table": "monthly",
+    "type": "text"
+  },
+  {
+    "key": "sponsored_products",
+    "label": "SP广告",
+    "table": "monthly",
+    "type": "text"
+  },
+  {
+    "key": "sponsored_brands",
+    "label": "品牌广告",
+    "table": "monthly",
+    "type": "text"
+  },
+  {
+    "key": "ac_keywords",
+    "label": "AC关键词",
+    "table": "monthly",
+    "type": "text"
+  },
+  {
+    "key": "amazon_choice",
+    "label": "Amazon's Choice",
+    "table": "monthly",
+    "type": "text"
+  },
+  {
+    "key": "best_seller",
+    "label": "Best Seller标识",
+    "table": "monthly",
+    "type": "text"
+  },
+  {
+    "key": "new_release",
+    "label": "New Release标识",
+    "table": "monthly",
+    "type": "text"
+  },
+  {
+    "key": "aplus",
+    "label": "A+页面",
+    "table": "monthly",
+    "type": "text"
+  },
+  {
+    "key": "brand_story",
+    "label": "品牌故事",
+    "table": "monthly",
+    "type": "text"
+  },
+  {
+    "key": "video",
+    "label": "视频介绍",
+    "table": "monthly",
+    "type": "text"
+  },
+  {
+    "key": "lqs",
+    "label": "LQS",
+    "table": "monthly",
+    "type": "text"
+  },
+  {
+    "key": "qa_count",
+    "label": "Q&A",
+    "table": "monthly",
+    "type": "text"
+  },
+  {
+    "key": "rating_level",
+    "label": "评级",
+    "table": "monthly",
+    "type": "text"
+  },
+  {
+    "key": "listing_days",
+    "label": "上架天数",
+    "table": "monthly",
+    "type": "text"
+  },
+  {
+    "key": "imported_fba_fee_usd",
+    "label": "FBA($)",
+    "table": "profit",
+    "type": "numeric(18,6)"
+  },
+  {
+    "key": "imported_gross_margin_rate",
+    "label": "毛利率",
+    "table": "profit",
+    "type": "numeric(18,6)"
+  },
+  {
+    "key": "source_monthly_sales",
+    "label": "报表原始月销量",
+    "table": "monthly",
+    "type": "bigint"
+  },
+  {
+    "key": "source_monthly_revenue",
+    "label": "报表原始月销售额",
+    "table": "monthly",
+    "type": "numeric(18,6)"
+  },
+  {
+    "key": "sales_quantity_kind",
+    "label": "子体销量数据类型",
+    "table": "monthly",
+    "type": "text"
+  },
+  {
+    "key": "child_sales_raw",
+    "label": "子体销量原文",
+    "table": "monthly",
+    "type": "text"
+  }
+]

@@ -217,5 +217,5 @@ func (s *service) one(ctx context.Context, sql string, args ...any) (Object, err
 	return items[0], nil
 }
 func (s *service) product(ctx context.Context, a identity, id string) (Object, error) {
-	return s.one(ctx, "SELECT to_jsonb(p) FROM ps_products p WHERE tenant_id=$1 AND id=$2::uuid", a.Tenant, id)
+	return s.one(ctx, "SELECT to_jsonb(p) FROM ps_products p WHERE tenant_id=$1 AND id=$2::uuid AND archived_at IS NULL", a.Tenant, id)
 }

@@ -8,17 +8,14 @@ import {
   getCoreRowModel,
   useReactTable,
   type ColumnDef,
+  type ColumnSizingState,
   type OnChangeFn,
   type RowSelectionState
 } from '@tanstack/react-table';
 import PageContainer from '@/components/layout/page-container';
-import {
-  Popover,
-  PopoverTrigger,
-  PopoverContent,
-  PopoverTitle,
-  PopoverDescription
-} from '@/components/ui/popover';
+import { Icons } from '@/components/icons';
+import { Dialog, DialogTrigger } from '@/components/ui/dialog';
+import DataDialogContent from './DataDialogContent';
 import { useSellerSession } from '@/features/auth/session';
 import { cn } from '@/lib/utils';
 import { useJob, useScreeningQuery } from '../queries';
@@ -31,8 +28,12 @@ import type {
   ReviewStatus,
   FamilyResult
 } from '../types';
-import ImportPanel from './ImportPanel';
+import { childSales } from '../sales';
+import { useTableTextAlignment } from '../use-table-text-alignment';
+import { countryCode, listingAge, shanghaiToday } from '../product-display';
+import ImportDialog from './ImportDialog';
 import ReviewPanel from './ReviewPanel';
+import BatchReviewDialog from './BatchReviewDialog';
 import ProfitPanel from './ProfitPanel';
 import PolicyPanel from './PolicyPanel';
 import ProductParameters from './ProductParameters';
@@ -40,16 +41,115 @@ import FamilyPanel from './FamilyPanel';
 import ParentMonthlyPanel from './ParentMonthlyPanel';
 import MonthlyHistory, { periodLabels, sourceLabels } from './MonthlyHistory';
 import type { MonthOption } from '../types';
-import { Badge, Button, DataBlock, Field, Input, formatMoney, type Action } from './shared';
+import {
+  Badge,
+  Button,
+  DataBlock,
+  Field,
+  Input,
+  TableScroll,
+  formatMoney,
+  type Action
+} from './shared';
 
-const tabs = ['商品库', '导入记录', '批量复核', '利润测算', '规则与历史', '父体数据'];
+const minimumColumnWidths: ColumnSizingState = {
+  selection: 40,
+  asin: 156,
+  price_usd: 104,
+  monthly_sales: 88,
+  rating_reviews: 132,
+  listing_date: 90,
+  dimensions: 120,
+  seller: 92,
+  decision: 96,
+  review_status: 88,
+  profit: 132,
+  actions: 56
+};
+function fittedColumnWidths(width: number): ColumnSizingState {
+  const minimum = Object.values(minimumColumnWidths).reduce((a, b) => a + b, 0);
+  const extra = Math.max(0, Math.floor(width) - minimum);
+  const weights: ColumnSizingState = {
+    asin: 5,
+    dimensions: 2,
+    seller: 1,
+    decision: 1,
+    review_status: 1,
+    price_usd: 1,
+    profit: 1
+  };
+  const result = { ...minimumColumnWidths };
+  let assigned = 0;
+  for (const [key, weight] of Object.entries(weights)) {
+    const addition = Math.floor((extra * weight) / 12);
+    result[key] += addition;
+    assigned += addition;
+  }
+  result.asin += extra - assigned;
+  return result;
+}
+
+const sortFields: Record<string, string> = {
+  price_usd: 'price_usd',
+  monthly_sales: 'monthly_sales',
+  rating_reviews: 'rating',
+  profit: 'profit_usd'
+};
+function sortDirection(
+  sort: string | undefined,
+  column: string
+): 'ascending' | 'descending' | undefined {
+  const field = sortFields[column];
+  return field && sort === field
+    ? 'ascending'
+    : field && sort === '-' + field
+      ? 'descending'
+      : undefined;
+}
+const tabs = [
+  { id: 0, title: '商品库' },
+  { id: 2, title: '分组复核' },
+  { id: 3, title: '利润测算' },
+  { id: 4, title: '规则与历史' },
+  { id: 5, title: '父体数据' }
+];
 export default function ScreeningPage() {
   const session = useSellerSession();
+  const [today, setToday] = useState('');
+  useEffect(() => {
+    const refresh = () => setToday(shanghaiToday());
+    refresh();
+    const timer = setInterval(refresh, 60000);
+    return () => clearInterval(timer);
+  }, []);
   const client = useQueryClient();
   const [tab, setTab] = useState(0);
+  const [importOpen, setImportOpen] = useState(false);
+  const [batchReviewOpen, setBatchReviewOpen] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [page, setPage] = useState(1);
   const [filters, setFilters] = useState<Record<string, string>>({ show_merged: 'false' });
   const [selected, setSelected] = useState<RowSelectionState>({});
+  const [columnSizing, setColumnSizing] = useState<ColumnSizingState>({});
+  const [tableContainer, setTableContainer] = useState<HTMLDivElement | null>(null);
+  const [tableWidth, setTableWidth] = useState(0);
+  useTableTextAlignment(tableContainer);
+  useEffect(() => {
+    if (!tableContainer) return;
+    const measure = () => setTableWidth(Math.floor(tableContainer.clientWidth));
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(tableContainer);
+    return () => observer.disconnect();
+  }, [tableContainer]);
+  const defaultColumnWidths = useMemo(() => fittedColumnWidths(tableWidth), [tableWidth]);
+  function resetColumnWidth(id: string) {
+    setColumnSizing((old) => {
+      const next = { ...old };
+      delete next[id];
+      return next;
+    });
+  }
   const [familyRows, setFamilyRows] = useState<Record<string, boolean>>({});
   const [focus, setFocus] = useState<Product | null>(null);
   const [group, setGroup] = useState<string | null>(null);
@@ -57,11 +157,45 @@ export default function ScreeningPage() {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [jobs, setJobs] = useState<string[]>([]);
+  const [showJob, setShowJob] = useState(true);
   const [activeJob, setActiveJob] = useState<string | null>(null);
   const query = new URLSearchParams({ ...filters, page: String(page) }).toString();
-  const products = useScreeningQuery<PageResult<Product>>('/products?' + query);
+  const products = useScreeningQuery<PageResult<Product>>('/products?' + query, false, true);
+  useEffect(() => {
+    if (
+      !products.data ||
+      products.isPlaceholderData ||
+      products.isFetching ||
+      page * products.data.page_size >= products.data.total
+    )
+      return;
+    const params = new URLSearchParams({ ...filters, page: String(page + 1) });
+    const path = '/products?' + params;
+    const timer = setTimeout(
+      () =>
+        void client.prefetchQuery({
+          queryKey: ['screening', session.workspaceId, path],
+          queryFn: ({ signal }) =>
+            request<PageResult<Product>>(path, 'GET', undefined, signal, 'low'),
+          staleTime: 60000
+        }),
+      300
+    );
+    return () => clearTimeout(timer);
+  }, [
+    client,
+    filters,
+    page,
+    products.data,
+    products.isPlaceholderData,
+    products.isFetching,
+    session.workspaceId
+  ]);
   const counts = useScreeningQuery<Record<string, number>>(
-    '/summary?' + new URLSearchParams(filters)
+    '/summary?' +
+      new URLSearchParams(
+        Object.fromEntries(Object.entries(filters).filter(([key]) => key !== 'sort'))
+      )
   );
   const imports = useScreeningQuery<PageResult<ImportRecord>>('/imports');
   const months = useScreeningQuery<{ items: MonthOption[] }>('/months');
@@ -70,6 +204,30 @@ export default function ScreeningPage() {
     group ? `/groups/${group}/products?page=${groupPage}&${new URLSearchParams(filters)}` : null
   );
   const job = useJob(activeJob);
+  const advancedKeys = [
+    'recommendation',
+    'category',
+    'seller_region',
+    'direction',
+    'child_sales_min',
+    'profit_min',
+    'profit_max',
+    'import_id',
+    'has_reference'
+  ];
+  const advancedCount = advancedKeys.filter((key) => Boolean(filters[key])).length;
+  const filterCount = Object.entries(filters).filter(
+    ([key, value]) => key !== 'sort' && value && (key !== 'show_merged' || value === 'true')
+  ).length;
+  function resetFilters() {
+    setFilters({ show_merged: 'false' });
+    setPage(1);
+    setSelected({});
+    setFamilyRows({});
+    setGroup(null);
+    setFocus(null);
+    setShowAdvanced(false);
+  }
   const selectedIds = Object.keys(selected).filter((id) => selected[id]);
   const refresh = async () => {
     await Promise.all([
@@ -93,7 +251,8 @@ export default function ScreeningPage() {
       setBusy(false);
     }
   };
-  function watch(id: string) {
+  function watch(id: string, visible = true) {
+    setShowJob(visible);
     setJobs((old) => [...new Set([id, ...old])]);
     setActiveJob(id);
   }
@@ -101,6 +260,7 @@ export default function ScreeningPage() {
     setSelected({});
     setFamilyRows({});
     setFocus(null);
+    setImportOpen(false);
     setGroup(null);
     setJobs([]);
     setActiveJob(null);
@@ -129,9 +289,14 @@ export default function ScreeningPage() {
     () => [
       {
         id: 'selection',
+        enableResizing: false,
+        size: 40,
+        minSize: 40,
+        maxSize: 40,
         header: ({ table }) => (
           <input
             aria-label='选择当前页代表商品'
+            disabled={products.isPlaceholderData}
             type='checkbox'
             checked={table.getIsAllPageRowsSelected()}
             onChange={table.getToggleAllPageRowsSelectedHandler()}
@@ -150,7 +315,7 @@ export default function ScreeningPage() {
         accessorKey: 'asin',
         header: '商品',
         cell: ({ row }) => (
-          <div className='flex max-w-md gap-3'>
+          <div className='flex min-w-0 items-center gap-2'>
             {row.original.image_url && (
               <Image
                 unoptimized
@@ -158,32 +323,42 @@ export default function ScreeningPage() {
                 height={64}
                 src={row.original.image_url}
                 alt=''
-                className='h-16 w-16 rounded bg-white object-contain'
+                className='h-14 w-14 shrink-0 rounded-md border bg-white object-contain'
                 loading='lazy'
                 referrerPolicy='no-referrer'
               />
             )}
             <div>
-              <button
-                className='font-medium underline underline-offset-4'
-                onClick={() => setFocus(row.original)}
-              >
-                {row.original.asin}
-              </button>
-              {(row.original.family_count || 1) > 1 && (
-                <Button
-                  size='sm'
-                  variant='ghost'
-                  aria-label={`展开 ${row.original.parent_asin} 的子体`}
-                  aria-expanded={Boolean(familyRows[row.original.id])}
-                  aria-controls={`family-${row.original.id}`}
-                  onClick={() =>
-                    setFamilyRows((old) => ({ ...old, [row.original.id]: !old[row.original.id] }))
-                  }
+              <div className='flex flex-wrap items-center gap-1'>
+                <button
+                  className='break-all text-xs font-semibold underline-offset-4 hover:underline'
+                  title='打开商品复核'
+                  onClick={() => setFocus(row.original)}
                 >
-                  {familyRows[row.original.id] ? '▾' : '▸'} {row.original.family_count} 个子体
-                </Button>
-              )}
+                  {row.original.asin}
+                </button>
+                <AsinTools asin={row.original.asin} />
+                {(row.original.family_count || 1) > 1 && (
+                  <Button
+                    size='sm'
+                    variant='ghost'
+                    className='h-7 px-2 text-xs'
+                    aria-label={`${familyRows[row.original.id] ? '收起' : '展开'} ${row.original.parent_asin} 的子体`}
+                    aria-expanded={Boolean(familyRows[row.original.id])}
+                    aria-controls={`family-${row.original.id}`}
+                    onClick={() =>
+                      setFamilyRows((old) => ({ ...old, [row.original.id]: !old[row.original.id] }))
+                    }
+                  >
+                    {familyRows[row.original.id] ? (
+                      <Icons.chevronDown className='size-3' />
+                    ) : (
+                      <Icons.chevronRight className='size-3' />
+                    )}
+                    {row.original.family_count} 个子体
+                  </Button>
+                )}
+              </div>
               {(row.original.family_count || 1) > 1 && (
                 <p className='text-muted-foreground text-xs'>
                   {row.original.sales_scope === 'child' && row.original.monthly_sales !== null
@@ -193,7 +368,12 @@ export default function ScreeningPage() {
                     : '代表商品 · 销量待确认'}
                 </p>
               )}
-              <p className='line-clamp-2'>{row.original.title_zh || row.original.title}</p>
+              <p
+                className='line-clamp-2 leading-5'
+                title={row.original.title_zh || row.original.title}
+              >
+                {row.original.title_zh || row.original.title}
+              </p>
               <p className='text-xs'>
                 父体：{row.original.parent_asin || '未知'}{' '}
                 {row.original.manual_category && `· 人工分类：${row.original.manual_category}`}
@@ -202,16 +382,13 @@ export default function ScreeningPage() {
                 {row.original.stat_month?.slice(0, 7)} ·{' '}
                 {periodLabels[row.original.period_type || ''] || '暂无分期数据'}
               </p>
-              <p className='text-muted-foreground text-xs'>
-                {row.original.seller_name} · {row.original.seller_region || '地区未知'}
-              </p>
             </div>
           </div>
         )
       },
       {
         accessorKey: 'price_usd',
-        header: '价格 / 月销量',
+        header: '价格 USD',
         cell: ({ row }) => (
           <PriceHistoryCard
             product={row.original}
@@ -220,6 +397,77 @@ export default function ScreeningPage() {
               setTab(3);
             }}
           />
+        )
+      },
+      {
+        accessorKey: 'monthly_sales',
+        header: '子体销量',
+        cell: ({ row }) => (
+          <div className='space-y-1 tabular-nums'>
+            <p>{childSales(row.original)}</p>
+          </div>
+        )
+      },
+      {
+        id: 'rating_reviews',
+        header: '评分 / 评分数',
+        cell: ({ row }) => (
+          <p className='whitespace-nowrap tabular-nums'>
+            {row.original.rating == null
+              ? '—'
+              : Number(row.original.rating).toLocaleString('zh-CN', {
+                  minimumFractionDigits: 1,
+                  maximumFractionDigits: 2
+                })}
+            {' / '}
+            {row.original.review_count?.toLocaleString('zh-CN') ?? '—'}
+          </p>
+        )
+      },
+      {
+        accessorKey: 'listing_date',
+        header: '上架时间',
+        cell: ({ row }) => (
+          <div className='space-y-1 tabular-nums'>
+            <p>{row.original.listing_date?.trim() || '—'}</p>
+            {listingAge(row.original.listing_date, today) != null && (
+              <p className='text-muted-foreground text-xs'>
+                距今 {listingAge(row.original.listing_date, today)?.toLocaleString('zh-CN')} 天
+              </p>
+            )}
+          </div>
+        )
+      },
+      {
+        id: 'dimensions',
+        header: '尺寸 / 重量',
+        cell: ({ row }) => <ProductMeasurements product={row.original} />
+      },
+      {
+        id: 'seller',
+        header: '卖家',
+        cell: ({ row }) => (
+          <div className='min-w-36 max-w-52 space-y-1 text-xs leading-5'>
+            <p className='break-words text-sm font-medium'>{row.original.seller_name || '—'}</p>
+            <p className='text-muted-foreground flex flex-wrap items-center justify-center gap-1'>
+              所属地：
+              {countryCode(row.original.seller_region) && (
+                <Image
+                  unoptimized
+                  src={'/images/flags/' + countryCode(row.original.seller_region) + '.svg'}
+                  width={18}
+                  height={12}
+                  alt=''
+                  aria-hidden='true'
+                  className='inline-block h-3 w-[18px] shrink-0 rounded-[1px] object-contain'
+                />
+              )}
+              {row.original.seller_region || '—'}
+            </p>
+            {row.original.seller_id && (
+              <p className='text-muted-foreground break-all'>ID：{row.original.seller_id}</p>
+            )}
+          </div>
         )
       },
       {
@@ -266,7 +514,7 @@ export default function ScreeningPage() {
         id: 'actions',
         header: '操作',
         cell: ({ row }) => (
-          <div className='flex gap-1'>
+          <div className='flex flex-col items-stretch gap-1 [&>button]:h-7 [&>button]:px-1'>
             <Button size='sm' variant='ghost' onClick={() => setFocus(row.original)}>
               复核
             </Button>
@@ -296,32 +544,66 @@ export default function ScreeningPage() {
         )
       }
     ],
-    [familyRows]
+    [familyRows, products.isPlaceholderData, today]
+  );
+  const sizedColumns = useMemo(
+    () =>
+      columns.map((column) => ({
+        ...column,
+        minSize:
+          minimumColumnWidths[
+            column.id ?? ('accessorKey' in column ? String(column.accessorKey) : '')
+          ] ?? 40
+      })),
+    [columns]
   );
   // oxlint-disable-next-line react/incompatible-library -- TanStack Table is intentionally kept outside React Compiler memoization.
   const table = useReactTable({
     data: products.data?.items || [],
-    columns,
-    state: { rowSelection: selected },
+    columns: sizedColumns,
+    state: { rowSelection: selected, columnSizing: { ...defaultColumnWidths, ...columnSizing } },
+    onColumnSizingChange: (updater) =>
+      setColumnSizing((old) => {
+        const current = { ...defaultColumnWidths, ...old };
+        const next = typeof updater === 'function' ? updater(current) : updater;
+        return Object.fromEntries(
+          Object.entries(next).filter(([key, value]) => value !== defaultColumnWidths[key])
+        );
+      }),
+    defaultColumn: { minSize: 40, maxSize: 900 },
+    columnResizeMode: 'onChange',
+    enableColumnResizing: true,
     onRowSelectionChange: setSelected,
     getRowId: (row) => row.id,
     getCoreRowModel: getCoreRowModel(),
     enableRowSelection: true
   });
   return (
-    <div className='w-full min-w-0 max-w-full overflow-x-hidden'>
+    <div className='w-full min-w-0 max-w-full'>
       <PageContainer
         pageTitle='产品初筛'
         pageDescription='导入、筛选、人工复核与利润测算，保留每次判断的来源。'
         pageHeaderAction={
-          <Button variant='outline' onClick={() => void refresh()}>
-            刷新
-          </Button>
+          <div className='flex items-center gap-2'>
+            {tab === 0 && (
+              <Button size='sm' onClick={() => setImportOpen(true)}>
+                导入商品
+              </Button>
+            )}
+            <Button
+              size='sm'
+              variant='outline'
+              disabled={products.isFetching}
+              onClick={() => void refresh()}
+            >
+              {products.isFetching ? '刷新中…' : '刷新'}
+            </Button>
+          </div>
         }
       >
-        <div className='space-y-4'>
+        <div className='min-w-0 max-w-full space-y-4'>
           <nav className='flex flex-wrap gap-2 border-b pb-3' aria-label='初筛工作台'>
-            {tabs.map((title, i) => (
+            {tabs.map(({ title, id: i }) => (
               <Button
                 key={title}
                 variant={tab === i ? 'default' : 'ghost'}
@@ -341,7 +623,7 @@ export default function ScreeningPage() {
               {message}
             </div>
           )}
-          {activeJob && (
+          {activeJob && showJob && (
             <section className='space-y-2 rounded border p-3'>
               <div className='flex flex-wrap items-center gap-3'>
                 <strong className='text-sm'>后台任务</strong>
@@ -393,143 +675,184 @@ export default function ScreeningPage() {
           )}
           {tab === 0 && (
             <>
-              <div className='grid grid-cols-2 gap-3 md:grid-cols-4'>
+              <div className='grid grid-cols-1 gap-2 sm:grid-cols-3'>
                 {[
-                  ['source_rows', '子体来源行数'],
-                  ['products', '去重商品'],
-                  ['displayed', '父体折叠展示'],
-                  ['pending', '待复核']
+                  ['displayed', '商品数'],
+                  ['products', '子体商品数'],
+                  ['pending_displayed', '待复核']
                 ].map(([key, title]) => (
-                  <div key={key} className='rounded-lg border p-4'>
-                    <span className='text-muted-foreground text-sm'>{title}</span>
-                    <p className='mt-1 text-2xl font-semibold'>{counts.data?.[key] ?? '—'}</p>
+                  <div
+                    key={key}
+                    className='bg-card flex items-center justify-between gap-2 rounded-lg border px-3 py-3'
+                  >
+                    <span className='text-muted-foreground text-xs'>{title}</span>
+                    <p className='text-xl font-semibold tabular-nums'>
+                      {counts.data?.[key]?.toLocaleString('zh-CN') ?? '—'}
+                    </p>
                   </div>
                 ))}
               </div>
-              <div className='grid gap-3 rounded border p-3 md:grid-cols-4'>
-                <p className='text-muted-foreground text-xs md:col-span-4'>
-                  默认展示各商品最新一期经营数据，点击价格 /
-                  月销量列的“查看详细数据”可查看近一年历史；人工结论为商品级，机器结果依据最新商品资料计算。
-                </p>
-                <Field label='经营数据来源'>
-                  <select
-                    className='rounded border bg-transparent p-2'
-                    value={filters.source_type || ''}
-                    onChange={(e) => {
-                      filter('source_type', e.target.value);
-                      setFocus(null);
-                      setSelected({});
-                    }}
-                  >
-                    <option value=''>全部来源（采用所选周期最新观察值）</option>
-                    {[...new Set((months.data?.items || []).map((m) => m.source_type))].map(
-                      (source) => (
-                        <option key={source} value={source}>
-                          {sourceLabels[source] || source}
-                        </option>
-                      )
-                    )}
-                  </select>
-                </Field>
-
-                <Field label='关键词 / ASIN'>
-                  <Input value={filters.q || ''} onChange={(e) => filter('q', e.target.value)} />
-                </Field>
-                <Field label='人工结论'>
-                  <select
-                    className='rounded border bg-transparent p-2'
-                    value={filters.review_status || ''}
-                    onChange={(e) => filter('review_status', e.target.value)}
-                  >
-                    <option value=''>全部</option>
-                    {(['pending', 'kept', 'excluded', 'unsure'] as const).map((v, i) => (
-                      <option key={v} value={v}>
-                        {['待复核', '保留', '排除', '待确认'][i]}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-                <Field label='机器结果'>
-                  <select
-                    className='rounded border bg-transparent p-2'
-                    value={filters.machine || ''}
-                    onChange={(e) => filter('machine', e.target.value)}
-                  >
-                    <option value=''>全部</option>
-                    <option value='passed'>通过</option>
-                    <option value='excluded'>排除</option>
-                    <option value='insufficient'>信息不足</option>
-                    <option value='unscreened'>未初筛</option>
-                  </select>
-                </Field>
-                <Field label='推荐类型'>
-                  <select
-                    className='rounded border bg-transparent p-2'
-                    value={filters.recommendation || ''}
-                    onChange={(e) => filter('recommendation', e.target.value)}
-                  >
-                    <option value=''>全部</option>
-                    <option value='regular'>常规</option>
-                    <option value='exploration'>探索</option>
-                  </select>
-                </Field>
-                {(
-                  [
-                    ['category', '类目'],
-                    ['seller_region', '卖家地区'],
-                    ['direction', '产品方向'],
-                    ['profit_min', '最低利润 USD'],
-                    ['profit_max', '最高利润 USD']
-                  ] as const
-                ).map(([key, title]) => (
-                  <Field key={key} label={title}>
+              <section aria-label='商品筛选' className='bg-card space-y-3 rounded-lg border p-3'>
+                <div className='flex items-center justify-between gap-3'>
+                  <p className='text-muted-foreground text-xs'>
+                    默认最新一期 · 同父体折叠展示 · 点击价格销量查看历史
+                  </p>
+                  <Button size='sm' variant='ghost' disabled={!filterCount} onClick={resetFilters}>
+                    重置筛选{filterCount ? `（${filterCount}）` : ''}
+                  </Button>
+                </div>
+                <div className='grid gap-3 sm:grid-cols-2 xl:grid-cols-4'>
+                  <Field label='关键词 / ASIN'>
                     <Input
-                      value={filters[key] || ''}
-                      onChange={(e) => filter(key, e.target.value)}
+                      placeholder='搜索 ASIN 或商品标题'
+                      value={filters.q || ''}
+                      onChange={(e) => filter('q', e.target.value)}
                     />
                   </Field>
-                ))}
-                <Field label='来源批次'>
-                  <select
-                    className='rounded border bg-transparent p-2'
-                    value={filters.import_id || ''}
-                    onChange={(e) => filter('import_id', e.target.value)}
+                  <Field label='人工结论'>
+                    <select
+                      className='h-9 w-full min-w-0 rounded-md border bg-background px-2 text-sm'
+                      value={filters.review_status || ''}
+                      onChange={(e) => filter('review_status', e.target.value)}
+                    >
+                      <option value=''>全部</option>
+                      {(['pending', 'kept', 'excluded', 'unsure'] as const).map((v, i) => (
+                        <option key={v} value={v}>
+                          {['待复核', '保留', '排除', '待确认'][i]}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field label='机器结果'>
+                    <select
+                      className='rounded border bg-transparent p-2'
+                      value={filters.machine || ''}
+                      onChange={(e) => filter('machine', e.target.value)}
+                    >
+                      <option value=''>全部</option>
+                      <option value='passed'>通过</option>
+                      <option value='excluded'>排除</option>
+                      <option value='insufficient'>信息不足</option>
+                      <option value='unscreened'>未初筛</option>
+                    </select>
+                  </Field>
+                  <Field label='经营数据来源'>
+                    <select
+                      className='rounded border bg-transparent p-2'
+                      value={filters.source_type || ''}
+                      onChange={(e) => {
+                        filter('source_type', e.target.value);
+                        setFocus(null);
+                        setSelected({});
+                      }}
+                    >
+                      <option value=''>全部来源 · 最新一期</option>
+                      {[...new Set((months.data?.items || []).map((m) => m.source_type))].map(
+                        (source) => (
+                          <option key={source} value={source}>
+                            {sourceLabels[source] || source}
+                          </option>
+                        )
+                      )}
+                    </select>
+                  </Field>
+                </div>
+                <div className='flex items-center justify-between gap-3'>
+                  <label className='flex items-center gap-2 text-xs'>
+                    <input
+                      type='checkbox'
+                      aria-label='展示全部子体'
+                      checked={filters.show_merged === 'true'}
+                      onChange={(e) => filter('show_merged', String(e.target.checked))}
+                    />
+                    展示全部子体
+                  </label>
+                  <Button
+                    size='sm'
+                    variant='ghost'
+                    aria-expanded={showAdvanced}
+                    aria-controls='screening-advanced-filters'
+                    onClick={() => setShowAdvanced((v) => !v)}
                   >
-                    <option value=''>全部批次</option>
-                    {imports.data?.items.map((item) => (
-                      <option key={item.id} value={item.id}>
-                        {item.file_name} · {item.source_period}
-                      </option>
+                    {showAdvanced ? '收起筛选' : '更多筛选'}
+                    {advancedCount > 0 && (
+                      <span className='bg-primary/10 text-primary rounded px-1.5 text-xs'>
+                        {advancedCount}
+                      </span>
+                    )}
+                    <Icons.chevronDown
+                      className={cn('size-4 transition-transform', showAdvanced && 'rotate-180')}
+                    />
+                  </Button>
+                </div>
+                {showAdvanced && (
+                  <div
+                    id='screening-advanced-filters'
+                    className='grid gap-3 border-t pt-3 sm:grid-cols-2 xl:grid-cols-4'
+                  >
+                    {' '}
+                    <Field label='推荐类型'>
+                      <select
+                        className='rounded border bg-transparent p-2'
+                        value={filters.recommendation || ''}
+                        onChange={(e) => filter('recommendation', e.target.value)}
+                      >
+                        <option value=''>全部</option>
+                        <option value='regular'>常规</option>
+                        <option value='exploration'>探索</option>
+                      </select>
+                    </Field>
+                    {(
+                      [
+                        ['category', '类目'],
+                        ['seller_region', '卖家地区'],
+                        ['direction', '产品方向'],
+                        ['child_sales_min', '最低子体销量（仅确定达到）'],
+                        ['profit_min', '最低利润 USD'],
+                        ['profit_max', '最高利润 USD']
+                      ] as const
+                    ).map(([key, title]) => (
+                      <Field key={key} label={title}>
+                        <Input
+                          value={filters[key] || ''}
+                          onChange={(e) => filter(key, e.target.value)}
+                        />
+                      </Field>
                     ))}
-                  </select>
-                </Field>
-                <Field label='人工样本'>
-                  <select
-                    className='rounded border bg-transparent p-2'
-                    value={filters.has_reference || ''}
-                    onChange={(e) => filter('has_reference', e.target.value)}
-                  >
-                    <option value=''>全部</option>
-                    <option value='true'>有样本</option>
-                    <option value='false'>无样本</option>
-                  </select>
-                </Field>
-                <label className='flex items-center gap-2 text-sm'>
-                  <input
-                    type='checkbox'
-                    aria-label='展示全部子体'
-                    checked={filters.show_merged === 'true'}
-                    onChange={(e) => filter('show_merged', String(e.target.checked))}
-                  />{' '}
-                  展示全部归并商品
-                </label>
-              </div>
-              <div className='flex flex-wrap items-center gap-2'>
+                    <Field label='来源批次'>
+                      <select
+                        className='rounded border bg-transparent p-2'
+                        value={filters.import_id || ''}
+                        onChange={(e) => filter('import_id', e.target.value)}
+                      >
+                        <option value=''>全部批次</option>
+                        {imports.data?.items.map((item) => (
+                          <option key={item.id} value={item.id}>
+                            {item.file_name} · {item.source_period}
+                          </option>
+                        ))}
+                      </select>
+                    </Field>
+                    <Field label='人工样本'>
+                      <select
+                        className='rounded border bg-transparent p-2'
+                        value={filters.has_reference || ''}
+                        onChange={(e) => filter('has_reference', e.target.value)}
+                      >
+                        <option value=''>全部</option>
+                        <option value='true'>有样本</option>
+                        <option value='false'>无样本</option>
+                      </select>
+                    </Field>
+                  </div>
+                )}
+              </section>
+              <div className='bg-card flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2'>
                 <span className='text-sm'>跨页已选 {selectedIds.length} 个</span>
                 <Button variant='outline' onClick={() => setSelected({})}>
                   清空
                 </Button>
-                <Button disabled={!selectedIds.length} onClick={() => setTab(2)}>
+                <Button disabled={!selectedIds.length} onClick={() => setBatchReviewOpen(true)}>
                   批量复核
                 </Button>
                 <Button
@@ -550,64 +873,178 @@ export default function ScreeningPage() {
                 </Button>
               </div>
               {products.isError && <p role='alert'>{products.error.message}</p>}
+              {products.isFetching && products.data && (
+                <p role='status' className='text-muted-foreground text-xs'>
+                  正在更新列表，暂时保留上次结果…
+                </p>
+              )}
               {products.isLoading ? (
-                <p role='status'>正在加载商品…</p>
+                <div
+                  role='status'
+                  className='text-muted-foreground animate-pulse rounded-lg border p-8 text-center text-sm'
+                >
+                  正在加载商品…
+                </div>
               ) : (
-                <div className='overflow-auto rounded border'>
-                  <table className='w-full text-left text-sm'>
-                    <thead className='bg-muted'>
-                      {table.getHeaderGroups().map((g) => (
-                        <tr key={g.id}>
-                          {g.headers.map((h) => (
-                            <th key={h.id} className='whitespace-nowrap p-3'>
-                              {flexRender(h.column.columnDef.header, h.getContext())}
-                            </th>
-                          ))}
-                        </tr>
-                      ))}
-                    </thead>
-                    <tbody>
-                      {table.getRowModel().rows.map((row) => (
-                        <Fragment key={row.id}>
-                          <tr
-                            className={cn(
-                              'border-t',
-                              familyRows[row.original.id] && 'bg-primary/[0.035]',
-                              row.getIsSelected() && 'bg-muted/50'
-                            )}
-                          >
-                            {row.getVisibleCells().map((cell) => (
-                              <td key={cell.id} className='p-3 align-top'>
-                                {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                              </td>
+                <fieldset className='w-full min-w-0 max-w-full'>
+                  <legend className='sr-only'>商品列表操作</legend>
+                  <TableScroll
+                    label='商品列表，可横向和纵向滚动'
+                    data-screening-table
+                    ref={setTableContainer}
+                    aria-busy={products.isFetching}
+                    className='bg-card w-full min-w-0 max-w-full max-h-[65vh] overflow-x-auto overflow-y-auto overscroll-x-contain rounded-lg border [contain:inline-size] [&_td[data-fixed-align=left]]:text-left [&_td[data-fixed-align=left]_p]:text-left [&_tbody_p]:text-center [&_tbody_p[data-multiline=true]]:text-left [&_tbody_p[data-multiline=true]]:justify-start [&_[data-auto-align]]:text-center [&_[data-auto-align][data-multiline=true]]:text-left'
+                  >
+                    <table
+                      className='table-fixed text-center text-xs'
+                      style={{ width: table.getTotalSize() }}
+                    >
+                      <colgroup>
+                        {table.getVisibleLeafColumns().map((column) => (
+                          <col key={column.id} style={{ width: column.getSize() }} />
+                        ))}
+                      </colgroup>
+                      <caption className='sr-only'>
+                        商品列表：商品信息、价格销量、尺寸重量、卖家、筛选与复核结果
+                      </caption>
+                      <thead className='bg-muted sticky top-0 z-10 [&_th]:bg-muted'>
+                        {table.getHeaderGroups().map((g) => (
+                          <tr key={g.id}>
+                            {g.headers.map((h) => (
+                              <th
+                                scope='col'
+                                key={h.id}
+                                aria-sort={sortDirection(filters.sort, h.column.id)}
+                                className='group relative whitespace-nowrap p-2 text-center align-middle has-[>button:not([data-column-resize])]:p-0'
+                              >
+                                {sortFields[h.column.id] ? (
+                                  <button
+                                    type='button'
+                                    className='inline-flex min-h-12 w-full items-center justify-center gap-1 p-2 text-center font-semibold focus-visible:outline-2 focus-visible:outline-primary'
+                                    onClick={() => {
+                                      const field = sortFields[h.column.id];
+                                      setFilters((old) => ({
+                                        ...old,
+                                        sort: old.sort === field ? '-' + field : field
+                                      }));
+                                      setPage(1);
+                                    }}
+                                  >
+                                    <span className='min-w-0 whitespace-nowrap'>
+                                      {flexRender(h.column.columnDef.header, h.getContext())}
+                                    </span>
+                                    <span aria-hidden='true' className='text-muted-foreground'>
+                                      <span className='group-aria-[sort=descending]:hidden'>↑</span>
+                                      <span className='group-aria-[sort=ascending]:hidden'>↓</span>
+                                    </span>
+                                  </button>
+                                ) : (
+                                  <span className='min-w-0 whitespace-nowrap'>
+                                    {flexRender(h.column.columnDef.header, h.getContext())}
+                                  </span>
+                                )}
+                                {h.column.getCanResize() && (
+                                  <button
+                                    type='button'
+                                    data-column-resize
+                                    aria-label={
+                                      '调整' +
+                                      (typeof h.column.columnDef.header === 'string'
+                                        ? h.column.columnDef.header
+                                        : h.column.id) +
+                                      '列宽'
+                                    }
+                                    title='拖动调整列宽；双击还原；左右方向键微调'
+                                    className='absolute inset-y-0 right-0 z-20 w-3 touch-none cursor-col-resize select-none border-r-2 border-transparent hover:border-primary focus-visible:border-primary focus-visible:outline-2 focus-visible:outline-primary'
+                                    onClick={(e) => e.stopPropagation()}
+                                    onMouseDown={h.getResizeHandler()}
+                                    onTouchStart={h.getResizeHandler()}
+                                    onDoubleClick={() => resetColumnWidth(h.column.id)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+                                        e.preventDefault();
+                                        setColumnSizing((old) => ({
+                                          ...old,
+                                          [h.column.id]: Math.max(
+                                            minimumColumnWidths[h.column.id] ?? 40,
+                                            Math.min(
+                                              900,
+                                              h.column.getSize() +
+                                                (e.key === 'ArrowRight' ? 16 : -16)
+                                            )
+                                          )
+                                        }));
+                                      } else if (e.key === 'Home') {
+                                        e.preventDefault();
+                                        resetColumnWidth(h.column.id);
+                                      }
+                                    }}
+                                  />
+                                )}
+                              </th>
                             ))}
                           </tr>
-                          {familyRows[row.original.id] && (
-                            <FamilyChildren
-                              product={row.original}
-                              columns={columns}
-                              selected={selected}
-                              onSelectionChange={setSelected}
-                            />
-                          )}
-                        </Fragment>
-                      ))}
-                    </tbody>
-                  </table>
-                  {!products.data?.items.length && (
-                    <div className='p-10 text-center'>
-                      <p>还没有符合条件的商品</p>
-                      <Button variant='link' onClick={() => setTab(1)}>
-                        导入商品文件
-                      </Button>
-                    </div>
-                  )}
-                </div>
+                        ))}
+                      </thead>
+                      <tbody inert={products.isPlaceholderData}>
+                        {table.getRowModel().rows.map((row) => (
+                          <Fragment key={row.id}>
+                            <tr
+                              className={cn(
+                                'border-t',
+                                familyRows[row.original.id] && 'bg-primary/[0.035]',
+                                row.getIsSelected() && 'bg-muted/50'
+                              )}
+                            >
+                              {row.getVisibleCells().map((cell) => (
+                                <td
+                                  key={cell.id}
+                                  data-fixed-align={
+                                    ['asin', 'dimensions'].includes(cell.column.id)
+                                      ? 'left'
+                                      : undefined
+                                  }
+                                  className='break-words px-2 py-2 align-middle [&>*]:min-w-0 [&>*]:max-w-full [&_p]:whitespace-normal'
+                                >
+                                  {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                                </td>
+                              ))}
+                            </tr>
+                            {familyRows[row.original.id] && (
+                              <FamilyChildren
+                                product={row.original}
+                                columns={columns}
+                                selected={selected}
+                                onSelectionChange={setSelected}
+                              />
+                            )}
+                          </Fragment>
+                        ))}
+                      </tbody>
+                    </table>
+                    {!products.isError && !products.data?.items.length && (
+                      <div className='p-10 text-center'>
+                        <p className='font-medium'>
+                          {filterCount ? '没有符合筛选条件的商品' : '还没有商品'}
+                        </p>
+                        <p className='text-muted-foreground mt-1 text-sm'>
+                          {filterCount ? '调整筛选条件后重试。' : '导入商品文件，开始初筛与复核。'}
+                        </p>
+                        <Button
+                          variant='link'
+                          onClick={() => (filterCount ? resetFilters() : setImportOpen(true))}
+                        >
+                          {filterCount ? '重置筛选' : '导入商品文件'}
+                        </Button>
+                      </div>
+                    )}
+                  </TableScroll>
+                </fieldset>
               )}
               <div className='flex items-center gap-3'>
                 <Button
                   variant='outline'
-                  disabled={page === 1}
+                  disabled={products.isPlaceholderData || page === 1}
                   onClick={() => setPage((v) => v - 1)}
                 >
                   上一页
@@ -617,7 +1054,7 @@ export default function ScreeningPage() {
                 </span>
                 <Button
                   variant='outline'
-                  disabled={page * 50 >= (products.data?.total || 0)}
+                  disabled={products.isPlaceholderData || page * 50 >= (products.data?.total || 0)}
                   onClick={() => setPage((v) => v + 1)}
                 >
                   下一页
@@ -694,8 +1131,15 @@ export default function ScreeningPage() {
               )}
             </>
           )}
-          {tab === 1 && <ImportPanel act={act} watch={watch} busy={busy} />}
-          {tab === 2 && <ReviewPanel selected={selectedIds} act={act} busy={busy} />}
+          {tab === 2 && (
+            <ReviewPanel
+              key={session.workspaceId}
+              selected={selectedIds}
+              filters={filters}
+              act={act}
+              busy={busy}
+            />
+          )}
           {tab === 3 && (
             <ProfitPanel
               key={`${focus?.id || 'none'}:${focus?.monthly_id || 'latest'}`}
@@ -711,7 +1155,95 @@ export default function ScreeningPage() {
           {tab === 4 && <PolicyPanel selected={selectedIds} act={act} watch={watch} busy={busy} />}
         </div>
       </PageContainer>
+      <BatchReviewDialog
+        key={'batch-' + session.workspaceId}
+        open={batchReviewOpen}
+        onClose={() => setBatchReviewOpen(false)}
+        selected={selectedIds}
+        act={act}
+        busy={busy}
+        onApplied={() => setSelected({})}
+      />
+      <ImportDialog
+        key={session.workspaceId}
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        act={act}
+        watch={(id) => watch(id, false)}
+        busy={busy}
+        error={error}
+        message={message}
+        job={showJob ? undefined : job.data}
+        onRemoved={(id) => {
+          setSelected({});
+          setFocus(null);
+          setFamilyRows({});
+          setGroup(null);
+          setFilters((old) => {
+            if (old.import_id !== id) return old;
+            const next = { ...old };
+            delete next.import_id;
+            return next;
+          });
+        }}
+      />
     </div>
+  );
+}
+
+function AsinTools({ asin }: { asin: string }) {
+  const [copied, setCopied] = useState(false);
+  const [error, setError] = useState(false);
+  useEffect(() => {
+    if (!copied) return;
+    const timer = setTimeout(() => setCopied(false), 1800);
+    return () => clearTimeout(timer);
+  }, [copied]);
+  return (
+    <>
+      <Button
+        size='sm'
+        variant='ghost'
+        className='h-7 w-7 p-0'
+        aria-label={`复制 ASIN ${asin}`}
+        title={copied ? '已复制 ASIN' : '复制 ASIN'}
+        onClick={async () => {
+          setError(false);
+          try {
+            await navigator.clipboard.writeText(asin);
+            setCopied(true);
+          } catch {
+            setError(true);
+          }
+        }}
+      >
+        {copied ? (
+          <Icons.check className='size-3.5 text-emerald-600' />
+        ) : (
+          <Icons.ecomCopy className='size-3.5 text-muted-foreground' />
+        )}
+      </Button>
+      <a
+        href={`https://www.amazon.com/dp/${asin}`}
+        target='_blank'
+        rel='noopener noreferrer'
+        aria-label={`在 Amazon 查看 ${asin}`}
+        title='在 Amazon 查看'
+        className='text-muted-foreground hover:bg-muted inline-flex size-7 items-center justify-center rounded-md'
+      >
+        <Icons.externalLink className='size-3.5' />
+      </a>
+      {copied && (
+        <span role='status' className='sr-only'>
+          ASIN 已复制
+        </span>
+      )}
+      {error && (
+        <span role='alert' className='text-destructive text-xs'>
+          复制失败，请手动选择 ASIN
+        </span>
+      )}
+    </>
   );
 }
 
@@ -752,7 +1284,13 @@ function FamilyChildren({
           className={cn('border-t bg-primary/[0.035]', row.getIsSelected() && 'bg-muted/50')}
         >
           {row.getVisibleCells().map((cell) => (
-            <td key={cell.id} className='p-3 align-top'>
+            <td
+              key={cell.id}
+              data-fixed-align={
+                ['asin', 'dimensions'].includes(cell.column.id) ? 'left' : undefined
+              }
+              className='break-words px-2 py-2 align-middle [&>*]:min-w-0 [&>*]:max-w-full [&_p]:whitespace-normal'
+            >
               {flexRender(cell.column.columnDef.cell, cell.getContext())}
             </td>
           ))}
@@ -813,28 +1351,16 @@ function PriceHistoryCard({
   const [open, setOpen] = useState(false);
   return (
     <div className='space-y-1'>
-      <p className='whitespace-nowrap'>
-        ${formatMoney(product.price_usd)} / {product.monthly_sales ?? '—'}
-      </p>
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger className='text-primary text-xs underline underline-offset-2'>
+      <p className='whitespace-nowrap'>${formatMoney(product.price_usd)}</p>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogTrigger className='text-primary text-xs underline underline-offset-2'>
           查看详细数据
-        </PopoverTrigger>
-        <PopoverContent
-          align='start'
-          className='max-h-[65vh] w-[min(46rem,calc(100vw-2rem))] overflow-y-auto p-3'
+        </DialogTrigger>
+        <DataDialogContent
+          title={'经营数据 · ' + product.asin}
+          description={product.title_zh || product.title}
+          wide
         >
-          <div className='flex items-start justify-between gap-3'>
-            <div className='min-w-0'>
-              <PopoverTitle>经营数据 · {product.asin}</PopoverTitle>
-              <PopoverDescription className='line-clamp-2'>
-                {product.title_zh || product.title}
-              </PopoverDescription>
-            </div>
-            <Button size='sm' variant='ghost' onClick={() => setOpen(false)}>
-              关闭
-            </Button>
-          </div>
           {open && (
             <MonthlyHistory
               product={product}
@@ -845,13 +1371,74 @@ function PriceHistoryCard({
               }}
             />
           )}
-        </PopoverContent>
-      </Popover>
+        </DataDialogContent>
+      </Dialog>
     </div>
   );
 }
 
-function SingleReview({
+const measurementNumber = (value: string | number | null | undefined) =>
+  value == null || value === '' || !Number.isFinite(Number(value))
+    ? '—'
+    : Number(value).toLocaleString('zh-CN', { maximumFractionDigits: 2 });
+const measurementDimensions = (
+  length: Product['weight_g'],
+  width: Product['weight_g'],
+  height: Product['weight_g'],
+  original?: string | null
+) =>
+  [length, width, height].every((v) => v != null && v !== '')
+    ? [length, width, height].map(measurementNumber).join(' × ') + ' cm'
+    : original || '—';
+function ProductMeasurements({ product }: { product: Product }) {
+  return (
+    <div className='min-w-56 space-y-1 text-xs leading-5 tabular-nums'>
+      <p>
+        <span className='text-muted-foreground'>商品：</span>
+        {measurementDimensions(
+          product.product_length_cm,
+          product.product_width_cm,
+          product.product_height_cm,
+          product.product_dimensions || product.product_dimensions_original
+        )}
+      </p>
+      <p>
+        <span className='text-muted-foreground'>净重：</span>
+        {measurementNumber(product.weight_g)}
+        {product.weight_g != null && ' g'}
+      </p>
+      <p>
+        <span className='text-muted-foreground'>包装：</span>
+        {measurementDimensions(
+          product.package_length_cm,
+          product.package_width_cm,
+          product.package_height_cm,
+          product.package_dimensions || product.package_dimensions_original
+        )}
+      </p>
+      <p>
+        <span className='text-muted-foreground'>毛重：</span>
+        {measurementNumber(product.package_weight_g)}
+        {product.package_weight_g != null && ' g'}
+      </p>
+    </div>
+  );
+}
+
+function SingleReview(props: Parameters<typeof SingleReviewContent>[0]) {
+  const detail = useScreeningQuery<Product>(`/products/` + props.product.id);
+  if (detail.isError) return <p role='alert'>{detail.error.message}</p>;
+  if (!detail.data) return <p role='status'>正在加载商品详情…</p>;
+  return (
+    <SingleReviewContent
+      {...props}
+      product={detail.data}
+      key={detail.data.id + ':' + detail.data.data_revision + ':' + detail.data.review_revision}
+    />
+  );
+}
+
+function SingleReviewContent({
   product,
   act,
   busy,
@@ -944,6 +1531,7 @@ function SingleReview({
       >
         保存复核结论
       </Button>
+      <DataBlock title='商品完整资料（主表）' value={product} />
       <DataBlock title='操作历史' value={history.data} />
       <DataBlock title='来源历史' value={observations.data} />
     </section>

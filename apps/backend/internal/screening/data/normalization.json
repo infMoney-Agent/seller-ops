@@ -59,7 +59,8 @@
     "bsr_rank": [
       "BSR排名",
       "BSR Rank",
-      "BSR"
+      "BSR",
+      "大类BSR"
     ],
     "review_count": [
       "评分数",
@@ -135,7 +136,8 @@
     "child_monthly_sales": [
       "子体月销量",
       "子ASIN月销量",
-      "Child Monthly Sales"
+      "Child Monthly Sales",
+      "子体销量"
     ],
     "parent_monthly_sales": [
       "父体月销量",
@@ -144,11 +146,169 @@
     ],
     "child_monthly_revenue": [
       "子体月销售额($)",
-      "Child Monthly Revenue"
+      "Child Monthly Revenue",
+      "子体销售额($)",
+      "子体销售额"
     ],
     "parent_monthly_revenue": [
       "父体月销售额($)",
       "Parent Monthly Revenue"
+    ],
+    "variant_count": [
+      "变体数",
+      "变体数量",
+      "Variation Count",
+      "Variants"
+    ],
+    "product_url": [
+      "商品详情页链接"
+    ],
+    "brand_url": [
+      "品牌链接"
+    ],
+    "seller_url": [
+      "卖家首页"
+    ],
+    "seller_info": [
+      "卖家信息"
+    ],
+    "sku": [
+      "SKU"
+    ],
+    "main_category": [
+      "大类目"
+    ],
+    "category_path": [
+      "类目路径"
+    ],
+    "listing_date": [
+      "上架时间"
+    ],
+    "detail_parameters": [
+      "详细参数"
+    ],
+    "product_dimensions_original": [
+      "商品尺寸"
+    ],
+    "product_dimensions": [
+      "商品尺寸（单位换算）"
+    ],
+    "product_weight_original": [
+      "商品重量"
+    ],
+    "product_weight_converted": [
+      "商品重量（单位换算）"
+    ],
+    "package_dimensions_original": [
+      "包装尺寸"
+    ],
+    "package_dimensions": [
+      "包装尺寸（单位换算）"
+    ],
+    "package_weight_original": [
+      "包装重量"
+    ],
+    "package_weight_converted": [
+      "包装重量（单位换算）"
+    ],
+    "package_size_tier": [
+      "包装尺寸分段"
+    ],
+    "product_length_cm": [
+      "商品长(cm)"
+    ],
+    "product_width_cm": [
+      "商品宽(cm)"
+    ],
+    "product_height_cm": [
+      "商品高(cm)"
+    ],
+    "small_bsr": [
+      "小类BSR"
+    ],
+    "bsr_change": [
+      "大类BSR增长数"
+    ],
+    "bsr_growth_rate": [
+      "大类BSR增长率"
+    ],
+    "sales_yoy": [
+      "销量同比增长率"
+    ],
+    "sales_mom": [
+      "销量环比增长率"
+    ],
+    "prime_price": [
+      "prime价格($)"
+    ],
+    "shipping_price": [
+      "买家运费($)"
+    ],
+    "new_reviews": [
+      "月新增评分数"
+    ],
+    "review_rate": [
+      "留评率"
+    ],
+    "seller_count": [
+      "卖家数"
+    ],
+    "buybox_type": [
+      "BuyBox类型"
+    ],
+    "fulfillment": [
+      "配送方式"
+    ],
+    "coupon": [
+      "Coupon"
+    ],
+    "deal": [
+      "秒杀"
+    ],
+    "sponsored_products": [
+      "SP广告"
+    ],
+    "sponsored_brands": [
+      "品牌广告"
+    ],
+    "ac_keywords": [
+      "AC关键词"
+    ],
+    "amazon_choice": [
+      "Amazon's Choice"
+    ],
+    "best_seller": [
+      "Best Seller标识"
+    ],
+    "new_release": [
+      "New Release标识"
+    ],
+    "aplus": [
+      "A+页面"
+    ],
+    "brand_story": [
+      "品牌故事"
+    ],
+    "video": [
+      "视频介绍"
+    ],
+    "lqs": [
+      "LQS"
+    ],
+    "qa_count": [
+      "Q&A"
+    ],
+    "rating_level": [
+      "评级"
+    ],
+    "listing_days": [
+      "上架天数"
+    ],
+    "imported_fba_fee_usd": [
+      "FBA($)"
+    ],
+    "imported_gross_margin_rate": [
+      "毛利率"
     ]
   },
   "MATERIALS": [

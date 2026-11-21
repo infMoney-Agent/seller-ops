@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Icons } from '@/components/icons';
 import { monitorApi } from '../api';
@@ -28,6 +28,7 @@ const {
 } = Icons;
 
 export default function CompetitorMonitorPage() {
+  const fieldId = useId();
   const qc = useQueryClient();
   const [newAsin, setNewAsin] = useState('');
   const [newLabel, setNewLabel] = useState('');
@@ -70,7 +71,7 @@ export default function CompetitorMonitorPage() {
   });
 
   const monitors = monitorsData?.monitors || [];
-  const snapshots = (snapshotsData?.snapshots || []).reverse();
+  const snapshots = (snapshotsData?.snapshots || []).toReversed();
 
   const error =
     listError ||
@@ -106,14 +107,32 @@ export default function CompetitorMonitorPage() {
           <div className='p-5 bg-slate-900 rounded-xl border border-slate-800'>
             <h3 className='text-white font-semibold mb-4 text-sm'>添加要监控的 ASIN</h3>
             <div className='space-y-3'>
+              <label
+                id={fieldId + '-asin-label'}
+                htmlFor={fieldId + '-asin'}
+                className='block text-xs text-slate-400'
+              >
+                商品 ASIN
+              </label>
               <input
+                id={fieldId + '-asin'}
+                aria-labelledby={fieldId + '-asin-label'}
                 value={newAsin}
                 onChange={(e) => setNewAsin(e.target.value.toUpperCase())}
                 placeholder='ASIN（例如 B01MFCXDYG）'
                 maxLength={10}
                 className='w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-lg px-3 py-2.5 focus:ring-1 focus:ring-emerald-500 outline-none placeholder:text-slate-600 font-mono'
               />
+              <label
+                id={fieldId + '-note-label'}
+                htmlFor={fieldId + '-note'}
+                className='block text-xs text-slate-400'
+              >
+                备注（可选）
+              </label>
               <input
+                id={fieldId + '-note'}
+                aria-labelledby={fieldId + '-note-label'}
                 value={newLabel}
                 onChange={(e) => setNewLabel(e.target.value)}
                 placeholder='备注（可选）'
@@ -121,8 +140,16 @@ export default function CompetitorMonitorPage() {
               />
               <div className='grid grid-cols-2 gap-2'>
                 <div>
-                  <label className='text-xs text-slate-500 block mb-1'>降价预警阈值（%）</label>
+                  <label
+                    id={fieldId + '-ecom-field-1-label'}
+                    htmlFor={fieldId + '-ecom-field-1'}
+                    className='text-xs text-slate-500 block mb-1'
+                  >
+                    降价预警阈值（%）
+                  </label>
                   <input
+                    aria-labelledby={fieldId + '-ecom-field-1-label'}
+                    id={fieldId + '-ecom-field-1'}
                     type='number'
                     value={alertRules.price_drop_pct}
                     onChange={(e) =>
@@ -132,8 +159,16 @@ export default function CompetitorMonitorPage() {
                   />
                 </div>
                 <div>
-                  <label className='text-xs text-slate-500 block mb-1'>畅销排名变化阈值（%）</label>
+                  <label
+                    id={fieldId + '-ecom-field-2-label'}
+                    htmlFor={fieldId + '-ecom-field-2'}
+                    className='text-xs text-slate-500 block mb-1'
+                  >
+                    畅销排名变化阈值（%）
+                  </label>
                   <input
+                    aria-labelledby={fieldId + '-ecom-field-2-label'}
+                    id={fieldId + '-ecom-field-2'}
                     type='number'
                     value={alertRules.bsr_change_pct}
                     onChange={(e) =>
@@ -164,7 +199,6 @@ export default function CompetitorMonitorPage() {
             {monitors.map((m) => (
               <div
                 key={m.asin}
-                onClick={() => setSelectedAsin(m.asin)}
                 className={cn(
                   'p-4 rounded-xl border cursor-pointer transition-all',
                   selectedAsin === m.asin
@@ -173,10 +207,18 @@ export default function CompetitorMonitorPage() {
                 )}
               >
                 <div className='flex items-center justify-between'>
-                  <div>
-                    <p className='font-mono text-sm text-white'>{m.asin}</p>
-                    {m.label && <p className='text-xs text-slate-400 mt-0.5'>{m.label}</p>}
-                  </div>
+                  <button
+                    type='button'
+                    onClick={() => setSelectedAsin(m.asin)}
+                    aria-label={'查看监控 ' + m.asin}
+                    aria-pressed={selectedAsin === m.asin}
+                    className='min-h-8 min-w-0 flex-1 rounded text-left focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-emerald-400'
+                  >
+                    <span className='block font-mono text-sm text-white'>{m.asin}</span>
+                    {m.label && (
+                      <span className='mt-0.5 block text-xs text-slate-400'>{m.label}</span>
+                    )}
+                  </button>
                   <div className='flex gap-1'>
                     <button
                       onClick={(e) => {
@@ -184,7 +226,9 @@ export default function CompetitorMonitorPage() {
                         snapshotMutation.mutate(m.asin);
                       }}
                       className='p-1.5 text-slate-500 hover:text-emerald-400 transition-colors'
-                      aria-label='立即记录'
+                      type='button'
+                      disabled={snapshotMutation.isPending}
+                      aria-label={'立即记录 ' + m.asin}
                       title='立即记录'
                     >
                       {snapshotMutation.isPending ? (
@@ -198,7 +242,10 @@ export default function CompetitorMonitorPage() {
                         e.stopPropagation();
                         removeMutation.mutate(m.asin);
                       }}
-                      className='p-1.5 text-slate-500 hover:text-red-400 transition-colors'
+                      type='button'
+                      aria-label={'删除监控 ' + m.asin}
+                      disabled={removeMutation.isPending}
+                      className='min-h-6 min-w-6 p-1.5 text-slate-500 hover:text-red-400 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-400'
                     >
                       <Trash2 className='w-4 h-4' />
                     </button>

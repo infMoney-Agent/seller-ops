@@ -42,6 +42,7 @@ export function TagsField({
           value={tagInput}
           onChange={(e) => setTagInput(e.target.value)}
           onKeyDown={(e) => {
+            if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
             if (e.key === 'Enter') {
               e.preventDefault();
               addTag();

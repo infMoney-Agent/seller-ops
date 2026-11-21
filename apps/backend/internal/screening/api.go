@@ -48,6 +48,15 @@ func (s *service) route(w http.ResponseWriter, r *http.Request) (any, error) {
 	if r.Method == "POST" && path == "imports" {
 		return s.upload(w, r)
 	}
+	if r.Method == "DELETE" && len(parts) == 2 && parts[0] == "imports" {
+		key := r.Header.Get("Idempotency-Key")
+		if key == "" || len(key) > 200 {
+			return nil, fail(422, "修改请求需要Idempotency-Key")
+		}
+		a.RequestKey = key
+		a.RequestHash = shaDigest([]byte("DELETE " + r.URL.RequestURI()))
+		return s.removeImportHistory(ctx, a, parts[1])
+	}
 	if r.Method == "GET" {
 		switch path {
 		case "products":
@@ -55,7 +64,11 @@ func (s *service) route(w http.ResponseWriter, r *http.Request) (any, error) {
 		case "summary":
 			return s.summary(r)
 		case "imports":
-			return s.list(r, "ps_imports", "tenant_id=$1", a.Tenant)
+			return s.list(r, "ps_imports", "tenant_id=$1 AND NOT(counts ? 'data_deleted_at')", a.Tenant)
+		case "review-categories":
+			return s.reviewCategories(r)
+		case "review-workspace":
+			return s.reviewWorkspace(r)
 		case "review-batches":
 			return s.list(r, "ps_jobs", "tenant_id=$1 AND kind='review'", a.Tenant)
 		case "policies", "profit/templates":
@@ -95,11 +108,17 @@ func (s *service) route(w http.ResponseWriter, r *http.Request) (any, error) {
 				case "monthly":
 					return s.monthlyList(r, id)
 				case "observations":
-					return s.list(r, "ps_import_rows", "tenant_id=$1 AND product_id=$2::uuid", a.Tenant, id)
+					if len(parts) == 4 {
+						if !uuidPattern.MatchString(parts[3]) {
+							return nil, fail(422, "来源行ID无效")
+						}
+						return s.observationSource(ctx, a, id, parts[3])
+					}
+					return s.list(r, "ps_import_rows", "tenant_id=$1 AND product_id=$2::uuid AND import_id IN (SELECT id FROM ps_imports WHERE tenant_id=$1 AND NOT(counts ? 'data_deleted_at'))", a.Tenant, id)
 				case "history":
 					return s.list(r, "ps_review_events", "tenant_id=$1 AND product_id=$2::uuid", a.Tenant, id)
 				case "references":
-					items, e := s.query(ctx, "SELECT to_jsonb(p)||jsonb_build_object('direction',machine_direction) FROM ps_products p WHERE tenant_id=$1 AND id<>$2::uuid AND review_status<>'pending' AND machine_direction IS NOT DISTINCT FROM (SELECT machine_direction FROM ps_products WHERE tenant_id=$1 AND id=$2::uuid) ORDER BY reviewed_at DESC,id LIMIT 100", a.Tenant, id)
+					items, e := s.query(ctx, "SELECT to_jsonb(p)||jsonb_build_object('direction',machine_direction) FROM ps_products p WHERE tenant_id=$1 AND archived_at IS NULL AND id<>$2::uuid AND review_status<>'pending' AND machine_direction IS NOT DISTINCT FROM (SELECT machine_direction FROM ps_products WHERE tenant_id=$1 AND id=$2::uuid) ORDER BY reviewed_at DESC,id LIMIT 100", a.Tenant, id)
 					return Object{"items": items}, e
 				case "family":
 					return s.family(r, id)
@@ -107,10 +126,13 @@ func (s *service) route(w http.ResponseWriter, r *http.Request) (any, error) {
 					return s.profitScenarios(r, id)
 				}
 			case "imports":
-				if len(parts) == 2 {
-					return s.one(ctx, "SELECT to_jsonb(i)||jsonb_build_object('latest_job_id',(SELECT j.id FROM ps_jobs j WHERE j.tenant_id=i.tenant_id AND j.kind IN ('parse','import') AND j.payload->>'import_id'=i.id::text ORDER BY j.updated_at DESC,j.id DESC LIMIT 1)) FROM ps_imports i WHERE tenant_id=$1 AND id=$2::uuid", a.Tenant, id)
+				if len(parts) == 3 && parts[2] == "removal-preview" {
+					return s.importRemovalPreview(ctx, a, id)
 				}
-				if _, e := s.one(ctx, "SELECT to_jsonb(i) FROM ps_imports i WHERE tenant_id=$1 AND id=$2::uuid", a.Tenant, id); e != nil {
+				if len(parts) == 2 {
+					return s.one(ctx, "SELECT to_jsonb(i)||jsonb_build_object('latest_job_id',(SELECT j.id FROM ps_jobs j WHERE j.tenant_id=i.tenant_id AND j.kind IN ('parse','import') AND j.payload->>'import_id'=i.id::text ORDER BY j.updated_at DESC,j.id DESC LIMIT 1)) FROM ps_imports i WHERE tenant_id=$1 AND id=$2::uuid AND NOT(counts ? 'data_deleted_at')", a.Tenant, id)
+				}
+				if _, e := s.one(ctx, "SELECT to_jsonb(i) FROM ps_imports i WHERE tenant_id=$1 AND id=$2::uuid AND NOT(counts ? 'data_deleted_at')", a.Tenant, id); e != nil {
 					return nil, e
 				}
 				if parts[2] == "preview" {
