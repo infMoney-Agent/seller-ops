@@ -257,6 +257,7 @@ export interface FamilyResult extends PageResult<Product> {
 }
 
 export interface ReviewTypeGroup {
+  display_products?: number;
   id: string;
   title: string;
   marketplace: string;

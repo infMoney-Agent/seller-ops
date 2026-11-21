@@ -1,5 +1,5 @@
 'use client';
-import { useId, useState } from 'react';
+import { useCallback, useEffect, useId, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useScreeningQuery } from '../queries';
 import { request } from '../service';
@@ -191,6 +191,7 @@ export default function ReviewPanel({
               memberPage={setMemberPage}
               samplePage={setSamplePage}
               referenceContainer={referenceContainer}
+              familyQuery={params.toString()}
             />
           )}
           {data && !data.group && (
@@ -212,7 +213,8 @@ function GroupReview({
   act,
   memberPage,
   samplePage,
-  referenceContainer
+  referenceContainer,
+  familyQuery
 }: {
   data: ReviewWorkspace;
   seed: string[];
@@ -221,6 +223,7 @@ function GroupReview({
   memberPage: (page: number) => void;
   samplePage: (page: number) => void;
   referenceContainer: HTMLDivElement | null;
+  familyQuery: string;
 }) {
   const [selected, setSelected] = useState<string[]>(() =>
     data.items.filter((p) => seed.includes(p.id) && p.review_status === 'pending').map((p) => p.id)
@@ -228,10 +231,19 @@ function GroupReview({
   const [reference, setReference] = useState<Product | null>(null);
   const [compare, setCompare] = useState<Product[]>([]);
   const [reviewOpen, setReviewOpen] = useState(false);
+  const [visibleFamilies, setVisibleFamilies] = useState<Record<string, Product[]>>({});
+  const familyVisible = useCallback((id: string, products: Product[]) => {
+    setVisibleFamilies((old) => ({ ...old, [id]: products }));
+  }, []);
   const items = data.items || [],
     samples = data.samples.items || [];
   const currentReference = samples.find((p) => p.id === reference?.id) || reference;
-  const eligible = items.filter((p) => p.review_status === 'pending');
+  const displayed = [
+    ...new Map(
+      items.flatMap((p) => [p, ...(visibleFamilies[p.id] || [])]).map((p) => [p.id, p])
+    ).values()
+  ];
+  const eligible = displayed.filter((p) => p.review_status === 'pending');
   const allChecked = eligible.length > 0 && eligible.every((p) => selected.includes(p.id));
   function toggle(id: string, checked: boolean) {
     setSelected((old) =>
@@ -367,7 +379,7 @@ function GroupReview({
           <div>
             <h3 className='break-words text-lg font-semibold'>{data.group?.title}</h3>
             <p className='mt-1 text-xs text-muted-foreground'>
-              逐项看图勾选，已有人工结论不会被批量覆盖。
+              同父体默认折叠，展开后可分别勾选子体。
             </p>
           </div>
           {compare.length === 2 && (
@@ -394,16 +406,14 @@ function GroupReview({
             </section>
           )}
           {items.map((p) => (
-            <ReviewProductCard
+            <ReviewFamilyCard
               key={p.id}
               product={p}
-              checked={selected.includes(p.id)}
-              disabled={
-                busy ||
-                p.review_status !== 'pending' ||
-                (selected.length >= 100 && !selected.includes(p.id))
-              }
-              onCheck={(checked) => toggle(p.id, checked)}
+              query={familyQuery}
+              selected={selected}
+              busy={busy}
+              toggle={toggle}
+              onVisible={familyVisible}
             />
           ))}
           <div className='flex flex-wrap items-center justify-between gap-2 rounded-xl border p-3'>
@@ -415,12 +425,19 @@ function GroupReview({
               上一页商品
             </Button>
             <span className='text-xs text-muted-foreground'>
-              第 {data.page} / {Math.max(1, Math.ceil((data.group?.products || 0) / 50))} 页 ·
-              每页50项
+              第 {data.page} /{' '}
+              {Math.max(
+                1,
+                Math.ceil((data.group?.display_products ?? data.group?.products ?? 0) / 50)
+              )}{' '}
+              页 · 每页50个父体／独立商品
             </span>
             <Button
               variant='outline'
-              disabled={busy || data.page * 50 >= (data.group?.products || 0)}
+              disabled={
+                busy ||
+                data.page * 50 >= (data.group?.display_products ?? data.group?.products ?? 0)
+              }
               onClick={() => memberPage(data.page + 1)}
             >
               下一页商品
@@ -435,7 +452,10 @@ function GroupReview({
         reference={currentReference}
         act={act}
         busy={busy}
-        onApplied={() => setSelected([])}
+        onApplied={() => {
+          setSelected([]);
+          setVisibleFamilies({});
+        }}
       />
       <div
         className='sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-background/95 px-4 py-3 shadow-lg backdrop-blur-sm'
@@ -449,6 +469,107 @@ function GroupReview({
         <Button disabled={busy || !selected.length} onClick={() => setReviewOpen(true)}>
           批量复核
         </Button>
+      </div>
+    </div>
+  );
+}
+
+function ReviewFamilyCard({
+  product,
+  query,
+  selected,
+  busy,
+  toggle,
+  onVisible
+}: {
+  product: Product;
+  query: string;
+  selected: string[];
+  busy: boolean;
+  toggle: (id: string, checked: boolean) => void;
+  onVisible: (id: string, products: Product[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [page, setPage] = useState(1);
+  const contentID = useId();
+  const params = new URLSearchParams(query);
+  params.set('family_product_id', product.id);
+  params.set('member_page', String(page));
+  const family = useScreeningQuery<ReviewWorkspace>(open ? '/review-workspace?' + params : null);
+  useEffect(() => {
+    onVisible(product.id, open ? family.data?.items || [] : []);
+  }, [onVisible, product.id, open, family.data]);
+  function card(p: Product) {
+    return (
+      <ReviewProductCard
+        key={p.id}
+        product={p}
+        checked={selected.includes(p.id)}
+        disabled={
+          busy ||
+          p.review_status !== 'pending' ||
+          (selected.length >= 100 && !selected.includes(p.id))
+        }
+        onCheck={(checked) => toggle(p.id, checked)}
+      />
+    );
+  }
+  return (
+    <div className='min-w-0 space-y-3' data-review-family={product.id}>
+      {card(product)}
+      {(product.family_count || 1) > 1 && (
+        <Button
+          size='sm'
+          variant='outline'
+          aria-expanded={open}
+          aria-controls={contentID}
+          aria-label={(open ? '收起' : '展开') + ' ' + product.parent_asin + ' 的子体'}
+          disabled={busy}
+          onClick={() => setOpen(!open)}
+        >
+          {open ? '▾ 收起' : '▸'} {product.family_count} 个子体
+        </Button>
+      )}
+      <div id={contentID} hidden={!open} className='space-y-3'>
+        {family.isLoading && (
+          <p role='status' className='p-3 text-sm text-muted-foreground'>
+            正在加载同父体商品…
+          </p>
+        )}
+        {family.isError && (
+          <div role='alert' className='text-sm text-destructive'>
+            {family.error.message}
+            <Button variant='outline' size='sm' onClick={() => void family.refetch()}>
+              重试
+            </Button>
+          </div>
+        )}
+        {family.data?.items.filter((p) => p.id !== product.id).map(card)}
+        {(family.data?.group?.products || 0) > 50 && (
+          <div className='flex items-center justify-between gap-2'>
+            <Button
+              size='sm'
+              variant='outline'
+              disabled={busy || family.isFetching || page <= 1}
+              onClick={() => setPage(page - 1)}
+            >
+              上一页子体
+            </Button>
+            <span className='text-xs'>
+              {page} / {Math.ceil((family.data?.group?.products || 0) / 50)}
+            </span>
+            <Button
+              size='sm'
+              variant='outline'
+              disabled={
+                busy || family.isFetching || page * 50 >= (family.data?.group?.products || 0)
+              }
+              onClick={() => setPage(page + 1)}
+            >
+              下一页子体
+            </Button>
+          </div>
+        )}
       </div>
     </div>
   );

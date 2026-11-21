@@ -34,11 +34,33 @@ func (s *service) reviewWorkspace(r *http.Request) (any, error) {
 	if e != nil {
 		return nil, e
 	}
-	counts, e := s.one(ctx, "SELECT jsonb_build_object('products',count(*),'pending',count(*) FILTER(WHERE p.review_status='pending')) FROM ps_products p "+filterJoins(q, false)+" WHERE "+q.where, q.args...)
+	expanded := v.Get("family_product_id") != ""
+	if expanded {
+		id := v.Get("family_product_id")
+		if !uuidPattern.MatchString(id) {
+			return nil, fail(422, "商品ID无效")
+		}
+		anchor, err := s.product(ctx, actor(r), id)
+		if err != nil {
+			return nil, err
+		}
+		if str(anchor["parent_asin"]) == "" {
+			q.args = append(q.args, id)
+			q.where += fmt.Sprintf(" AND p.id=$%d::uuid", len(q.args))
+		} else {
+			q.args = append(q.args, anchor["parent_asin"], anchor["marketplace"])
+			q.where += fmt.Sprintf(" AND p.parent_asin=$%d AND p.marketplace=$%d", len(q.args)-1, len(q.args))
+		}
+	}
+	counts, e := s.one(ctx, "SELECT jsonb_build_object('products',count(*),'families',count(DISTINCT "+parentFamilySQL+"),'pending',count(*) FILTER(WHERE p.review_status='pending')) FROM ps_products p "+filterJoins(q, false)+" WHERE "+q.where, q.args...)
 	if e != nil {
 		return nil, e
 	}
 	total := integer(counts["products"])
+	displayed := integer(counts["families"])
+	if expanded {
+		displayed = total
+	}
 	title := "全部商品"
 	var path []string
 	if v.Get("category_path") != "" {
@@ -65,7 +87,7 @@ func (s *service) reviewWorkspace(r *http.Request) (any, error) {
 	if e = s.db.QueryRow(ctx, "SELECT count(*) FROM ps_products p WHERE "+sq.where, sq.args...).Scan(&sampleCount); e != nil {
 		return nil, e
 	}
-	maxMember := int((total + 49) / 50)
+	maxMember := int((displayed + 49) / 50)
 	if maxMember < 1 {
 		maxMember = 1
 	}
@@ -80,7 +102,11 @@ func (s *service) reviewWorkspace(r *http.Request) (any, error) {
 		sp = maxSample
 	}
 	args := append(append([]any{}, q.args...), 50, (mp-1)*50)
-	items, e := s.query(ctx, "SELECT "+productProjection+" FROM ps_products p "+q.joins+" WHERE "+q.where+" ORDER BY (p.review_status='pending') DESC,"+displayChildSalesSQL+fmt.Sprintf(" DESC NULLS LAST,p.asin,p.id LIMIT $%d OFFSET $%d", len(args)-1, len(args)), args...)
+	itemSQL := "SELECT " + productProjection + " FROM ps_products p " + q.joins + " WHERE " + q.where + " ORDER BY " + familyRankSQL + fmt.Sprintf(" LIMIT $%d OFFSET $%d", len(args)-1, len(args))
+	if !expanded {
+		itemSQL = "WITH candidates AS (SELECT p.id," + displayChildSalesSQL + " AS sales,(p.review_status='pending') AS pending,count(*) OVER(PARTITION BY " + parentFamilySQL + ") AS family_count,row_number() OVER(PARTITION BY " + parentFamilySQL + " ORDER BY " + familyRankSQL + ") AS family_rank FROM ps_products p " + q.joins + " WHERE " + q.where + "), chosen AS (SELECT * FROM candidates WHERE family_rank=1 ORDER BY pending DESC,sales DESC NULLS LAST,id" + fmt.Sprintf(" LIMIT $%d OFFSET $%d", len(args)-1, len(args)) + ") SELECT " + productProjection + "||jsonb_build_object('family_count',chosen.family_count) FROM chosen JOIN ps_products p ON p.tenant_id=$1 AND p.id=chosen.id " + q.joins + " ORDER BY chosen.pending DESC,chosen.sales DESC NULLS LAST,p.id"
+	}
+	items, e := s.query(ctx, itemSQL, args...)
 	if e != nil {
 		return nil, e
 	}
@@ -91,7 +117,7 @@ func (s *service) reviewWorkspace(r *http.Request) (any, error) {
 	}
 	var group any
 	if total > 0 {
-		group = Object{"id": shaDigest(encoded(path)), "title": title, "marketplace": "US", "products": total, "pending": counts["pending"], "reviewed": total - integer(counts["pending"]), "samples": sampleCount}
+		group = Object{"id": shaDigest(encoded(path)), "title": title, "marketplace": "US", "products": total, "display_products": displayed, "pending": counts["pending"], "reviewed": total - integer(counts["pending"]), "samples": sampleCount}
 	}
 	counts["groups"] = 0
 	if total > 0 {

@@ -23,7 +23,7 @@ type reviewCategoryNode struct {
 func reviewCandidateQuery(r *http.Request, ignoreCategory bool) (productQuery, error) {
 	v := r.URL.Query()
 	selected, category := v.Get("selected_ids"), v.Get("category_path")
-	for _, k := range []string{"group_page", "member_page", "sample_page", "group_id", "selected_ids", "category_path"} {
+	for _, k := range []string{"group_page", "member_page", "sample_page", "group_id", "selected_ids", "category_path", "family_product_id"} {
 		v.Del(k)
 	}
 	if e := validateFilters(v); e != nil {
