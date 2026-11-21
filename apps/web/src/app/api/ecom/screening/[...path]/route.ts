@@ -146,10 +146,12 @@ async function proxy(request: Request, { params }: { params: Promise<{ path: str
       if (value) responseHeaders.set(name, value);
     }
     let responseBody = response.body;
-    const productList = path === 'products' || /^products\/[^/]+\/family$/.test(path);
+    const compressibleJSON =
+      ['products', 'review-categories', 'review-workspace'].includes(path) ||
+      /^products\/[^/]+\/family$/.test(path);
     if (
       !write &&
-      productList &&
+      compressibleJSON &&
       response.ok &&
       responseBody &&
       response.headers.get('content-type')?.includes('application/json')

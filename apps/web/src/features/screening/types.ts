@@ -277,7 +277,6 @@ export interface ReviewWorkspace {
 
 export interface ReviewCategory {
   label?: string;
-  display_path?: string[];
   id: string;
   name: string;
   path: string[];
