@@ -87,7 +87,7 @@ function CategoryBranch({
           <button
             type='button'
             className='mt-0.5 size-7 shrink-0 rounded hover:bg-muted focus-visible:outline-2'
-            aria-label={(open ? '收起' : '展开') + node.name}
+            aria-label={(open ? '收起' : '展开') + (node.label || node.name)}
             aria-expanded={open}
             aria-controls={id}
             onClick={() => setOpen(!open)}
@@ -104,7 +104,7 @@ function CategoryBranch({
           className='min-h-8 min-w-0 flex-1 rounded px-1 py-1 text-left hover:bg-muted focus-visible:outline-2'
           onClick={() => onSelect(node.path)}
         >
-          <span className='break-words leading-5'>{node.name}</span>
+          <span className='break-words leading-5'>{node.label || node.name}</span>
           <span className='ms-1 whitespace-nowrap text-[11px] text-muted-foreground'>
             {node.products} · 待 {node.pending}
           </span>

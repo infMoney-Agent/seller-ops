@@ -11,12 +11,14 @@ import (
 const reviewCategoryPathSQL = "regexp_split_to_array(COALESCE(NULLIF(trim(p.category_path),''),NULLIF(concat_ws(':',NULLIF(trim(p.main_category),''),NULLIF(trim(p.category),'')),''),'未分类'),'\\s*[:>›]\\s*')"
 
 type reviewCategoryNode struct {
-	ID       string                `json:"id"`
-	Name     string                `json:"name"`
-	Path     []string              `json:"path"`
-	Products int64                 `json:"products"`
-	Pending  int64                 `json:"pending"`
-	Children []*reviewCategoryNode `json:"children"`
+	ID          string                `json:"id"`
+	Label       string                `json:"label"`
+	DisplayPath []string              `json:"display_path"`
+	Name        string                `json:"name"`
+	Path        []string              `json:"path"`
+	Products    int64                 `json:"products"`
+	Pending     int64                 `json:"pending"`
+	Children    []*reviewCategoryNode `json:"children"`
 }
 
 func reviewCandidateQuery(r *http.Request, ignoreCategory bool) (productQuery, error) {
@@ -81,7 +83,7 @@ func (s *service) reviewCategories(r *http.Request) (any, error) {
 			id := shaDigest(encoded(path))
 			node := index[id]
 			if node == nil {
-				node = &reviewCategoryNode{ID: id, Name: label, Path: append([]string{}, path...), Children: []*reviewCategoryNode{}}
+				node = &reviewCategoryNode{ID: id, Name: label, Label: categoryLabel(label), DisplayPath: categoryDisplayPath(path), Path: append([]string{}, path...), Children: []*reviewCategoryNode{}}
 				index[id] = node
 				if parent == nil {
 					roots = append(roots, node)

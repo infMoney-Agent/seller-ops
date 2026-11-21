@@ -45,7 +45,7 @@ func (s *service) reviewWorkspace(r *http.Request) (any, error) {
 		if e = json.Unmarshal([]byte(v.Get("category_path")), &path); e != nil {
 			return nil, fail(422, "类目路径无效")
 		}
-		title = strings.Join(path, " / ")
+		title = strings.Join(categoryDisplayPath(path), " / ")
 	}
 	// References share the selected category, not a machine-generated type group.
 	sampleURL := *r.URL

@@ -70,7 +70,7 @@ export default function ReviewPanel({
             </div>
             {categoryPath.length > 0 && (
               <p className='break-words text-xs text-muted-foreground'>
-                {categoryPath.join(' / ')}
+                {data?.group?.title || '正在加载分类…'}
               </p>
             )}
             <div className='flex flex-wrap items-end gap-3'>
