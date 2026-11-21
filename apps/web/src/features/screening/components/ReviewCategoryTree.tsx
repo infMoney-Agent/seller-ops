@@ -1,5 +1,5 @@
 'use client';
-import { useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { useScreeningQuery } from '../queries';
 import type { ReviewCategory } from '../types';
 import { Button } from './shared';
@@ -17,7 +17,43 @@ export default function ReviewCategoryTree({
 }) {
   const tree = useScreeningQuery<{ items: ReviewCategory[] }>('/review-categories?' + query);
   const [height, setHeight] = useState(240);
-  const drag = useRef<{ y: number; height: number } | null>(null);
+  const resizeHandle = useRef<HTMLButtonElement>(null);
+  const categoryList = useRef<HTMLUListElement>(null);
+  useEffect(() => {
+    const handle = resizeHandle.current;
+    if (!handle) return;
+    let drag: { y: number; height: number } | null = null;
+    function start(event: PointerEvent) {
+      if (event.button !== 0 || !event.isPrimary) return;
+      event.preventDefault();
+      drag = {
+        y: event.clientY,
+        height: categoryList.current?.getBoundingClientRect().height || 240
+      };
+      handle!.setPointerCapture(event.pointerId);
+    }
+    function move(event: PointerEvent) {
+      if (drag && handle!.hasPointerCapture(event.pointerId))
+        setHeight(Math.max(120, Math.min(640, drag.height + event.clientY - drag.y)));
+    }
+    function end(event: PointerEvent) {
+      drag = null;
+      if (handle!.hasPointerCapture(event.pointerId))
+        handle!.releasePointerCapture(event.pointerId);
+    }
+    handle.addEventListener('pointerdown', start);
+    handle.addEventListener('pointermove', move);
+    handle.addEventListener('pointerup', end);
+    handle.addEventListener('pointercancel', end);
+    handle.addEventListener('lostpointercapture', end);
+    return () => {
+      handle.removeEventListener('pointerdown', start);
+      handle.removeEventListener('pointermove', move);
+      handle.removeEventListener('pointerup', end);
+      handle.removeEventListener('pointercancel', end);
+      handle.removeEventListener('lostpointercapture', end);
+    };
+  }, []);
   const [expandedPath, setExpandedPath] = useState<string[] | null>(null);
   const [previousSelection, setPreviousSelection] = useState(JSON.stringify(selected));
   if (previousSelection !== JSON.stringify(selected)) {
@@ -57,6 +93,7 @@ export default function ReviewCategoryTree({
       )}
       <ul
         data-review-category-list
+        ref={categoryList}
         style={{ height }}
         className='space-y-1 overflow-auto overscroll-contain text-xs [scrollbar-gutter:stable]'
       >
@@ -86,23 +123,7 @@ export default function ReviewCategoryTree({
           type='button'
           aria-label='调整分类高度，可拖动或使用上下方向键'
           className='flex h-7 flex-1 touch-none cursor-row-resize select-none items-center justify-center rounded hover:bg-muted focus-visible:outline-2 [-webkit-user-select:none]'
-          onPointerDownCapture={(e) => {
-            if (e.nativeEvent.button !== 0 || !e.nativeEvent.isPrimary) return;
-            e.preventDefault();
-            drag.current = { y: e.clientY, height };
-            e.currentTarget.setPointerCapture(e.pointerId);
-          }}
-          onPointerMoveCapture={(e) => {
-            if (drag.current && e.currentTarget.hasPointerCapture(e.pointerId))
-              resizeHeight(drag.current.height + e.clientY - drag.current.y);
-          }}
-          onPointerUp={(e) => {
-            if (e.currentTarget.hasPointerCapture(e.pointerId))
-              e.currentTarget.releasePointerCapture(e.pointerId);
-          }}
-          onLostPointerCapture={() => {
-            drag.current = null;
-          }}
+          ref={resizeHandle}
           onKeyDown={(e) => {
             if (['ArrowUp', 'ArrowDown', 'Home', 'End'].includes(e.key)) {
               e.preventDefault();
