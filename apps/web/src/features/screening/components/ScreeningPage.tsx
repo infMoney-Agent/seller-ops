@@ -49,20 +49,42 @@ import {
   type Action
 } from './shared';
 
-const defaultColumnWidths: ColumnSizingState = {
-  selection: 48,
-  asin: 360,
-  price_usd: 145,
-  monthly_sales: 125,
-  rating_reviews: 155,
-  listing_date: 145,
-  dimensions: 240,
-  seller: 185,
-  decision: 200,
-  review_status: 155,
-  profit: 155,
-  actions: 90
+const minimumColumnWidths: ColumnSizingState = {
+  selection: 40,
+  asin: 156,
+  price_usd: 84,
+  monthly_sales: 64,
+  rating_reviews: 100,
+  listing_date: 90,
+  dimensions: 120,
+  seller: 92,
+  decision: 88,
+  review_status: 72,
+  profit: 88,
+  actions: 56
 };
+function fittedColumnWidths(width: number): ColumnSizingState {
+  const minimum = Object.values(minimumColumnWidths).reduce((a, b) => a + b, 0);
+  const extra = Math.max(0, Math.floor(width) - minimum);
+  const weights: ColumnSizingState = {
+    asin: 5,
+    dimensions: 2,
+    seller: 1,
+    decision: 1,
+    review_status: 1,
+    price_usd: 1,
+    profit: 1
+  };
+  const result = { ...minimumColumnWidths };
+  let assigned = 0;
+  for (const [key, weight] of Object.entries(weights)) {
+    const addition = Math.floor((extra * weight) / 12);
+    result[key] += addition;
+    assigned += addition;
+  }
+  result.asin += extra - assigned;
+  return result;
+}
 
 const sortFields: Record<string, string> = {
   price_usd: 'price_usd',
@@ -97,7 +119,25 @@ export default function ScreeningPage() {
   const [page, setPage] = useState(1);
   const [filters, setFilters] = useState<Record<string, string>>({ show_merged: 'false' });
   const [selected, setSelected] = useState<RowSelectionState>({});
-  const [columnSizing, setColumnSizing] = useState<ColumnSizingState>(defaultColumnWidths);
+  const [columnSizing, setColumnSizing] = useState<ColumnSizingState>({});
+  const [tableContainer, setTableContainer] = useState<HTMLDivElement | null>(null);
+  const [tableWidth, setTableWidth] = useState(0);
+  useEffect(() => {
+    if (!tableContainer) return;
+    const measure = () => setTableWidth(Math.floor(tableContainer.clientWidth));
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(tableContainer);
+    return () => observer.disconnect();
+  }, [tableContainer]);
+  const defaultColumnWidths = useMemo(() => fittedColumnWidths(tableWidth), [tableWidth]);
+  function resetColumnWidth(id: string) {
+    setColumnSizing((old) => {
+      const next = { ...old };
+      delete next[id];
+      return next;
+    });
+  }
   const [familyRows, setFamilyRows] = useState<Record<string, boolean>>({});
   const [focus, setFocus] = useState<Product | null>(null);
   const [group, setGroup] = useState<string | null>(null);
@@ -238,9 +278,9 @@ export default function ScreeningPage() {
       {
         id: 'selection',
         enableResizing: false,
-        size: 48,
-        minSize: 48,
-        maxSize: 48,
+        size: 40,
+        minSize: 40,
+        maxSize: 40,
         header: ({ table }) => (
           <input
             aria-label='选择当前页代表商品'
@@ -263,7 +303,7 @@ export default function ScreeningPage() {
         accessorKey: 'asin',
         header: '商品',
         cell: ({ row }) => (
-          <div className='flex min-w-64 max-w-md gap-2.5'>
+          <div className='flex min-w-0 gap-2'>
             {row.original.image_url && (
               <Image
                 unoptimized
@@ -279,7 +319,7 @@ export default function ScreeningPage() {
             <div>
               <div className='flex flex-wrap items-center gap-1'>
                 <button
-                  className='font-semibold underline-offset-4 hover:underline'
+                  className='break-all text-xs font-semibold underline-offset-4 hover:underline'
                   title='打开商品复核'
                   onClick={() => setFocus(row.original)}
                 >
@@ -443,7 +483,7 @@ export default function ScreeningPage() {
         id: 'actions',
         header: '操作',
         cell: ({ row }) => (
-          <div className='flex flex-col items-stretch gap-1'>
+          <div className='flex flex-col items-stretch gap-1 [&>button]:h-7 [&>button]:px-1'>
             <Button size='sm' variant='ghost' onClick={() => setFocus(row.original)}>
               复核
             </Button>
@@ -479,9 +519,16 @@ export default function ScreeningPage() {
   const table = useReactTable({
     data: products.data?.items || [],
     columns,
-    state: { rowSelection: selected, columnSizing },
-    onColumnSizingChange: setColumnSizing,
-    defaultColumn: { minSize: 90, maxSize: 900 },
+    state: { rowSelection: selected, columnSizing: { ...defaultColumnWidths, ...columnSizing } },
+    onColumnSizingChange: (updater) =>
+      setColumnSizing((old) => {
+        const current = { ...defaultColumnWidths, ...old };
+        const next = typeof updater === 'function' ? updater(current) : updater;
+        return Object.fromEntries(
+          Object.entries(next).filter(([key, value]) => value !== defaultColumnWidths[key])
+        );
+      }),
+    defaultColumn: { minSize: 40, maxSize: 900 },
     columnResizeMode: 'onChange',
     enableColumnResizing: true,
     onRowSelectionChange: setSelected,
@@ -802,11 +849,12 @@ export default function ScreeningPage() {
                   <TableScroll
                     label='商品列表，可横向和纵向滚动'
                     data-screening-table
+                    ref={setTableContainer}
                     aria-busy={products.isFetching}
                     className='bg-card max-h-[65vh] overflow-auto rounded-lg border'
                   >
                     <table
-                      className='table-fixed text-left text-sm'
+                      className='table-fixed text-left text-xs'
                       style={{ width: table.getTotalSize() }}
                     >
                       <colgroup>
@@ -825,12 +873,12 @@ export default function ScreeningPage() {
                                 scope='col'
                                 key={h.id}
                                 aria-sort={sortDirection(filters.sort, h.column.id)}
-                                className='group relative whitespace-nowrap p-3 has-[>button:not([data-column-resize])]:p-0'
+                                className='group relative whitespace-normal p-2 has-[>button:not([data-column-resize])]:p-0'
                               >
                                 {sortFields[h.column.id] ? (
                                   <button
                                     type='button'
-                                    className='inline-flex min-h-12 w-full items-center gap-2 p-3 text-left font-semibold focus-visible:outline-2 focus-visible:outline-primary'
+                                    className='inline-flex min-h-12 w-full items-center gap-1 p-2 text-left font-semibold focus-visible:outline-2 focus-visible:outline-primary'
                                     onClick={() => {
                                       const field = sortFields[h.column.id];
                                       setFilters((old) => ({
@@ -865,19 +913,14 @@ export default function ScreeningPage() {
                                     onClick={(e) => e.stopPropagation()}
                                     onMouseDown={h.getResizeHandler()}
                                     onTouchStart={h.getResizeHandler()}
-                                    onDoubleClick={() =>
-                                      setColumnSizing((old) => ({
-                                        ...old,
-                                        [h.column.id]: defaultColumnWidths[h.column.id] ?? 150
-                                      }))
-                                    }
+                                    onDoubleClick={() => resetColumnWidth(h.column.id)}
                                     onKeyDown={(e) => {
                                       if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
                                         e.preventDefault();
                                         setColumnSizing((old) => ({
                                           ...old,
                                           [h.column.id]: Math.max(
-                                            90,
+                                            minimumColumnWidths[h.column.id] ?? 40,
                                             Math.min(
                                               900,
                                               h.column.getSize() +
@@ -887,10 +930,7 @@ export default function ScreeningPage() {
                                         }));
                                       } else if (e.key === 'Home') {
                                         e.preventDefault();
-                                        setColumnSizing((old) => ({
-                                          ...old,
-                                          [h.column.id]: defaultColumnWidths[h.column.id] ?? 150
-                                        }));
+                                        resetColumnWidth(h.column.id);
                                       }
                                     }}
                                   />
@@ -913,7 +953,7 @@ export default function ScreeningPage() {
                               {row.getVisibleCells().map((cell) => (
                                 <td
                                   key={cell.id}
-                                  className='break-words px-3 py-2.5 align-top [&>*]:min-w-0 [&>*]:max-w-full'
+                                  className='break-words px-2 py-2 align-middle [&>*]:min-w-0 [&>*]:max-w-full [&_p]:whitespace-normal'
                                 >
                                   {flexRender(cell.column.columnDef.cell, cell.getContext())}
                                 </td>
@@ -1186,7 +1226,7 @@ function FamilyChildren({
           {row.getVisibleCells().map((cell) => (
             <td
               key={cell.id}
-              className='break-words px-3 py-2.5 align-top [&>*]:min-w-0 [&>*]:max-w-full'
+              className='break-words px-2 py-2 align-middle [&>*]:min-w-0 [&>*]:max-w-full [&_p]:whitespace-normal'
             >
               {flexRender(cell.column.columnDef.cell, cell.getContext())}
             </td>

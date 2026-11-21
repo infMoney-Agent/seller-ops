@@ -134,6 +134,15 @@ func TestBrowserScreening(t *testing.T) {
 		t.Fatal(e)
 	}
 
+	for _, width := range []int64{1366, 1440, 1920} {
+		if e := chromedp.Run(ctx, chromedp.EmulateViewport(width, 1000), chromedp.Poll(`(()=>{const area=document.querySelector('[data-screening-table]');return area&&area.scrollWidth<=area.clientWidth+2&&[...area.querySelectorAll('tbody td')].every(c=>getComputedStyle(c).verticalAlign==='middle')})()`, nil)); e != nil {
+			t.Fatalf("Compact table does not fit viewport %d: %v", width, e)
+		}
+	}
+	if e := chromedp.Run(ctx, chromedp.EmulateViewport(1440, 1100)); e != nil {
+		t.Fatal(e)
+	}
+
 	for _, label := range []string{"价格 USD", "子体销量", "预计单件利润"} {
 		if e := chromedp.Run(ctx, chromedp.Evaluate(fmt.Sprintf(`[...document.querySelectorAll('[data-screening-table] th button')].find(b=>b.textContent.trim().startsWith(%q)).click()`, label), nil), chromedp.Poll(`document.querySelectorAll('[data-screening-table] th[aria-sort=ascending]').length===1 && !document.querySelector('[data-screening-table] tbody').inert`, nil)); e != nil {
 			t.Fatal(label, e)
