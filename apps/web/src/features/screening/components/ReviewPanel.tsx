@@ -78,141 +78,145 @@ export default function ReviewPanel({
     else groupPages((data?.groups.page || 1) + 1);
   }
   return (
-    <div
-      className='@container grid min-w-0 items-start gap-4 @4xl:grid-cols-[15rem_minmax(0,1fr)]'
-      data-review-workspace
-    >
-      <ReviewCategoryTree
-        query={categoryParams.toString()}
-        selected={categoryPath}
-        busy={busy}
-        onSelect={(path) => {
-          setCategoryPath(path);
-          groupPages(1);
-        }}
-      />
-      <div className='@container min-w-0 space-y-4'>
-        <section className='space-y-3 rounded-xl border bg-muted/30 p-4'>
-          <div className='flex flex-wrap items-center justify-between gap-3'>
-            <h3 className='font-semibold'>分组复核</h3>
-            <p className='text-sm text-muted-foreground' role='status'>
-              {data
-                ? data.counts.groups.toLocaleString() +
-                  ' 个类型组 · ' +
-                  data.counts.products.toLocaleString() +
-                  ' 个子体 · 待复核 ' +
-                  data.counts.pending.toLocaleString()
-                : '正在加载类型组…'}
-            </p>
-          </div>
-          {categoryPath.length > 0 && (
-            <p className='break-words text-xs text-muted-foreground'>{categoryPath.join(' / ')}</p>
-          )}
-          <div className='flex flex-wrap items-end gap-3'>
-            {seed.length > 0 && (
-              <Field label='商品范围'>
-                <select
-                  aria-label='复核商品范围'
-                  className='h-10 rounded-md border bg-background px-3'
-                  value={scope}
-                  onChange={(e) => {
-                    setScope(e.target.value);
-                    groupPages(1);
-                  }}
-                >
-                  <option value='selected'>商品库已选 {seed.length} 项</option>
-                  <option value='filtered'>当前筛选结果</option>
-                </select>
-              </Field>
+    <div className='@container min-w-0'>
+      <div
+        className='grid min-w-0 items-start gap-4 @4xl:grid-cols-[15rem_minmax(0,1fr)]'
+        data-review-workspace
+      >
+        <ReviewCategoryTree
+          query={categoryParams.toString()}
+          selected={categoryPath}
+          busy={busy}
+          onSelect={(path) => {
+            setCategoryPath(path);
+            groupPages(1);
+          }}
+        />
+        <div className='@container min-w-0 space-y-4'>
+          <section className='space-y-3 rounded-xl border bg-muted/30 p-4'>
+            <div className='flex flex-wrap items-center justify-between gap-3'>
+              <h3 className='font-semibold'>分组复核</h3>
+              <p className='text-sm text-muted-foreground' role='status'>
+                {data
+                  ? data.counts.groups.toLocaleString() +
+                    ' 个类型组 · ' +
+                    data.counts.products.toLocaleString() +
+                    ' 个子体 · 待复核 ' +
+                    data.counts.pending.toLocaleString()
+                  : '正在加载类型组…'}
+              </p>
+            </div>
+            {categoryPath.length > 0 && (
+              <p className='break-words text-xs text-muted-foreground'>
+                {categoryPath.join(' / ')}
+              </p>
             )}
-            <div className='min-w-0 flex-1 basis-80'>
-              <Field label='类型组'>
-                <select
-                  ref={navigation}
-                  aria-label='类型组'
-                  className='h-10 w-full min-w-0 rounded-md border bg-background px-3 text-sm'
-                  disabled={!groups.length || workspace.isFetching || busy}
-                  value={data?.group?.id || ''}
-                  onChange={(e) => choose(e.target.value)}
+            <div className='flex flex-wrap items-end gap-3'>
+              {seed.length > 0 && (
+                <Field label='商品范围'>
+                  <select
+                    aria-label='复核商品范围'
+                    className='h-10 rounded-md border bg-background px-3'
+                    value={scope}
+                    onChange={(e) => {
+                      setScope(e.target.value);
+                      groupPages(1);
+                    }}
+                  >
+                    <option value='selected'>商品库已选 {seed.length} 项</option>
+                    <option value='filtered'>当前筛选结果</option>
+                  </select>
+                </Field>
+              )}
+              <div className='min-w-0 flex-1 basis-80'>
+                <Field label='类型组'>
+                  <select
+                    ref={navigation}
+                    aria-label='类型组'
+                    className='h-10 w-full min-w-0 rounded-md border bg-background px-3 text-sm'
+                    disabled={!groups.length || workspace.isFetching || busy}
+                    value={data?.group?.id || ''}
+                    onChange={(e) => choose(e.target.value)}
+                  >
+                    {groups.length ? (
+                      groups.map((g) => (
+                        <option key={g.id} value={g.id}>
+                          {g.title}（{g.products} 项 · 待复核 {g.pending} · 样本 {g.samples}）
+                        </option>
+                      ))
+                    ) : (
+                      <option value=''>暂无类型组</option>
+                    )}
+                  </select>
+                </Field>
+              </div>
+              <div className='flex flex-wrap items-center gap-2'>
+                <Button
+                  variant='outline'
+                  disabled={busy || workspace.isFetching || !data || data.groups.page <= 1}
+                  onClick={() => groupPages((data?.groups.page || 1) - 1)}
                 >
-                  {groups.length ? (
-                    groups.map((g) => (
-                      <option key={g.id} value={g.id}>
-                        {g.title}（{g.products} 项 · 待复核 {g.pending} · 样本 {g.samples}）
-                      </option>
-                    ))
-                  ) : (
-                    <option value=''>暂无类型组</option>
-                  )}
-                </select>
-              </Field>
+                  前20组
+                </Button>
+                <span className='text-xs text-muted-foreground'>
+                  第 {data?.groups.page || 1} /{' '}
+                  {Math.max(1, Math.ceil((data?.groups.total || 0) / 20))} 页
+                </span>
+                <Button
+                  variant='outline'
+                  disabled={
+                    busy ||
+                    workspace.isFetching ||
+                    !data ||
+                    data.groups.page * 20 >= data.groups.total
+                  }
+                  onClick={() => groupPages((data?.groups.page || 1) + 1)}
+                >
+                  后20组
+                </Button>
+                <Button
+                  variant='secondary'
+                  disabled={
+                    busy ||
+                    workspace.isFetching ||
+                    !data?.group ||
+                    (index >= groups.length - 1 && data.groups.page * 20 >= data.groups.total)
+                  }
+                  onClick={next}
+                >
+                  下一类型组
+                </Button>
+              </div>
             </div>
-            <div className='flex flex-wrap items-center gap-2'>
-              <Button
-                variant='outline'
-                disabled={busy || workspace.isFetching || !data || data.groups.page <= 1}
-                onClick={() => groupPages((data?.groups.page || 1) - 1)}
-              >
-                前20组
-              </Button>
-              <span className='text-xs text-muted-foreground'>
-                第 {data?.groups.page || 1} /{' '}
-                {Math.max(1, Math.ceil((data?.groups.total || 0) / 20))} 页
-              </span>
-              <Button
-                variant='outline'
-                disabled={
-                  busy ||
-                  workspace.isFetching ||
-                  !data ||
-                  data.groups.page * 20 >= data.groups.total
-                }
-                onClick={() => groupPages((data?.groups.page || 1) + 1)}
-              >
-                后20组
-              </Button>
-              <Button
-                variant='secondary'
-                disabled={
-                  busy ||
-                  workspace.isFetching ||
-                  !data?.group ||
-                  (index >= groups.length - 1 && data.groups.page * 20 >= data.groups.total)
-                }
-                onClick={next}
-              >
-                下一类型组
-              </Button>
-            </div>
-          </div>
-        </section>
-        {workspace.isError && (
-          <p role='alert' className='text-destructive'>
-            {workspace.error.message}
-          </p>
-        )}
-        {workspace.isLoading && (
-          <p role='status' className='rounded-xl border p-6 text-sm text-muted-foreground'>
-            正在加载商品与参考样本…
-          </p>
-        )}
-        {data?.group && (
-          <GroupReview
-            key={data.group.id + ':' + scope + ':' + JSON.stringify(categoryPath)}
-            data={data}
-            seed={seed}
-            busy={busy || workspace.isFetching}
-            act={act}
-            memberPage={setMemberPage}
-            samplePage={setSamplePage}
-          />
-        )}
-        {data && !data.group && (
-          <p className='rounded-xl border p-8 text-center text-sm text-muted-foreground'>
-            当前范围暂无商品，请调整商品库筛选或先导入商品。
-          </p>
-        )}
-        <ReviewHistory act={act} busy={busy} />
+          </section>
+          {workspace.isError && (
+            <p role='alert' className='text-destructive'>
+              {workspace.error.message}
+            </p>
+          )}
+          {workspace.isLoading && (
+            <p role='status' className='rounded-xl border p-6 text-sm text-muted-foreground'>
+              正在加载商品与参考样本…
+            </p>
+          )}
+          {data?.group && (
+            <GroupReview
+              key={data.group.id + ':' + scope + ':' + JSON.stringify(categoryPath)}
+              data={data}
+              seed={seed}
+              busy={busy || workspace.isFetching}
+              act={act}
+              memberPage={setMemberPage}
+              samplePage={setSamplePage}
+            />
+          )}
+          {data && !data.group && (
+            <p className='rounded-xl border p-8 text-center text-sm text-muted-foreground'>
+              当前范围暂无商品，请调整商品库筛选或先导入商品。
+            </p>
+          )}
+          <ReviewHistory act={act} busy={busy} />
+        </div>
       </div>
     </div>
   );

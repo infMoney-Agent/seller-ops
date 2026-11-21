@@ -44,6 +44,7 @@ func TestBrowserGroupedReview(t *testing.T) {
 	}
 	if e := chromedp.Run(ctx,
 		chromedp.Reload(), chromedp.WaitReady(`#main-content`, chromedp.ByQuery),
+		chromedp.Evaluate(`window.__groupApi=async path=>{const r=await fetch('/api/ecom/screening/'+path);if(!r.ok)throw Error('API '+r.status);return await r.json()}`, nil),
 		chromedp.Poll(`!!document.querySelector('[data-screening-table] tbody input[type=checkbox]')`, nil),
 		chromedp.Evaluate(`(()=>{const row=[...document.querySelectorAll('[data-screening-table] tbody tr')].find(r=>r.textContent.includes('GROUP00006'));row.querySelector('input[type=checkbox]').click();})()`, nil),
 		chromedp.Poll(`[...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='批量复核'&&!b.disabled)`, nil),
@@ -65,7 +66,7 @@ func TestBrowserGroupedReview(t *testing.T) {
 		chromedp.Evaluate(`[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='分组复核').click()`, nil),
 		chromedp.Poll(`document.querySelector('[data-review-workspace]')&&document.querySelectorAll('aside[aria-label="人工参考样本"] article').length===2&&document.querySelectorAll('[aria-label="本组候选商品"] article').length===5`, nil),
 
-		chromedp.Poll(`document.querySelector('nav[aria-label="商品分类目录"]')?.textContent.includes('Kitchen & Dining')`, nil),
+		chromedp.Poll(`document.querySelector('nav[aria-label="商品分类目录"]')?.textContent.includes('Kitchen & Dining')&&getComputedStyle(document.querySelector('[data-review-workspace]')).gridTemplateColumns.split(' ').length===2`, nil),
 		chromedp.Evaluate(`(()=>{const tree=document.querySelector('nav[aria-label="商品分类目录"]');[...tree.querySelectorAll('button')].find(b=>b.textContent.includes('Kitchen & Dining')).click();})()`, nil),
 		chromedp.Poll(`(()=>{const s=document.querySelector('nav[aria-label="商品分类目录"] button[aria-current="true"]');return s?.textContent.includes('Kitchen & Dining')&&document.querySelectorAll('[aria-label="本组候选商品"] article').length===5})()`, nil),
 
