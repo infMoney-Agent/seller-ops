@@ -141,12 +141,18 @@ func TestBrowserScreening(t *testing.T) {
 	}
 
 	if e := chromedp.Run(ctx,
-		chromedp.Evaluate(`(()=>{const handle=document.querySelector('button[aria-label="调整评分 / 评分数列宽"]');if(!handle)throw Error('Resize handle missing');const th=handle.closest('th');window.__resizeWidth=th.getBoundingClientRect().width;window.__resizeSort=th.getAttribute('aria-sort');const x=handle.getBoundingClientRect().left+4;handle.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,clientX:x,clientY:th.getBoundingClientRect().top+10}));document.dispatchEvent(new MouseEvent('mousemove',{bubbles:true,clientX:x+80}));document.dispatchEvent(new MouseEvent('mouseup',{bubbles:true,clientX:x+80}));})()`, nil),
+		chromedp.Evaluate(`(()=>{const handle=document.querySelector('button[aria-label="调整评分 / 评分数列宽"]');if(!handle)throw Error('Resize handle missing');const th=handle.closest('th');window.__resizeWidth=th.getBoundingClientRect().width;window.__resizeSort=th.getAttribute('aria-sort');const x=handle.getBoundingClientRect().left+4;handle.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,clientX:x,clientY:th.getBoundingClientRect().top+10}));window.__resizeX=x;})()`, nil),
+		chromedp.Sleep(100*time.Millisecond),
+		chromedp.Evaluate(`document.dispatchEvent(new MouseEvent('mousemove',{bubbles:true,clientX:window.__resizeX+80}))`, nil),
+		chromedp.Sleep(100*time.Millisecond),
+		chromedp.Evaluate(`document.dispatchEvent(new MouseEvent('mouseup',{bubbles:true,clientX:window.__resizeX+80}))`, nil),
 		chromedp.Poll(`(()=>{const th=document.querySelector('button[aria-label="调整评分 / 评分数列宽"]').closest('th');return Math.abs(th.getBoundingClientRect().width-window.__resizeWidth-80)<2&&th.getAttribute('aria-sort')===window.__resizeSort})()`, nil),
 		chromedp.Evaluate(`document.querySelector('button[aria-label="调整评分 / 评分数列宽"]').dispatchEvent(new MouseEvent('dblclick',{bubbles:true}))`, nil),
 		chromedp.Poll(`Math.abs(document.querySelector('button[aria-label="调整评分 / 评分数列宽"]').closest('th').getBoundingClientRect().width-window.__resizeWidth)<2`, nil),
 	); e != nil {
-		t.Fatal("column dragging or reset failed", e)
+		var diagnostic string
+		chromedp.Run(ctx, chromedp.Evaluate(`JSON.stringify({before:window.__resizeWidth,after:document.querySelector('button[aria-label="调整评分 / 评分数列宽"]')?.closest('th').getBoundingClientRect().width,sort:document.querySelector('button[aria-label="调整评分 / 评分数列宽"]')?.closest('th').getAttribute('aria-sort')})`, &diagnostic))
+		t.Fatal("column dragging or reset failed", e, diagnostic)
 	}
 	if e := chromedp.Run(ctx,
 		chromedp.Evaluate(`(()=>{const row=[...document.querySelectorAll('tbody tr')].find(r=>r.textContent.includes('BROWSER001'));row.querySelector('button[aria-controls^="family-"]').click()})()`, nil),
