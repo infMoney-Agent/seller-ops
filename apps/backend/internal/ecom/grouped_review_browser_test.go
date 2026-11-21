@@ -67,7 +67,7 @@ func TestBrowserGroupedReview(t *testing.T) {
 		chromedp.Poll(`document.querySelector('[data-review-workspace]')&&document.querySelectorAll('aside[aria-label="人工参考样本"] article').length===2&&document.querySelectorAll('[aria-label="本类目候选商品"] article').length===6`, nil),
 
 		chromedp.Evaluate(`if(document.querySelector('select[aria-label="类型组"]')||[...document.querySelectorAll('button')].some(b=>['前20组','后20组','下一类型组'].includes(b.textContent.trim())))throw Error('Type group controls remain')`, nil),
-		chromedp.Poll(`document.querySelector('nav[aria-label="商品分类目录"]')?.textContent.includes('Kitchen & Dining')&&getComputedStyle(document.querySelector('[data-review-workspace]')).gridTemplateColumns.split(' ').length===2`, nil),
+		chromedp.Poll(`document.querySelector('nav[aria-label="商品分类目录"]')?.textContent.includes('Kitchen & Dining')&&document.querySelector('nav[aria-label="商品分类目录"]').getBoundingClientRect().width>document.querySelector('[data-review-workspace]').getBoundingClientRect().width*0.85`, nil),
 		chromedp.Evaluate(`(()=>{const tree=document.querySelector('nav[aria-label="商品分类目录"]');[...tree.querySelectorAll('button')].find(b=>b.textContent.includes('Kitchen & Dining')).click();})()`, nil),
 		chromedp.Poll(`(()=>{const s=document.querySelector('nav[aria-label="商品分类目录"] button[aria-current="true"]');return s?.textContent.includes('Kitchen & Dining')&&document.querySelectorAll('[aria-label="本类目候选商品"] article').length===5})()`, nil),
 

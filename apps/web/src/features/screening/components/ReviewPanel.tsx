@@ -46,24 +46,20 @@ export default function ReviewPanel({
   const data = workspace.data;
   return (
     <div className='@container min-w-0'>
-      <div
-        className='grid min-w-0 items-start gap-4 @4xl:grid-cols-[15rem_minmax(0,1fr)]'
-        data-review-workspace
-      >
-        <ReviewCategoryTree
-          query={categoryParams.toString()}
-          selected={categoryPath}
-          busy={busy}
-          onSelect={(path) => {
-            setCategoryPath(path);
-            setMemberPage(1);
-            setSamplePage(1);
-          }}
-        />
+      <div className='min-w-0 space-y-4' data-review-workspace>
         <div className='@container min-w-0 space-y-4'>
           <section className='space-y-3 rounded-xl border bg-muted/30 p-4'>
+            <ReviewCategoryTree
+              query={categoryParams.toString()}
+              selected={categoryPath}
+              busy={busy}
+              onSelect={(path) => {
+                setCategoryPath(path);
+                setMemberPage(1);
+                setSamplePage(1);
+              }}
+            />
             <div className='flex flex-wrap items-center justify-between gap-3'>
-              <h3 className='font-semibold'>分组复核</h3>
               <p className='text-sm text-muted-foreground' role='status'>
                 {data
                   ? data.counts.products.toLocaleString() +

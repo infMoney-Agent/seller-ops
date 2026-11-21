@@ -17,14 +17,11 @@ export default function ReviewCategoryTree({
 }) {
   const tree = useScreeningQuery<{ items: ReviewCategory[] }>('/review-categories?' + query);
   return (
-    <nav
-      aria-label='商品分类目录'
-      className='min-w-0 rounded-xl border bg-muted/20 p-3 @4xl:sticky @4xl:top-4'
-    >
+    <nav aria-label='商品分类目录' className='min-w-0'>
       <h3 className='mb-2 font-semibold'>商品分类</h3>
       <Button
         variant={selected.length ? 'ghost' : 'secondary'}
-        className='mb-2 w-full justify-start'
+        className='mb-2 justify-start'
         disabled={busy}
         onClick={() => onSelect([])}
       >
@@ -40,7 +37,7 @@ export default function ReviewCategoryTree({
           {tree.error.message}
         </p>
       )}
-      <ul className='max-h-[65dvh] space-y-1 overflow-auto overscroll-contain text-xs'>
+      <ul className='max-h-[32dvh] space-y-1 overflow-auto overscroll-contain text-xs'>
         {tree.data?.items.map((node) => (
           <CategoryBranch
             key={node.id}
