@@ -15,7 +15,6 @@ import type {
 import { Badge, Button, Field, Input, TableScroll, type Action } from './shared';
 import ReviewProductCard from './ReviewProductCard';
 import ReviewCategoryTree from './ReviewCategoryTree';
-import { cn } from '@/lib/utils';
 
 export default function ReviewPanel({
   selected,
@@ -77,31 +76,16 @@ export default function ReviewPanel({
   return (
     <div className='@container min-w-0'>
       <div
-        className={cn(
-          'grid min-w-0 items-start gap-4',
-          categoriesOpen && '@3xl:grid-cols-[minmax(13rem,16rem)_minmax(0,1fr)]'
-        )}
+        className='grid min-w-0 items-start gap-4 @3xl:grid-cols-[minmax(13rem,16rem)_minmax(0,1fr)]'
         data-review-workspace
       >
         <aside
-          id={categoryID}
-          hidden={!categoriesOpen}
           className='max-h-[calc(100dvh-7rem)] min-w-0 space-y-4 overflow-y-auto overscroll-contain @3xl:sticky @3xl:top-20 [scrollbar-gutter:stable]'
           data-review-category-sidebar
         >
           <div className='rounded-xl border bg-muted/30 p-3'>
-            <ReviewCategoryTree
-              query={categoryParams.toString()}
-              selected={categoryPath}
-              busy={busy}
-              onSelect={selectCategory}
-            />
-          </div>
-          <div ref={setReferenceContainer} />
-        </aside>
-        <div className='@container min-w-0 space-y-4' data-review-content>
-          <section className='space-y-2 rounded-xl border bg-muted/30 p-3'>
-            <div className='flex flex-wrap items-center justify-between gap-2'>
+            <div className='flex items-center justify-between gap-2'>
+              <h3 className='font-semibold'>商品分类</h3>
               <Button
                 size='sm'
                 variant='outline'
@@ -111,6 +95,26 @@ export default function ReviewPanel({
               >
                 {categoriesOpen ? '收起分类' : '展开分类'}
               </Button>
+            </div>
+            <div
+              id={categoryID}
+              hidden={!categoriesOpen}
+              className='mt-2'
+              data-review-category-content
+            >
+              <ReviewCategoryTree
+                query={categoryParams.toString()}
+                selected={categoryPath}
+                busy={busy}
+                onSelect={selectCategory}
+              />
+            </div>
+          </div>
+          <div ref={setReferenceContainer} />
+        </aside>
+        <div className='@container min-w-0 space-y-4' data-review-content>
+          <section className='space-y-2 rounded-xl border bg-muted/30 p-3'>
+            <div className='flex flex-wrap items-center justify-between gap-2'>
               <div className='flex items-center gap-2'>
                 <Button
                   size='sm'

@@ -71,7 +71,6 @@ export default function ReviewCategoryTree({
 
   return (
     <nav aria-label='商品分类目录' className='min-w-0'>
-      <h3 className='mb-2 font-semibold'>商品分类</h3>
       <Button
         variant={selected.length ? 'ghost' : 'secondary'}
         className='mb-2 justify-start'
