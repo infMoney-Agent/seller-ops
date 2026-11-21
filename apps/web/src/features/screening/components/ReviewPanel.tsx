@@ -8,11 +8,13 @@ import type {
   BatchResult,
   PageResult,
   Product,
-  ReviewWorkspace
+  ReviewWorkspace,
+  ReviewCategory
 } from '../types';
 import { Badge, Button, Field, Input, TableScroll, type Action } from './shared';
 import ReviewProductCard from './ReviewProductCard';
 import ReviewCategoryTree from './ReviewCategoryTree';
+import { cn } from '@/lib/utils';
 
 export default function ReviewPanel({
   selected,
@@ -25,8 +27,8 @@ export default function ReviewPanel({
   act: Action;
   busy: boolean;
 }) {
-  const categoryPicker = useRef<HTMLDetailsElement>(null);
-  const categoryTrigger = useRef<HTMLElement>(null);
+  const [categoriesOpen, setCategoriesOpen] = useState(true);
+  const categoryID = useId();
   const [seed] = useState(selected);
   const [scope, setScope] = useState(seed.length ? 'selected' : 'filtered');
   const [categoryPath, setCategoryPath] = useState<string[]>([]);
@@ -46,35 +48,91 @@ export default function ReviewPanel({
   if (categoryPath.length) params.set('category_path', JSON.stringify(categoryPath));
   const workspace = useScreeningQuery<ReviewWorkspace>('/review-workspace?' + params);
   const data = workspace.data;
+  const categories = useScreeningQuery<{ items: ReviewCategory[] }>(
+    '/review-categories?' + categoryParams
+  );
+  const leaves: ReviewCategory[] = [];
+  function collect(nodes: ReviewCategory[]) {
+    for (const node of nodes) {
+      if (node.children.length) collect(node.children);
+      else if (node.products > 0) leaves.push(node);
+    }
+  }
+  collect(categories.data?.items || []);
+  const currentIndex = leaves.findIndex(
+    (node) => JSON.stringify(node.path) === JSON.stringify(categoryPath)
+  );
+  const descendantIndex = leaves.findIndex((node) =>
+    categoryPath.every((part, i) => node.path[i] === part)
+  );
+  const previous = leaves[(currentIndex >= 0 ? currentIndex : descendantIndex) - 1];
+  const next = leaves[currentIndex >= 0 ? currentIndex + 1 : descendantIndex];
+  function selectCategory(path: string[]) {
+    setCategoryPath(path);
+    setMemberPage(1);
+    setSamplePage(1);
+  }
   return (
     <div className='@container min-w-0'>
-      <div className='min-w-0 space-y-4' data-review-workspace>
-        <div className='@container min-w-0 space-y-4'>
+      <div
+        className={cn(
+          'grid min-w-0 items-start gap-4',
+          categoriesOpen && '@3xl:grid-cols-[minmax(13rem,16rem)_minmax(0,1fr)]'
+        )}
+        data-review-workspace
+      >
+        <aside
+          id={categoryID}
+          hidden={!categoriesOpen}
+          className='min-w-0 rounded-xl border bg-muted/30 p-3 @3xl:sticky @3xl:top-20'
+          data-review-category-sidebar
+        >
+          <ReviewCategoryTree
+            query={categoryParams.toString()}
+            selected={categoryPath}
+            busy={busy}
+            onSelect={selectCategory}
+          />
+        </aside>
+        <div className='@container min-w-0 space-y-4' data-review-content>
           <section className='space-y-2 rounded-xl border bg-muted/30 p-3'>
-            <details ref={categoryPicker} data-review-category-picker>
-              <summary
-                ref={categoryTrigger}
-                className='cursor-pointer rounded-md px-1 py-2 text-sm font-medium focus-visible:outline-2'
+            <div className='flex flex-wrap items-center justify-between gap-2'>
+              <Button
+                size='sm'
+                variant='outline'
+                aria-expanded={categoriesOpen}
+                aria-controls={categoryID}
+                onClick={() => setCategoriesOpen(!categoriesOpen)}
               >
-                商品分类：
-                {categoryPath.length ? data?.group?.title || categoryPath.join(' / ') : '全部商品'}
-                <span className='ms-2 text-xs font-normal text-muted-foreground'>切换类目</span>
-              </summary>
-              <div className='mt-2 rounded-lg border bg-background p-3'>
-                <ReviewCategoryTree
-                  query={categoryParams.toString()}
-                  selected={categoryPath}
-                  busy={busy}
-                  onSelect={(path) => {
-                    setCategoryPath(path);
-                    setMemberPage(1);
-                    setSamplePage(1);
-                    if (categoryPicker.current) categoryPicker.current.open = false;
-                    categoryTrigger.current?.focus({ preventScroll: true });
-                  }}
-                />
+                {categoriesOpen ? '收起分类' : '展开分类'}
+              </Button>
+              <div className='flex items-center gap-2'>
+                <Button
+                  size='sm'
+                  variant='outline'
+                  disabled={busy || !previous}
+                  onClick={() => previous && selectCategory(previous.path)}
+                >
+                  上一组
+                </Button>
+                <span className='text-xs text-muted-foreground'>
+                  {currentIndex >= 0
+                    ? currentIndex + 1 + ' / ' + leaves.length
+                    : leaves.length + ' 个类目'}
+                </span>
+                <Button
+                  size='sm'
+                  variant='outline'
+                  disabled={busy || !next}
+                  onClick={() => next && selectCategory(next.path)}
+                >
+                  下一组
+                </Button>
               </div>
-            </details>
+            </div>
+            <h3 className='break-words text-sm font-semibold' data-review-category-title>
+              {categoryPath.length ? data?.group?.title || categoryPath.join(' / ') : '全部商品'}
+            </h3>
             <div className='flex flex-wrap items-center justify-between gap-3'>
               <p className='text-sm text-muted-foreground' role='status'>
                 {data

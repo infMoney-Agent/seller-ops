@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useId, useState } from 'react';
+import { useId, useState } from 'react';
 import { useScreeningQuery } from '../queries';
 import type { ReviewCategory } from '../types';
 import { Button } from './shared';
@@ -37,7 +37,7 @@ export default function ReviewCategoryTree({
           {tree.error.message}
         </p>
       )}
-      <ul className='max-h-[22dvh] space-y-1 overflow-auto overscroll-contain text-xs'>
+      <ul className='max-h-[28dvh] @3xl:max-h-[65dvh] [scrollbar-gutter:stable] space-y-1 overflow-auto overscroll-contain text-xs'>
         {tree.data?.items.map((node) => (
           <CategoryBranch
             key={node.id}
@@ -68,13 +68,16 @@ function CategoryBranch({
   onSelect: (p: string[]) => void;
   busy: boolean;
 }) {
-  const [open, setOpen] = useState(depth === 0);
+  const [expanded, setExpanded] = useState<boolean | null>(null);
   const id = useId();
   const active = JSON.stringify(selected) === JSON.stringify(node.path);
   const ancestor = node.path.every((p, i) => selected[i] === p);
-  useEffect(() => {
-    if (ancestor) setOpen(true);
-  }, [ancestor]);
+  const [wasAncestor, setWasAncestor] = useState(ancestor);
+  if (ancestor !== wasAncestor) {
+    setWasAncestor(ancestor);
+    if (ancestor) setExpanded(true);
+  }
+  const open = expanded ?? (depth === 0 || ancestor);
   return (
     <li>
       <div
@@ -90,7 +93,7 @@ function CategoryBranch({
             aria-label={(open ? '收起' : '展开') + (node.label || node.name)}
             aria-expanded={open}
             aria-controls={id}
-            onClick={() => setOpen(!open)}
+            onClick={() => setExpanded(!open)}
           >
             {open ? '▾' : '▸'}
           </button>
