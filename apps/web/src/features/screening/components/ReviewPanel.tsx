@@ -424,9 +424,9 @@ function GroupReview({
           {eligible.length} 项
         </p>
       </div>
-      <div className='grid min-w-0 items-start gap-4 @4xl:grid-cols-[18rem_minmax(0,1fr)]'>
+      <div className='grid min-w-0 items-start gap-4 @3xl:grid-cols-[14rem_minmax(0,1fr)]'>
         <aside
-          className='min-w-0 rounded-xl border bg-muted/20 p-3 @4xl:sticky @4xl:top-4'
+          className='min-w-0 rounded-xl border bg-muted/20 p-3 @3xl:sticky @3xl:top-4'
           aria-label='人工参考样本'
         >
           <details open>
