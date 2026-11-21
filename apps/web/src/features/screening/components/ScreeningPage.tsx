@@ -29,6 +29,7 @@ import type {
   FamilyResult
 } from '../types';
 import { childSales } from '../sales';
+import { useTableTextAlignment } from '../use-table-text-alignment';
 import { countryCode, listingAge, shanghaiToday } from '../product-display';
 import ImportDialog from './ImportDialog';
 import ReviewPanel from './ReviewPanel';
@@ -130,6 +131,7 @@ export default function ScreeningPage() {
   const [columnSizing, setColumnSizing] = useState<ColumnSizingState>({});
   const [tableContainer, setTableContainer] = useState<HTMLDivElement | null>(null);
   const [tableWidth, setTableWidth] = useState(0);
+  useTableTextAlignment(tableContainer);
   useEffect(() => {
     if (!tableContainer) return;
     const measure = () => setTableWidth(Math.floor(tableContainer.clientWidth));
@@ -311,7 +313,7 @@ export default function ScreeningPage() {
         accessorKey: 'asin',
         header: '商品',
         cell: ({ row }) => (
-          <div className='flex min-w-0 gap-2'>
+          <div className='flex min-w-0 items-center gap-2'>
             {row.original.image_url && (
               <Image
                 unoptimized
@@ -445,7 +447,7 @@ export default function ScreeningPage() {
         cell: ({ row }) => (
           <div className='min-w-36 max-w-52 space-y-1 text-xs leading-5'>
             <p className='break-words text-sm font-medium'>{row.original.seller_name || '—'}</p>
-            <p className='text-muted-foreground flex flex-wrap items-center gap-1'>
+            <p className='text-muted-foreground flex flex-wrap items-center justify-center gap-1'>
               所属地：
               {countryCode(row.original.seller_region) && (
                 <Image
@@ -564,7 +566,7 @@ export default function ScreeningPage() {
     enableRowSelection: true
   });
   return (
-    <div className='w-full min-w-0 max-w-full overflow-x-hidden'>
+    <div className='w-full min-w-0 max-w-full'>
       <PageContainer
         pageTitle='产品初筛'
         pageDescription='导入、筛选、人工复核与利润测算，保留每次判断的来源。'
@@ -586,7 +588,7 @@ export default function ScreeningPage() {
           </div>
         }
       >
-        <div className='space-y-4'>
+        <div className='min-w-0 max-w-full space-y-4'>
           <nav className='flex flex-wrap gap-2 border-b pb-3' aria-label='初筛工作台'>
             {tabs.map(({ title, id: i }) => (
               <Button
@@ -871,17 +873,17 @@ export default function ScreeningPage() {
                   正在加载商品…
                 </div>
               ) : (
-                <fieldset className='min-w-0'>
+                <fieldset className='w-full min-w-0 max-w-full'>
                   <legend className='sr-only'>商品列表操作</legend>
                   <TableScroll
                     label='商品列表，可横向和纵向滚动'
                     data-screening-table
                     ref={setTableContainer}
                     aria-busy={products.isFetching}
-                    className='bg-card max-h-[65vh] overflow-auto rounded-lg border'
+                    className='bg-card w-full min-w-0 max-w-full max-h-[65vh] overflow-x-auto overflow-y-auto overscroll-x-contain rounded-lg border [contain:inline-size] [&_tbody_p]:text-center [&_tbody_p[data-multiline=true]]:text-left [&_tbody_p[data-multiline=true]]:justify-start [&_[data-auto-align]]:text-center [&_[data-auto-align][data-multiline=true]]:text-left'
                   >
                     <table
-                      className='table-fixed text-left text-xs'
+                      className='table-fixed text-center text-xs'
                       style={{ width: table.getTotalSize() }}
                     >
                       <colgroup>
@@ -900,12 +902,12 @@ export default function ScreeningPage() {
                                 scope='col'
                                 key={h.id}
                                 aria-sort={sortDirection(filters.sort, h.column.id)}
-                                className='group relative whitespace-normal p-2 has-[>button:not([data-column-resize])]:p-0'
+                                className='group relative whitespace-normal p-2 text-center align-middle has-[>button:not([data-column-resize])]:p-0'
                               >
                                 {sortFields[h.column.id] ? (
                                   <button
                                     type='button'
-                                    className='inline-flex min-h-12 w-full items-center gap-1 p-2 text-left font-semibold focus-visible:outline-2 focus-visible:outline-primary'
+                                    className='inline-flex min-h-12 w-full items-center justify-center gap-1 p-2 text-center font-semibold focus-visible:outline-2 focus-visible:outline-primary'
                                     onClick={() => {
                                       const field = sortFields[h.column.id];
                                       setFilters((old) => ({
@@ -915,14 +917,18 @@ export default function ScreeningPage() {
                                       setPage(1);
                                     }}
                                   >
-                                    {flexRender(h.column.columnDef.header, h.getContext())}
+                                    <span data-auto-align className='min-w-0'>
+                                      {flexRender(h.column.columnDef.header, h.getContext())}
+                                    </span>
                                     <span aria-hidden='true' className='text-muted-foreground'>
                                       <span className='group-aria-[sort=descending]:hidden'>↑</span>
                                       <span className='group-aria-[sort=ascending]:hidden'>↓</span>
                                     </span>
                                   </button>
                                 ) : (
-                                  flexRender(h.column.columnDef.header, h.getContext())
+                                  <span data-auto-align className='min-w-0'>
+                                    {flexRender(h.column.columnDef.header, h.getContext())}
+                                  </span>
                                 )}
                                 {h.column.getCanResize() && (
                                   <button

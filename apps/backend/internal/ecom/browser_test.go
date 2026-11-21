@@ -163,6 +163,20 @@ func TestBrowserScreening(t *testing.T) {
 		chromedp.Run(ctx, chromedp.Evaluate(`JSON.stringify({before:window.__resizeWidth,after:document.querySelector('button[aria-label="调整评分 / 评分数列宽"]')?.closest('th').getBoundingClientRect().width,sort:document.querySelector('button[aria-label="调整评分 / 评分数列宽"]')?.closest('th').getAttribute('aria-sort')})`, &diagnostic))
 		t.Fatal("column dragging or reset failed", e, diagnostic)
 	}
+
+	if e := chromedp.Run(ctx,
+		chromedp.Evaluate(`(()=>{const h=document.querySelector('button[aria-label="调整商品列宽"]');const x=h.getBoundingClientRect().left+4;window.__wideX=x;window.__navLeft=document.querySelector('nav[aria-label="初筛工作台"]').getBoundingClientRect().left;h.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,clientX:x}));})()`, nil),
+		chromedp.Sleep(100*time.Millisecond),
+		chromedp.Evaluate(`document.dispatchEvent(new MouseEvent('mousemove',{bubbles:true,clientX:window.__wideX+800}))`, nil),
+		chromedp.Sleep(100*time.Millisecond),
+		chromedp.Evaluate(`document.dispatchEvent(new MouseEvent('mouseup',{bubbles:true,clientX:window.__wideX+800}))`, nil),
+		chromedp.Poll(`(()=>{const a=document.querySelector('[data-screening-table]');return a.scrollWidth>a.clientWidth+100&&document.documentElement.scrollWidth<=innerWidth+2})()`, nil),
+		chromedp.Evaluate(`(()=>{const a=document.querySelector('[data-screening-table]');a.scrollLeft=a.scrollWidth;if(a.scrollLeft<=0||Math.abs(document.querySelector('nav[aria-label="初筛工作台"]').getBoundingClientRect().left-window.__navLeft)>1||document.scrollingElement.scrollLeft!==0)throw Error('Table scrolling affected page layout');})()`, nil),
+		chromedp.Evaluate(`document.querySelector('button[aria-label="调整商品列宽"]').dispatchEvent(new MouseEvent('dblclick',{bubbles:true}))`, nil),
+		chromedp.Poll(`(()=>{const a=document.querySelector('[data-screening-table]');return a.scrollWidth<=a.clientWidth+2&&[...a.querySelectorAll('th')].every(h=>getComputedStyle(h).textAlign==='center')&&[...a.querySelectorAll('tbody p')].every(p=>{const line=parseFloat(getComputedStyle(p).lineHeight);return getComputedStyle(p).textAlign===(p.getBoundingClientRect().height>line+2?'left':'center')})})()`, nil),
+	); e != nil {
+		t.Fatal("independent table scrolling or adaptive alignment", e)
+	}
 	if e := chromedp.Run(ctx,
 		chromedp.Evaluate(`(()=>{const row=[...document.querySelectorAll('tbody tr')].find(r=>r.textContent.includes('BROWSER001'));row.querySelector('button[aria-controls^="family-"]').click()})()`, nil),
 		chromedp.Poll(`[...document.querySelectorAll('tr[data-family]')].some(r=>r.innerText.includes('GUI0000001'))`, nil),
