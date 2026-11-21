@@ -180,10 +180,21 @@ func TestBrowserGroupedReview(t *testing.T) {
 		chromedp.Poll(`document.querySelector('[data-review-category-title]').textContent==='Family Checks'&&document.querySelectorAll('[aria-label="本类目候选商品"] [data-review-family]').length===2`, nil),
 		chromedp.Evaluate(`document.querySelector('[aria-label="本类目候选商品"] button[aria-label="展开 FAMPARENT1 的子体"]').click()`, nil),
 		chromedp.Poll(`!!document.querySelector('[aria-label="本类目候选商品"] article[data-review-product="FAM0000060"]')`, nil),
+		chromedp.Evaluate(`(()=>{const parent=document.querySelector('article[data-review-product="FAM0000061"]'),child=document.querySelector('article[data-review-product="FAM0000060"]');const toggle=parent.querySelector('button[aria-label="收起 FAMPARENT1 的子体"]');if(!parent.hasAttribute('data-review-row')||!child.hasAttribute('data-review-row')||getComputedStyle(parent).borderRadius!=='0px'||getComputedStyle(child).paddingLeft!==getComputedStyle(parent).paddingLeft||toggle.parentElement!==parent.querySelector('h4').parentElement)throw Error('Family products must use equal compact rows with inline expansion')})()`, nil),
+
 		chromedp.Evaluate(`document.querySelector('input[aria-label="全选本页可处理商品"]').click()`, nil),
 		chromedp.Poll(`document.querySelector('[data-review-toolbar]').textContent.includes('已选 51 / 100 项')`, nil),
 	); e != nil {
 		t.Fatal("family pagination, expansion and explicit selection", e)
+	}
+
+	if e := chromedp.Run(ctx, chromedp.Evaluate(`document.querySelector('[data-review-workspace]').scrollIntoView({block:'start',behavior:'instant'});document.querySelector('[aria-label="本类目候选商品"]').scrollTop=0`, nil), chromedp.FullScreenshot(&screenshot, 90)); e != nil {
+		t.Fatal(e)
+	}
+	if dir := os.Getenv("SCREENING_QA_DIR"); dir != "" {
+		if e := os.WriteFile(filepath.Join(dir, "review-family-rows.png"), screenshot, 0600); e != nil {
+			t.Fatal(e)
+		}
 	}
 
 }

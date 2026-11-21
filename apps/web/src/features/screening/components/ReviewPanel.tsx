@@ -1,5 +1,5 @@
 'use client';
-import { useCallback, useEffect, useId, useState } from 'react';
+import { useCallback, useEffect, useId, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useScreeningQuery } from '../queries';
 import { request } from '../service';
@@ -405,17 +405,19 @@ function GroupReview({
               <ReviewProductCard product={currentReference} />
             </section>
           )}
-          {items.map((p) => (
-            <ReviewFamilyCard
-              key={p.id}
-              product={p}
-              query={familyQuery}
-              selected={selected}
-              busy={busy}
-              toggle={toggle}
-              onVisible={familyVisible}
-            />
-          ))}
+          <div className='min-w-0 overflow-clip rounded-lg border' data-review-rows>
+            {items.map((p) => (
+              <ReviewFamilyCard
+                key={p.id}
+                product={p}
+                query={familyQuery}
+                selected={selected}
+                busy={busy}
+                toggle={toggle}
+                onVisible={familyVisible}
+              />
+            ))}
+          </div>
           <div className='flex flex-wrap items-center justify-between gap-2 rounded-xl border p-3'>
             <Button
               variant='outline'
@@ -499,11 +501,13 @@ function ReviewFamilyCard({
   useEffect(() => {
     onVisible(product.id, open ? family.data?.items || [] : []);
   }, [onVisible, product.id, open, family.data]);
-  function card(p: Product) {
+  function card(p: Product, asinActions?: ReactNode) {
     return (
       <ReviewProductCard
         key={p.id}
         product={p}
+        row
+        asinActions={asinActions}
         checked={selected.includes(p.id)}
         disabled={
           busy ||
@@ -515,22 +519,25 @@ function ReviewFamilyCard({
     );
   }
   return (
-    <div className='min-w-0 space-y-3' data-review-family={product.id}>
-      {card(product)}
-      {(product.family_count || 1) > 1 && (
-        <Button
-          size='sm'
-          variant='outline'
-          aria-expanded={open}
-          aria-controls={contentID}
-          aria-label={(open ? '收起' : '展开') + ' ' + product.parent_asin + ' 的子体'}
-          disabled={busy}
-          onClick={() => setOpen(!open)}
-        >
-          {open ? '▾ 收起' : '▸'} {product.family_count} 个子体
-        </Button>
+    <div className='min-w-0' data-review-family={product.id}>
+      {card(
+        product,
+        (product.family_count || 1) > 1 ? (
+          <Button
+            size='sm'
+            variant='ghost'
+            className='h-7 gap-1 px-2 text-xs'
+            aria-expanded={open}
+            aria-controls={contentID}
+            aria-label={(open ? '收起' : '展开') + ' ' + product.parent_asin + ' 的子体'}
+            disabled={busy}
+            onClick={() => setOpen(!open)}
+          >
+            {open ? '▾ 收起' : '▸'} {product.family_count} 个子体
+          </Button>
+        ) : null
       )}
-      <div id={contentID} hidden={!open} className='space-y-3'>
+      <div id={contentID} hidden={!open}>
         {family.isLoading && (
           <p role='status' className='p-3 text-sm text-muted-foreground'>
             正在加载同父体商品…
@@ -544,7 +551,7 @@ function ReviewFamilyCard({
             </Button>
           </div>
         )}
-        {family.data?.items.filter((p) => p.id !== product.id).map(card)}
+        {family.data?.items.filter((p) => p.id !== product.id).map((p) => card(p))}
         {(family.data?.group?.products || 0) > 50 && (
           <div className='flex items-center justify-between gap-2'>
             <Button
