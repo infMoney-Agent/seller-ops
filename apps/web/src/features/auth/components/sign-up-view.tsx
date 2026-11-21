@@ -1,1 +1,4 @@
-export { default } from './sign-in-view';
+import { redirect } from 'next/navigation';
+export default function SignUpView() {
+  return redirect('/api/auth/login');
+}
