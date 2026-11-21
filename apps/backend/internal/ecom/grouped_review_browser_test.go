@@ -2,7 +2,6 @@ package ecom
 
 import (
 	"context"
-	"github.com/chromedp/cdproto/input"
 	"github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/chromedp"
 	"os"
@@ -40,10 +39,6 @@ func TestBrowserGroupedReview(t *testing.T) {
  for(let i=0;i<2;i++){const p=products.find(p=>p.asin==='GROUP0000'+(i+1));await call('products/'+p.id+'/review','PATCH',{expected_data_revision:p.data_revision,expected_review_revision:p.review_revision,status:i===0?'kept':'excluded',reason:'已核对材质和结构',note:'隔离分组测试样本'});}
  window.__groupApi=call;return 'ok';})()`
 	var result string
-	var resizePoint struct {
-		X float64
-		Y float64
-	}
 	if e := chromedp.Run(ctx, chromedp.Evaluate(seed, &result, func(p *runtime.EvaluateParams) *runtime.EvaluateParams { return p.WithAwaitPromise(true) })); e != nil {
 		t.Fatal("seed", e)
 	}
@@ -82,19 +77,11 @@ func TestBrowserGroupedReview(t *testing.T) {
 		chromedp.Evaluate(`window.__reviewStep=8`, nil),
 		chromedp.Poll(`document.querySelector('nav[aria-label="商品分类目录"]')?.textContent.includes('Kitchen & Dining')&&document.querySelector('nav[aria-label="商品分类目录"]').getBoundingClientRect().right<=document.querySelector('[data-review-content]').getBoundingClientRect().left`, nil),
 
-		chromedp.Evaluate(`(()=>{const tree=document.querySelector('nav[aria-label="商品分类目录"]');const button=[...tree.querySelectorAll('button[aria-expanded]')].find(b=>b.getAttribute('aria-label').includes('Bath'));button.click();window.__categoryHeight=tree.querySelector('[data-review-category-list]').getBoundingClientRect().height;const list=tree.querySelector('[data-review-category-list]');list.scrollIntoView({block:'center'});const r=list.getBoundingClientRect();return {X:r.right-3,Y:r.bottom-3}})()`, &resizePoint),
-		chromedp.ActionFunc(func(ctx context.Context) error {
-			if e := input.DispatchMouseEvent(input.MousePressed, resizePoint.X, resizePoint.Y).WithButton(input.Left).WithButtons(1).Do(ctx); e != nil {
-				return e
-			}
-			if e := input.DispatchMouseEvent(input.MouseMoved, resizePoint.X, resizePoint.Y+90).WithButtons(1).Do(ctx); e != nil {
-				return e
-			}
-			return input.DispatchMouseEvent(input.MouseReleased, resizePoint.X, resizePoint.Y+90).WithButton(input.Left).Do(ctx)
-		}),
-		chromedp.Evaluate(`window.__reviewStep=9`, nil),
-		chromedp.Poll(`document.querySelector('[data-review-category-list]').getBoundingClientRect().height>window.__categoryHeight+60`, nil),
-		chromedp.Evaluate(`(()=>{const tree=document.querySelector('nav[aria-label="商品分类目录"]');const b=[...tree.querySelectorAll('button[aria-expanded]')].find(b=>b.getAttribute('aria-label').includes('Kitchen & Dining'));b.click()})()`, nil),
+		chromedp.Evaluate(`(()=>{const tree=document.querySelector('nav[aria-label="商品分类目录"]');[...tree.querySelectorAll('button[aria-expanded]')].find(b=>b.getAttribute('aria-label').includes('Bath')).click();window.__categoryHeight=tree.querySelector('[data-review-category-list]').getBoundingClientRect().height;tree.querySelector('button[aria-label="增加分类高度"]').click()})()`, nil),
+		chromedp.Poll(`document.querySelector('[data-review-category-list]').getBoundingClientRect().height>window.__categoryHeight+20`, nil),
+		chromedp.Evaluate(`document.querySelector('button[aria-label="降低分类高度"]').click()`, nil),
+		chromedp.Poll(`document.querySelector('[data-review-category-list]').getBoundingClientRect().height===window.__categoryHeight`, nil),
+		chromedp.Evaluate(`(()=>{const tree=document.querySelector('nav[aria-label="商品分类目录"]');[...tree.querySelectorAll('button[aria-expanded]')].find(b=>b.getAttribute('aria-label').includes('Kitchen & Dining')).click()})()`, nil),
 		chromedp.Evaluate(`window.__reviewStep=10`, nil),
 		chromedp.Poll(`(()=>{const tree=document.querySelector('nav[aria-label="商品分类目录"]');const buttons=[...tree.querySelectorAll('button[aria-expanded]')];return buttons.find(b=>b.getAttribute('aria-label').includes('Bath')).getAttribute('aria-expanded')==='false'&&buttons.find(b=>b.getAttribute('aria-label').includes('Kitchen & Dining')).getAttribute('aria-expanded')==='true'})()`, nil),
 		chromedp.Evaluate(`(()=>{const tree=document.querySelector('nav[aria-label="商品分类目录"]');[...tree.querySelectorAll('button')].find(b=>b.textContent.includes('Kitchen & Dining')).click();})()`, nil),
@@ -127,7 +114,7 @@ func TestBrowserGroupedReview(t *testing.T) {
 		chromedp.Poll(`document.querySelector('[data-review-toolbar]').textContent.includes('已选 3 / 100 项')`, nil),
 	); e != nil {
 		var debug string
-		chromedp.Run(ctx, chromedp.Evaluate(`JSON.stringify({events:window.__dragEvents,hit:window.__dragHit,step:window.__reviewStep,height:document.querySelector("[data-review-category-list]")?.getBoundingClientRect().height,initial:window.__categoryHeight,tree:document.querySelector("nav[aria-label=商品分类目录]")?.innerText})`, &debug))
+		chromedp.Run(ctx, chromedp.Evaluate(`JSON.stringify({step:window.__reviewStep,height:document.querySelector("[data-review-category-list]")?.getBoundingClientRect().height,initial:window.__categoryHeight,tree:document.querySelector("nav[aria-label=商品分类目录]")?.innerText})`, &debug))
 		t.Fatal("group cards and sample selection", e, debug)
 	}
 	var screenshot []byte
