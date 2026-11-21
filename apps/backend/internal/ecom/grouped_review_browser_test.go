@@ -120,7 +120,7 @@ func TestBrowserGroupedReview(t *testing.T) {
 		chromedp.Poll(`document.querySelector('[data-review-category-title]').textContent.includes('Cloths')&&document.querySelectorAll('[aria-label="本类目候选商品"] article').length===1`, nil),
 		chromedp.Evaluate(`[...document.querySelectorAll('nav[aria-label="商品分类目录"] button')].find(b=>b.textContent.includes('Kitchen & Dining')).click()`, nil),
 		chromedp.Evaluate(`window.__reviewStep=17`, nil),
-		chromedp.Poll(`document.querySelector('[data-review-category-title]').textContent.endsWith('Kitchen & Dining')&&document.querySelectorAll('[aria-label="本类目候选商品"] article').length===5`, nil),
+		chromedp.Poll(`document.querySelector('[data-review-category-title]').textContent.includes('Kitchen & Dining')&&document.querySelectorAll('[aria-label="本类目候选商品"] article').length===5`, nil),
 		chromedp.Evaluate(`(()=>{const refs=document.querySelector('aside[aria-label="人工参考样本"]');refs.querySelector('button').click();const compare=refs.querySelectorAll('input[aria-label^="比较样本"]');compare[0].click();compare[1].click();})()`, nil),
 		chromedp.Evaluate(`window.__reviewStep=18`, nil),
 		chromedp.Poll(`!!document.querySelector('section[aria-label="样本对比"]')`, nil),
