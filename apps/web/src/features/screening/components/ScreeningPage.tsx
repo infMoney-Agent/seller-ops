@@ -29,6 +29,7 @@ import type {
   FamilyResult
 } from '../types';
 import { childSales } from '../sales';
+import { countryCode, listingAge, shanghaiToday } from '../product-display';
 import ImportDialog from './ImportDialog';
 import ReviewPanel from './ReviewPanel';
 import ProfitPanel from './ProfitPanel';
@@ -112,6 +113,13 @@ const tabs = [
 ];
 export default function ScreeningPage() {
   const session = useSellerSession();
+  const [today, setToday] = useState('');
+  useEffect(() => {
+    const refresh = () => setToday(shanghaiToday());
+    refresh();
+    const timer = setInterval(refresh, 60000);
+    return () => clearInterval(timer);
+  }, []);
   const client = useQueryClient();
   const [tab, setTab] = useState(0);
   const [importOpen, setImportOpen] = useState(false);
@@ -416,9 +424,14 @@ export default function ScreeningPage() {
         accessorKey: 'listing_date',
         header: '上架时间',
         cell: ({ row }) => (
-          <p className='whitespace-nowrap tabular-nums'>
-            {row.original.listing_date?.trim() || '—'}
-          </p>
+          <div className='space-y-1 tabular-nums'>
+            <p>{row.original.listing_date?.trim() || '—'}</p>
+            {listingAge(row.original.listing_date, today) != null && (
+              <p className='text-muted-foreground text-xs'>
+                距今 {listingAge(row.original.listing_date, today)?.toLocaleString('zh-CN')} 天
+              </p>
+            )}
+          </div>
         )
       },
       {
@@ -432,7 +445,21 @@ export default function ScreeningPage() {
         cell: ({ row }) => (
           <div className='min-w-36 max-w-52 space-y-1 text-xs leading-5'>
             <p className='break-words text-sm font-medium'>{row.original.seller_name || '—'}</p>
-            <p className='text-muted-foreground'>所属地：{row.original.seller_region || '—'}</p>
+            <p className='text-muted-foreground flex flex-wrap items-center gap-1'>
+              所属地：
+              {countryCode(row.original.seller_region) && (
+                <Image
+                  unoptimized
+                  src={'/images/flags/' + countryCode(row.original.seller_region) + '.svg'}
+                  width={18}
+                  height={12}
+                  alt=''
+                  aria-hidden='true'
+                  className='inline-block h-3 w-[18px] shrink-0 rounded-[1px] object-contain'
+                />
+              )}
+              {row.original.seller_region || '—'}
+            </p>
             {row.original.seller_id && (
               <p className='text-muted-foreground break-all'>ID：{row.original.seller_id}</p>
             )}
@@ -513,7 +540,7 @@ export default function ScreeningPage() {
         )
       }
     ],
-    [familyRows, products.isPlaceholderData]
+    [familyRows, products.isPlaceholderData, today]
   );
   // oxlint-disable-next-line react/incompatible-library -- TanStack Table is intentionally kept outside React Compiler memoization.
   const table = useReactTable({
