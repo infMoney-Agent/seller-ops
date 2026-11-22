@@ -45,11 +45,15 @@ func TestSingleVariantObservation(t *testing.T) {
 	if url == "" {
 		t.Skip("dedicated test database required")
 	}
-	if !strings.HasSuffix(url, "_test") {
+	cfg, err := pgxpool.ParseConfig(url)
+	if err != nil {
+		t.Fatal("invalid test database configuration")
+	}
+	if !strings.HasSuffix(cfg.ConnConfig.Database, "_test") {
 		t.Fatal("test database required")
 	}
 	ctx := context.Background()
-	pool, err := pgxpool.New(ctx, url)
+	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
