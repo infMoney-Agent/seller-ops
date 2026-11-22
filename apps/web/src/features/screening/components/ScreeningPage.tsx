@@ -33,6 +33,7 @@ import { useTableTextAlignment } from '../use-table-text-alignment';
 import { countryCode, listingAge, shanghaiToday } from '../product-display';
 import ImportDialog from './ImportDialog';
 import ReviewPanel from './ReviewPanel';
+import BilingualProductTitle from './BilingualProductTitle';
 import BatchReviewDialog from './BatchReviewDialog';
 import ProfitPanel from './ProfitPanel';
 import PolicyPanel from './PolicyPanel';
@@ -381,12 +382,7 @@ export default function ScreeningPage() {
                     : '代表商品 · 销量待确认'}
                 </p>
               )}
-              <p
-                className='line-clamp-2 leading-5'
-                title={row.original.title_zh || row.original.title}
-              >
-                {row.original.title_zh || row.original.title}
-              </p>
+              <BilingualProductTitle product={row.original} />
               <p className='text-xs'>
                 父体：{row.original.parent_asin || '未知'}{' '}
                 {row.original.manual_category && `· 人工分类：${row.original.manual_category}`}
