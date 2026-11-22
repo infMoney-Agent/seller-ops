@@ -199,26 +199,26 @@ func TestBrowserGroupedReview(t *testing.T) {
 
 	if e := chromedp.Run(ctx,
 		chromedp.Evaluate(`[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='商品库').click()`, nil),
-		chromedp.Poll(`document.querySelectorAll('[data-screening-table] > tbody > tr').length===28`, nil),
+		chromedp.Poll(`document.querySelectorAll('[data-screening-table] tbody > tr').length===28`, nil),
 		chromedp.Evaluate(`(()=>{const s=document.querySelector('#screening-page-size');s.value='10';s.dispatchEvent(new Event('change',{bubbles:true}))})()`, nil),
-		chromedp.Poll(`document.querySelectorAll('[data-screening-table] > tbody > tr').length===10`, nil),
+		chromedp.Poll(`document.querySelectorAll('[data-screening-table] tbody > tr').length===10`, nil),
 		chromedp.Evaluate(`window.__firstPageAsin=document.querySelector('[data-screening-table] tbody tr').innerText;[...document.querySelectorAll('[data-products-pagination] button')].find(b=>b.textContent.trim()==='下一页').click()`, nil),
-		chromedp.Poll(`document.querySelectorAll('[data-screening-table] > tbody > tr').length===10&&document.querySelector('[data-screening-table] tbody tr').innerText!==window.__firstPageAsin`, nil),
+		chromedp.Poll(`document.querySelectorAll('[data-screening-table] tbody > tr').length===10&&document.querySelector('[data-screening-table] tbody tr').innerText!==window.__firstPageAsin`, nil),
 		chromedp.Evaluate(`(()=>{const s=document.querySelector('#screening-page-size');s.value='20';s.dispatchEvent(new Event('change',{bubbles:true}))})()`, nil),
-		chromedp.Poll(`document.querySelectorAll('[data-screening-table] > tbody > tr').length===20&&document.querySelector('[data-products-pagination]').innerText.includes('1 / 2')`, nil),
+		chromedp.Poll(`document.querySelectorAll('[data-screening-table] tbody > tr').length===20&&document.querySelector('[data-products-pagination]').innerText.includes('1 / 2')`, nil),
 		chromedp.Evaluate(`(()=>{const s=document.querySelector('#screening-page-size');s.value='100';s.dispatchEvent(new Event('change',{bubbles:true}))})()`, nil),
-		chromedp.Poll(`document.querySelectorAll('[data-screening-table] > tbody > tr').length===28&&[...document.querySelectorAll('[data-products-pagination] button')].find(b=>b.textContent.trim()==='下一页').disabled`, nil),
+		chromedp.Poll(`document.querySelectorAll('[data-screening-table] tbody > tr').length===28&&[...document.querySelectorAll('[data-products-pagination] button')].find(b=>b.textContent.trim()==='下一页').disabled`, nil),
 		chromedp.Evaluate(`document.querySelector('[data-screening-table] button[aria-label="展开 FAMPARENT1 的子体"]').click()`, nil),
 		chromedp.Poll(`!!document.querySelector('[data-screening-table] tr[data-family]')`, nil),
 		chromedp.Evaluate(`document.querySelector('input[aria-label="展示全部子体"]').click()`, nil),
 		chromedp.Poll(`(()=>{const t=document.querySelector('[data-screening-table]');return t.querySelectorAll('tbody > tr').length===88&&!t.querySelector('tr[data-family]')&&!t.innerText.includes('销量代表')&&![...t.querySelectorAll('button[aria-label]')].some(b=>b.getAttribute('aria-label').endsWith(' 的子体'))})()`, nil),
 		chromedp.Evaluate(`document.querySelector('input[aria-label="展示全部子体"]').click()`, nil),
-		chromedp.Poll(`document.querySelectorAll('[data-screening-table] > tbody > tr').length===28&&document.querySelector('[data-screening-table] button[aria-label="展开 FAMPARENT1 的子体"]').closest('tr').innerText.includes('FAM0000061')`, nil),
+		chromedp.Poll(`document.querySelectorAll('[data-screening-table] tbody > tr').length===28&&document.querySelector('[data-screening-table] button[aria-label="展开 FAMPARENT1 的子体"]').closest('tr').innerText.includes('FAM0000061')`, nil),
 		chromedp.Evaluate(`(()=>{const s=document.querySelector('#screening-page-size');s.value='50';s.dispatchEvent(new Event('change',{bubbles:true}))})()`, nil),
-		chromedp.Poll(`document.querySelector('#screening-page-size').value==='50'&&document.querySelectorAll('[data-screening-table] > tbody > tr').length===28`, nil),
+		chromedp.Poll(`document.querySelector('#screening-page-size').value==='50'&&document.querySelectorAll('[data-screening-table] tbody > tr').length===28`, nil),
 	); e != nil {
 		var detail string
-		chromedp.Run(ctx, chromedp.Evaluate(`JSON.stringify({size:document.querySelector('#screening-page-size')?.value,rows:document.querySelectorAll('[data-screening-table] > tbody > tr').length,all:document.querySelector('input[aria-label="展示全部子体"]')?.checked,footer:document.querySelector('[data-products-pagination]')?.innerText,representativeCaption:document.querySelector('[data-screening-table]')?.innerText.includes('销量代表')})`, &detail))
+		chromedp.Run(ctx, chromedp.Evaluate(`JSON.stringify({size:document.querySelector('#screening-page-size')?.value,rows:document.querySelectorAll('[data-screening-table] tbody > tr').length,all:document.querySelector('input[aria-label="展示全部子体"]')?.checked,footer:document.querySelector('[data-products-pagination]')?.innerText,representativeCaption:document.querySelector('[data-screening-table]')?.innerText.includes('销量代表')})`, &detail))
 		t.Fatal("page sizes and unfolded-mode representative labels", e, detail)
 	}
 
