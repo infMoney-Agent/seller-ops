@@ -128,6 +128,7 @@ export default function ScreeningPage() {
   const [batchReviewOpen, setBatchReviewOpen] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
   const [filters, setFilters] = useState<Record<string, string>>({ show_merged: 'false' });
   const [selected, setSelected] = useState<RowSelectionState>({});
   const [columnSizing, setColumnSizing] = useState<ColumnSizingState>({});
@@ -159,7 +160,11 @@ export default function ScreeningPage() {
   const [jobs, setJobs] = useState<string[]>([]);
   const [showJob, setShowJob] = useState(true);
   const [activeJob, setActiveJob] = useState<string | null>(null);
-  const query = new URLSearchParams({ ...filters, page: String(page) }).toString();
+  const query = new URLSearchParams({
+    ...filters,
+    page: String(page),
+    page_size: String(pageSize)
+  }).toString();
   const products = useScreeningQuery<PageResult<Product>>('/products?' + query, false, true);
   useEffect(() => {
     if (
@@ -169,7 +174,11 @@ export default function ScreeningPage() {
       page * products.data.page_size >= products.data.total
     )
       return;
-    const params = new URLSearchParams({ ...filters, page: String(page + 1) });
+    const params = new URLSearchParams({
+      ...filters,
+      page: String(page + 1),
+      page_size: String(pageSize)
+    });
     const path = '/products?' + params;
     const timer = setTimeout(
       () =>
@@ -186,6 +195,7 @@ export default function ScreeningPage() {
     client,
     filters,
     page,
+    pageSize,
     products.data,
     products.isPlaceholderData,
     products.isFetching,
@@ -284,6 +294,7 @@ export default function ScreeningPage() {
   function filter(key: string, value: string) {
     setFilters((old) => ({ ...old, [key]: value }));
     setPage(1);
+    setFamilyRows({});
   }
   const columns = useMemo<ColumnDef<Product>[]>(
     () => [
@@ -338,7 +349,7 @@ export default function ScreeningPage() {
                   {row.original.asin}
                 </button>
                 <AsinTools asin={row.original.asin} />
-                {(row.original.family_count || 1) > 1 && (
+                {filters.show_merged !== 'true' && (row.original.family_count || 1) > 1 && (
                   <Button
                     size='sm'
                     variant='ghost'
@@ -544,7 +555,7 @@ export default function ScreeningPage() {
         )
       }
     ],
-    [familyRows, products.isPlaceholderData, today]
+    [familyRows, filters.show_merged, products.isPlaceholderData, today]
   );
   const sizedColumns = useMemo(
     () =>
@@ -765,7 +776,7 @@ export default function ScreeningPage() {
                       checked={filters.show_merged === 'true'}
                       onChange={(e) => filter('show_merged', String(e.target.checked))}
                     />
-                    展示全部子体
+                    全部子体（不折叠）
                   </label>
                   <Button
                     size='sm'
@@ -1010,7 +1021,7 @@ export default function ScreeningPage() {
                                 </td>
                               ))}
                             </tr>
-                            {familyRows[row.original.id] && (
+                            {filters.show_merged !== 'true' && familyRows[row.original.id] && (
                               <FamilyChildren
                                 product={row.original}
                                 columns={columns}
@@ -1041,7 +1052,27 @@ export default function ScreeningPage() {
                   </TableScroll>
                 </fieldset>
               )}
-              <div className='flex items-center gap-3'>
+              <div className='flex flex-wrap items-center gap-3' data-products-pagination>
+                <label htmlFor='screening-page-size' className='text-sm'>
+                  每页
+                </label>
+                <select
+                  id='screening-page-size'
+                  name='page_size'
+                  value={pageSize}
+                  className='h-9 rounded-md border bg-background px-2 text-sm'
+                  onChange={(event) => {
+                    setPageSize(Number(event.target.value));
+                    setPage(1);
+                    setFamilyRows({});
+                  }}
+                >
+                  {[10, 20, 50, 100].map((size) => (
+                    <option key={size} value={size}>
+                      {size} 条
+                    </option>
+                  ))}
+                </select>
                 <Button
                   variant='outline'
                   disabled={products.isPlaceholderData || page === 1}
@@ -1050,11 +1081,14 @@ export default function ScreeningPage() {
                   上一页
                 </Button>
                 <span className='text-sm'>
-                  第 {page} 页 / 共 {products.data?.total || 0} 项
+                  第 {page} / {Math.max(1, Math.ceil((products.data?.total || 0) / pageSize))} 页 ·
+                  共 {products.data?.total || 0} 项
                 </span>
                 <Button
                   variant='outline'
-                  disabled={products.isPlaceholderData || page * 50 >= (products.data?.total || 0)}
+                  disabled={
+                    products.isPlaceholderData || page * pageSize >= (products.data?.total || 0)
+                  }
                   onClick={() => setPage((v) => v + 1)}
                 >
                   下一页

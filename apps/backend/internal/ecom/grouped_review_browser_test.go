@@ -169,21 +169,21 @@ func TestBrowserGroupedReview(t *testing.T) {
 	if e := chromedp.Run(ctx, chromedp.EmulateViewport(1440, 1100), chromedp.Evaluate(`(async()=>{
     const api='/api/ecom/screening/';const call=async(path,method='GET',body)=>{const r=await fetch(api+path,{method,headers:{'Idempotency-Key':crypto.randomUUID(),...(body?{'Content-Type':'application/json'}:{})},body:body?JSON.stringify(body):undefined});const j=await r.json();if(!r.ok)throw Error(JSON.stringify(j));return j};
     const wait=async id=>{for(let i=0;i<150;i++){const j=await call('jobs/'+id);if(j.state==='failed')throw Error(JSON.stringify(j));if(['succeeded','partial'].includes(j.state))return j;await new Promise(r=>setTimeout(r,100));}throw Error('Import timeout')};
-    const rows=['ASIN,商品标题,父ASIN,变体数,月销量,子体销量,价格($),类目路径'];for(let i=1;i<=62;i++)rows.push(['FAM'+String(i).padStart(7,'0'),'steel storage hook '+i,i<=61?'FAMPARENT1':'','61','5000',String(i*10),'19.99','Family Checks:Hooks'].join(','));
+    const rows=['ASIN,商品标题,父ASIN,变体数,月销量,子体销量,价格($),类目路径'];for(let i=1;i<=82;i++)rows.push(['FAM'+String(i).padStart(7,'0'),'steel storage hook '+i,i<=61?'FAMPARENT1':'','61','5000',String(i*10),'19.99','Family Checks:Hooks'].join(','));
     const form=new FormData();form.set('file',new Blob([rows.join('\n')],{type:'text/csv'}),'Product-Tools-US-2026.08-review-family.csv');const r=await fetch(api+'imports',{method:'POST',headers:{'Idempotency-Key':crypto.randomUUID()},body:form});const u=await r.json();if(!r.ok)throw Error(JSON.stringify(u));await wait(u.job_id);const c=await call('imports/'+u.import_id+'/commit','POST');const done=await wait(c.job_id);if(done.result?.screen?.job_id)await wait(done.result.screen.job_id);
-    const params=new URLSearchParams({category_path:JSON.stringify(['Family Checks'])});const v=await call('review-workspace?'+params);if(v.counts.products!==62||v.group.display_products!==2||v.items.length!==2)throw Error('Family grouping must happen before pagination: '+JSON.stringify(v.counts));
+    const params=new URLSearchParams({category_path:JSON.stringify(['Family Checks'])});const v=await call('review-workspace?'+params);if(v.counts.products!==82||v.group.display_products!==22||v.items.length!==22)throw Error('Family grouping must happen before pagination: '+JSON.stringify(v.counts));
     const rep=v.items.find(p=>p.parent_asin==='FAMPARENT1');if(rep.asin!=='FAM0000061'||rep.family_count!==61)throw Error('Wrong representative');params.set('family_product_id',rep.id);const first=await call('review-workspace?'+params);params.set('member_page','2');const second=await call('review-workspace?'+params);if(first.items.length!==50||second.items.length!==11||new Set([...first.items,...second.items].map(p=>p.id)).size!==61)throw Error('Family pages duplicate or omit children');
     params.set('member_page','1');params.set('selected_ids',[rep.id,first.items[1].id].join(','));const scoped=await call('review-workspace?'+params);if(scoped.items.length!==2)throw Error('Expanded children escaped selection scope');return 'ok';})()`, &result, func(p *runtime.EvaluateParams) *runtime.EvaluateParams { return p.WithAwaitPromise(true) }),
 		chromedp.Evaluate(`[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='刷新').click()`, nil),
 		chromedp.Poll(`[...document.querySelectorAll('nav[aria-label="商品分类目录"] button')].some(b=>b.textContent.includes('Family Checks'))`, nil),
 		chromedp.Evaluate(`[...document.querySelectorAll('nav[aria-label="商品分类目录"] button')].find(b=>b.textContent.includes('Family Checks')).click()`, nil),
-		chromedp.Poll(`document.querySelector('[data-review-category-title]').textContent==='Family Checks'&&document.querySelectorAll('[aria-label="本类目候选商品"] [data-review-family]').length===2`, nil),
+		chromedp.Poll(`document.querySelector('[data-review-category-title]').textContent==='Family Checks'&&document.querySelectorAll('[aria-label="本类目候选商品"] [data-review-family]').length===22`, nil),
 		chromedp.Evaluate(`document.querySelector('[aria-label="本类目候选商品"] button[aria-label="展开 FAMPARENT1 的子体"]').click()`, nil),
 		chromedp.Poll(`!!document.querySelector('[aria-label="本类目候选商品"] article[data-review-product="FAM0000060"]')`, nil),
 		chromedp.Evaluate(`(()=>{const parent=document.querySelector('article[data-review-product="FAM0000061"]'),child=document.querySelector('article[data-review-product="FAM0000060"]');const toggle=parent.querySelector('button[aria-label="收起 FAMPARENT1 的子体"]');if(!parent.hasAttribute('data-review-row')||!child.hasAttribute('data-review-row')||getComputedStyle(parent).borderRadius!=='0px'||getComputedStyle(child).paddingLeft!==getComputedStyle(parent).paddingLeft||toggle.parentElement!==parent.querySelector('h4').parentElement)throw Error('Family products must use equal compact rows with inline expansion')})()`, nil),
 
 		chromedp.Evaluate(`document.querySelector('input[aria-label="全选本页可处理商品"]').click()`, nil),
-		chromedp.Poll(`document.querySelector('[data-review-toolbar]').textContent.includes('已选 51 / 100 项')`, nil),
+		chromedp.Poll(`document.querySelector('[data-review-toolbar]').textContent.includes('已选 71 / 100 项')`, nil),
 	); e != nil {
 		t.Fatal("family pagination, expansion and explicit selection", e)
 	}
@@ -195,6 +195,29 @@ func TestBrowserGroupedReview(t *testing.T) {
 		if e := os.WriteFile(filepath.Join(dir, "review-family-rows.png"), screenshot, 0600); e != nil {
 			t.Fatal(e)
 		}
+	}
+
+	if e := chromedp.Run(ctx,
+		chromedp.Evaluate(`[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='商品库').click()`, nil),
+		chromedp.Poll(`document.querySelectorAll('[data-screening-table] > tbody > tr').length===28`, nil),
+		chromedp.Evaluate(`(()=>{const s=document.querySelector('#screening-page-size');s.value='10';s.dispatchEvent(new Event('change',{bubbles:true}))})()`, nil),
+		chromedp.Poll(`document.querySelectorAll('[data-screening-table] > tbody > tr').length===10`, nil),
+		chromedp.Evaluate(`window.__firstPageAsin=document.querySelector('[data-screening-table] tbody tr').innerText;[...document.querySelectorAll('[data-products-pagination] button')].find(b=>b.textContent.trim()==='下一页').click()`, nil),
+		chromedp.Poll(`document.querySelectorAll('[data-screening-table] > tbody > tr').length===10&&document.querySelector('[data-screening-table] tbody tr').innerText!==window.__firstPageAsin`, nil),
+		chromedp.Evaluate(`(()=>{const s=document.querySelector('#screening-page-size');s.value='20';s.dispatchEvent(new Event('change',{bubbles:true}))})()`, nil),
+		chromedp.Poll(`document.querySelectorAll('[data-screening-table] > tbody > tr').length===20&&document.querySelector('[data-products-pagination]').innerText.includes('1 / 2')`, nil),
+		chromedp.Evaluate(`(()=>{const s=document.querySelector('#screening-page-size');s.value='100';s.dispatchEvent(new Event('change',{bubbles:true}))})()`, nil),
+		chromedp.Poll(`document.querySelectorAll('[data-screening-table] > tbody > tr').length===28&&[...document.querySelectorAll('[data-products-pagination] button')].find(b=>b.textContent.trim()==='下一页').disabled`, nil),
+		chromedp.Evaluate(`document.querySelector('[data-screening-table] button[aria-label="展开 FAMPARENT1 的子体"]').click()`, nil),
+		chromedp.Poll(`!!document.querySelector('[data-screening-table] tr[data-family]')`, nil),
+		chromedp.Evaluate(`document.querySelector('input[aria-label="展示全部子体"]').click()`, nil),
+		chromedp.Poll(`(()=>{const t=document.querySelector('[data-screening-table]');return t.querySelectorAll('tbody > tr').length===88&&!t.querySelector('tr[data-family]')&&!t.innerText.includes('销量代表')&&![...t.querySelectorAll('button[aria-label]')].some(b=>b.getAttribute('aria-label').endsWith(' 的子体'))})()`, nil),
+		chromedp.Evaluate(`document.querySelector('input[aria-label="展示全部子体"]').click()`, nil),
+		chromedp.Poll(`document.querySelectorAll('[data-screening-table] > tbody > tr').length===28&&document.querySelector('[data-screening-table] button[aria-label="展开 FAMPARENT1 的子体"]').closest('tr').innerText.includes('FAM0000061')`, nil),
+		chromedp.Evaluate(`(()=>{const s=document.querySelector('#screening-page-size');s.value='50';s.dispatchEvent(new Event('change',{bubbles:true}))})()`, nil),
+		chromedp.Poll(`document.querySelector('#screening-page-size').value==='50'&&document.querySelectorAll('[data-screening-table] > tbody > tr').length===28`, nil),
+	); e != nil {
+		t.Fatal("page sizes and unfolded-mode representative labels", e)
 	}
 
 }
