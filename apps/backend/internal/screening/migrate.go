@@ -49,7 +49,7 @@ func migrate(ctx context.Context, pool *pgxpool.Pool) error {
 			}
 		}
 	}
-	files := []string{"001_initial.sql", "002_groups.sql", "003_monthly.sql", "004_compact.sql", "005_go_jobs.sql", "006_self_parent.sql"}
+	files := []string{"001_initial.sql", "002_groups.sql", "003_monthly.sql", "004_compact.sql", "005_go_jobs.sql", "006_self_parent.sql", "007_import_columns.sql", "008_child_sales.sql", "009_import_removal.sql", "010_sales_display_index.sql"}
 	if current > len(files) {
 		return fmt.Errorf("database schema is newer than this application")
 	}
@@ -74,6 +74,9 @@ func migrate(ctx context.Context, pool *pgxpool.Pool) error {
 			if _, e = tx.Exec(ctx, statement); e != nil {
 				break
 			}
+		}
+		if e == nil && version == 7 {
+			e = backfillImportedColumns(ctx, tx)
 		}
 		if e == nil {
 			_, e = tx.Exec(ctx, "INSERT INTO screening_schema_versions(version) VALUES($1)", version)

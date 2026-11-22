@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { Icons } from '@/components/icons';
 import { adsApi } from '../api';
@@ -45,6 +45,7 @@ const ACTION_ICONS: Record<string, React.ElementType> = {
 };
 
 export default function AdOptimizerPage() {
+  const fieldId = useId();
   const [targetAcos, setTargetAcos] = useState(25);
 
   const mutation = useMutation({
@@ -66,10 +67,16 @@ export default function AdOptimizerPage() {
       {/* Controls */}
       <div className='flex gap-4 items-end flex-wrap p-5 bg-slate-900 rounded-xl border border-slate-800 mb-6'>
         <div>
-          <label className='text-xs text-slate-400 font-medium mb-1 block'>
+          <label
+            id={fieldId + '-ecom-field-1-label'}
+            htmlFor={fieldId + '-ecom-field-1'}
+            className='text-xs text-slate-400 font-medium mb-1 block'
+          >
             目标广告销售成本（ACoS %）
           </label>
           <input
+            aria-labelledby={fieldId + '-ecom-field-1-label'}
+            id={fieldId + '-ecom-field-1'}
             type='number'
             value={targetAcos}
             onChange={(e) => setTargetAcos(Number(e.target.value))}

@@ -7,7 +7,15 @@ export interface Product {
   asin: string;
   parent_asin: string | null;
   manual_category: string;
+  listing_date?: string | null;
   material: string | null;
+  product_length_cm: string | number | null;
+  product_width_cm: string | number | null;
+  product_height_cm: string | number | null;
+  product_dimensions?: string | null;
+  product_dimensions_original?: string | null;
+  package_dimensions?: string | null;
+  package_dimensions_original?: string | null;
   weight_g: string | number | null;
   package_weight_g: string | number | null;
   package_length_cm: string | number | null;
@@ -20,12 +28,15 @@ export interface Product {
   carton_width_cm: string | number | null;
   carton_height_cm: string | number | null;
   sales_scope: 'child' | 'parent' | 'unknown' | null;
+  sales_quantity_kind?: string;
+  child_sales_raw?: string | null;
   reported_monthly_sales: number | null;
   title: string;
   title_zh: string | null;
   image_url: string | null;
   category: string | null;
   seller_name: string | null;
+  seller_id?: string | null;
   seller_region: string | null;
   monthly_id: string | null;
   monthly_revision: number | null;
@@ -40,6 +51,7 @@ export interface Product {
   bsr_rank: number | null;
   price_usd: string | null;
   monthly_sales: number | null;
+  display_child_sales?: number | null;
   specs: Record<string, Json>;
   decision: string | null;
   recommendation: string | null;
@@ -76,6 +88,7 @@ export interface ImportRecord {
   default_sales_scope: string;
   mapping: Record<string, string>;
   counts: {
+    headers?: string[];
     total?: number;
     valid?: number;
     invalid?: number;
@@ -178,6 +191,9 @@ export interface ProfitInputs {
   note: string;
 }
 export interface ProfitScenario {
+  record_kind?: 'calculated' | 'imported';
+  imported_fba_fee_usd?: string | null;
+  imported_gross_margin_rate?: string | null;
   id: string;
   name: string;
   inputs: ProfitInputs;
@@ -205,6 +221,7 @@ export interface MonthlyRecord {
   source_row_id: string;
   price_usd: string | null;
   monthly_sales: number | null;
+  display_child_sales?: number | null;
   monthly_revenue: string | null;
   review_count: number | null;
   rating: string | null;
@@ -228,6 +245,7 @@ export interface ParentMonthly {
   observed_on: string;
   source_type: string;
   monthly_sales: number | null;
+  display_child_sales?: number | null;
   monthly_revenue: string | null;
 }
 export interface FamilyResult extends PageResult<Product> {
@@ -236,4 +254,34 @@ export interface FamilyResult extends PageResult<Product> {
   unknown_child_count: number;
   aggregate_label: string;
   parent_monthly: ParentMonthly[];
+}
+
+export interface ReviewTypeGroup {
+  display_products?: number;
+  id: string;
+  title: string;
+  marketplace: string;
+  products: number;
+  pending: number;
+  reviewed: number;
+  samples: number;
+}
+export interface ReviewWorkspace {
+  groups: PageResult<ReviewTypeGroup>;
+  counts: { products: number; groups: number; pending: number };
+  group: ReviewTypeGroup | null;
+  items: Product[];
+  page: number;
+  page_size: number;
+  samples: PageResult<Product>;
+}
+
+export interface ReviewCategory {
+  label?: string;
+  id: string;
+  name: string;
+  path: string[];
+  products: number;
+  pending: number;
+  children: ReviewCategory[];
 }

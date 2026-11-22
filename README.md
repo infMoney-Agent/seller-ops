@@ -71,6 +71,10 @@ SELLER_APP_ORIGIN=http://localhost:3000
 
 前端的两个签名密钥分别与业务后端一致。登录服务的 `APP_ORIGIN` 和 Casdoor 的回调地址使用相同前端入口。网页采集需要 Chromium，可通过 `CHROME_BIN` 指定路径。
 
+## 团队开发约定
+
+所有贡献者及 AI 编程助手遵循 [AGENTS.md](AGENTS.md) 和 [CONTRIBUTING.md](CONTRIBUTING.md)。项目内已集成 [Modern Web Guidance](docs/web-development-guidance.md)，前端改动先查询指南，再实现和验证；通过 `npm run guidance:check` 检查接入完整性。
+
 ## 检查与发布
 
 ```sh

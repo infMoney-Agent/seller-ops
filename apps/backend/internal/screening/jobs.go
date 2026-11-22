@@ -80,9 +80,9 @@ func (s *service) enqueueScreenTx(ctx context.Context, tx pgx.Tx, a identity, b 
 	}
 	var rows pgx.Rows
 	if b["product_ids"] != nil {
-		rows, e = tx.Query(ctx, "UPDATE ps_products SET screen_generation=screen_generation+1 WHERE tenant_id=$1 AND id=ANY($2::uuid[]) RETURNING id::text,data_revision,screen_generation", a.Tenant, ids)
+		rows, e = tx.Query(ctx, "UPDATE ps_products SET screen_generation=screen_generation+1 WHERE tenant_id=$1 AND archived_at IS NULL AND id=ANY($2::uuid[]) RETURNING id::text,data_revision,screen_generation", a.Tenant, ids)
 	} else {
-		rows, e = tx.Query(ctx, "UPDATE ps_products SET screen_generation=screen_generation+1 WHERE tenant_id=$1 RETURNING id::text,data_revision,screen_generation", a.Tenant)
+		rows, e = tx.Query(ctx, "UPDATE ps_products SET screen_generation=screen_generation+1 WHERE tenant_id=$1 AND archived_at IS NULL RETURNING id::text,data_revision,screen_generation", a.Tenant)
 	}
 	if e != nil {
 		return nil, e
@@ -208,7 +208,7 @@ func (s *service) runScreen(ctx context.Context, job Object, token string) error
 			return e
 		}
 		var raw []byte
-		e = tx.QueryRow(ctx, "SELECT to_jsonb(p)||jsonb_build_object('price_usd',m.price_usd::text,'occurrences',(SELECT count(DISTINCT stat_month) FROM ps_product_monthly h WHERE h.tenant_id=p.tenant_id AND h.product_id=p.id)) FROM ps_products p LEFT JOIN ps_product_monthly m ON m.tenant_id=p.tenant_id AND m.id=p.current_monthly_id WHERE p.tenant_id=$1 AND p.id=$2::uuid AND p.data_revision=$3 AND p.screen_generation=$4 FOR UPDATE OF p", tenant, target["id"], integer(target["revision"]), integer(target["generation"])).Scan(&raw)
+		e = tx.QueryRow(ctx, "SELECT to_jsonb(p)||jsonb_build_object('price_usd',m.price_usd::text,'sales_scope',m.sales_scope,'monthly_sales',CASE WHEN m.sales_scope='child' THEN m.monthly_sales END,'sales_quantity_kind',m.sales_quantity_kind,'occurrences',(SELECT count(DISTINCT stat_month) FROM ps_product_monthly h WHERE h.tenant_id=p.tenant_id AND h.product_id=p.id)) FROM ps_products p LEFT JOIN ps_product_monthly m ON m.tenant_id=p.tenant_id AND m.id=p.current_monthly_id WHERE p.tenant_id=$1 AND p.id=$2::uuid AND p.data_revision=$3 AND p.screen_generation=$4 FOR UPDATE OF p", tenant, target["id"], integer(target["revision"]), integer(target["generation"])).Scan(&raw)
 		if e != nil && e != pgx.ErrNoRows {
 			tx.Rollback(ctx)
 			return e

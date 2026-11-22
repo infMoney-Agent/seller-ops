@@ -24,3 +24,14 @@
 - 用 cn() 合并样式，优先通过组合扩展共享 UI。图标统一从 src/components/icons.tsx 的 Icons 使用。
 - 现有布局用 PageContainer 提供标题与操作。复用表单字段、useAppForm 和组件已有的加载状态。
 - 面向用户的界面沿用简体中文。商品页面文案仍按用户选择的输出语言生成。
+
+## Modern Web Guidance（团队前端开发必读）
+
+- HTML、CSS、浏览器端 JavaScript、交互、性能和无障碍改动，必须先读 [.agents/skills/modern-web-guidance/SKILL.md](.agents/skills/modern-web-guidance/SKILL.md)，按具体需求搜索并获取相关指南，再实施和验证。仅后端、部署、文档或纯类型调整无需无关搜索。
+- 项目统一入口：根目录执行 `npm run guidance -- search "responsive data table"`，再执行 `npm run guidance -- retrieve "实际搜索返回的ID"`。项目固定 CLI 版本；上游示例中的 @latest 在本项目使用此固定入口替代。离线可阅读随仓库保存的 guides，不伪造搜索或验收结果。
+- 浏览器策略：面向当前稳定版 Chrome、Edge、Firefox、Safari；默认优先 Baseline Widely available。尚未达到该级别的 API 必须进行能力检测并提供可用回退。不启用未经明确需求授权的 Origin Trial 或单浏览器实验特性。
+- 与现有 Next.js、React、TanStack 和共享 UI 组合使用。不能仅为追求新 API 删除已有必要的焦点管理、键盘行为、组件封装或回退。SSR 中保护浏览器对象访问。
+- 用户明确要求、租户隔离、人工结论保留等业务约束和项目架构优先；指南不构成扩大功能范围、绕过权限或修改业务数据的授权。冲突时在 PR 中说明取舍。
+- 前端 PR 必须在 Modern Web Guidance 栏列出实际采用的指南 ID、对应文件、兼容处理与验证结果；没有适用规则时说明具体原因。评审逐项核对，不用静态扫描代替真实交互验证。仅按影响范围运行验证，不因指南重复跑全部测试。
+- `legacy-scan` 仅用于明确要求的整体旧模式排查；结果需人工判断，不将零告警作为合入条件。
+- 新同事及工具接入见 [CONTRIBUTING.md](CONTRIBUTING.md) 和 [团队 Web 开发指南](docs/web-development-guidance.md)。上游更新须单独评审并同步版本锁，禁止在功能提交中悄悄替换全部指南。

@@ -2,7 +2,10 @@
 import { useState } from 'react';
 import { useScreeningQuery } from '../queries';
 import type { MonthlyRecord, PageResult, Product } from '../types';
-import { Button, formatMoney } from './shared';
+import { Button, TableScroll, formatMoney } from './shared';
+import { childSales } from '../sales';
+import SourceRowCard from './SourceRowCard';
+import OperatingTrends from './OperatingTrends';
 
 export const sourceLabels: Record<string, string> = {
   sellersprite: '卖家精灵',
@@ -12,8 +15,8 @@ export const sourceLabels: Record<string, string> = {
 };
 
 export const periodLabels: Record<string, string> = {
-  calendar_month: '自然月',
-  rolling_30d: '滚动30天',
+  calendar_month: '固定月份',
+  rolling_30d: '近30天',
   custom: '自定义周期'
 };
 
@@ -35,26 +38,30 @@ export default function MonthlyHistory({
       <h4 className='font-semibold'>{recentYear ? '近一年经营数据' : '月度经营数据'}</h4>
       <p className='text-muted-foreground text-xs'>
         {recentYear
-          ? '截至该商品最新数据月份，展示近 12 个月已导入的数据；缺失月份不补零，不同来源与统计口径分别展示。'
+          ? '截至该商品最新数据月份，展示近 12 个月已导入的数据；缺失月份不补零，不同来源和统计周期分别展示。'
           : '同一商品按来源和统计周期保存多期数据。修改经营数据不会覆盖人工结论。'}
       </p>
       {history.isLoading && <p role='status'>正在加载经营数据…</p>}
       {history.isError && <p role='alert'>{history.error.message}</p>}
-      <div className='overflow-auto'>
+      {history.data && history.data.items.length > 0 && (
+        <OperatingTrends rows={history.data.items} total={history.data.total} />
+      )}
+      <TableScroll label='月度经营数据，可横向滚动'>
         <table className='w-full text-left text-sm'>
+          <caption className='sr-only'>商品各月价格、销量及来源明细</caption>
           <thead>
             <tr>
               {[
-                '月份 / 口径',
+                '月份 / 周期',
                 '价格 USD',
-                '销量 / 口径',
+                '子体销量',
                 '销售额 USD',
                 '评分 / 数量',
                 'BSR',
                 '来源 / 观察日期',
                 '操作'
               ].map((x) => (
-                <th key={x} className='whitespace-nowrap p-2'>
+                <th scope='col' key={x} className='whitespace-nowrap p-2'>
                   {x}
                 </th>
               ))}
@@ -70,13 +77,7 @@ export default function MonthlyHistory({
                   </p>
                 </td>
                 <td>{formatMoney(row.price_usd)}</td>
-                <td>
-                  {row.sales_scope === 'child'
-                    ? (row.monthly_sales ?? '—')
-                    : row.sales_scope === 'parent'
-                      ? '父体汇总见父体数据'
-                      : `${row.monthly_sales ?? '—'}（未知，不参与合计）`}
-                </td>
+                <td>{childSales(row)}</td>
                 <td>{formatMoney(row.monthly_revenue)}</td>
                 <td>
                   {row.rating ?? '—'} / {row.review_count ?? '—'}
@@ -85,7 +86,7 @@ export default function MonthlyHistory({
                 <td className='text-xs'>
                   {sourceLabels[row.source_type] || row.source_type}
                   <p>{row.observed_on}</p>
-                  <p>{row.file_name}</p>
+                  <SourceRowCard productID={product.id} rowID={row.source_row_id} />
                 </td>
                 <td>
                   <Button
@@ -117,7 +118,7 @@ export default function MonthlyHistory({
             ))}
           </tbody>
         </table>
-      </div>
+      </TableScroll>
       {!history.data?.total && !history.isLoading && !history.isError && (
         <p className='text-sm'>暂无月度数据</p>
       )}

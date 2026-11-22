@@ -8,7 +8,7 @@ import (
 )
 
 var asinPattern = regexp.MustCompile(`^[A-Z0-9]{10}$`)
-var parameterColumns = []string{"parent_asin", "material", "weight_g", "package_weight_g", "package_length_cm", "package_width_cm", "package_height_cm", "units_per_pack", "carton_units", "carton_weight_g", "carton_length_cm", "carton_width_cm", "carton_height_cm"}
+var parameterColumns = []string{"parent_asin", "material", "product_length_cm", "product_width_cm", "product_height_cm", "weight_g", "package_weight_g", "package_length_cm", "package_width_cm", "package_height_cm", "units_per_pack", "carton_units", "carton_weight_g", "carton_length_cm", "carton_width_cm", "carton_height_cm"}
 
 func (s *service) mutateProduct(ctx context.Context, a identity, id, action string, b Object) (any, error) {
 	tx, e := s.db.Begin(ctx)
@@ -20,7 +20,7 @@ func (s *service) mutateProduct(ctx context.Context, a identity, id, action stri
 		return previous, e
 	}
 	var raw []byte
-	if e = tx.QueryRow(ctx, "SELECT to_jsonb(p) FROM ps_products p WHERE tenant_id=$1 AND id=$2::uuid FOR UPDATE", a.Tenant, id).Scan(&raw); e != nil {
+	if e = tx.QueryRow(ctx, "SELECT to_jsonb(p) FROM ps_products p WHERE tenant_id=$1 AND id=$2::uuid AND archived_at IS NULL FOR UPDATE", a.Tenant, id).Scan(&raw); e != nil {
 		return nil, e
 	}
 	before := decodeObject(raw)

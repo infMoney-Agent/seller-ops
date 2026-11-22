@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { Icons } from '@/components/icons';
 import { reviewsApi } from '../api';
@@ -17,6 +17,7 @@ const {
 } = Icons;
 
 export default function ReviewAnalyzerPage() {
+  const fieldId = useId();
   const [asin, setAsin] = useState('');
   const [maxPages, setMaxPages] = useState(3);
 
@@ -39,8 +40,16 @@ export default function ReviewAnalyzerPage() {
       {/* Input */}
       <div className='flex gap-4 flex-wrap p-5 bg-slate-900 rounded-xl border border-slate-800 mb-6'>
         <div className='flex-1 min-w-48'>
-          <label className='text-xs text-slate-400 font-medium mb-1 block'>ASIN</label>
+          <label
+            id={fieldId + '-ecom-field-1-label'}
+            htmlFor={fieldId + '-ecom-field-1'}
+            className='text-xs text-slate-400 font-medium mb-1 block'
+          >
+            ASIN
+          </label>
           <input
+            aria-labelledby={fieldId + '-ecom-field-1-label'}
+            id={fieldId + '-ecom-field-1'}
             value={asin}
             onChange={(e) => setAsin(e.target.value.toUpperCase())}
             placeholder='B01MFCXDYG'
@@ -49,8 +58,16 @@ export default function ReviewAnalyzerPage() {
           />
         </div>
         <div>
-          <label className='text-xs text-slate-400 font-medium mb-1 block'>评论页数</label>
+          <label
+            id={fieldId + '-ecom-field-2-label'}
+            htmlFor={fieldId + '-ecom-field-2'}
+            className='text-xs text-slate-400 font-medium mb-1 block'
+          >
+            评论页数
+          </label>
           <select
+            aria-labelledby={fieldId + '-ecom-field-2-label'}
+            id={fieldId + '-ecom-field-2'}
             value={maxPages}
             onChange={(e) => setMaxPages(Number(e.target.value))}
             className='bg-slate-800 border border-slate-700 text-white text-sm rounded-lg px-3 py-2.5 focus:ring-1 focus:ring-amber-500 outline-none'

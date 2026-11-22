@@ -45,14 +45,13 @@ export default function FamilyPanel({
       </div>
       {result.isError && <p role='alert'>{result.error.message}</p>}
       <p className='text-muted-foreground text-xs'>
-        {result.data?.aggregate_label}：{result.data?.known_child_sales_total ?? '未确认'}
-        ；未知口径子体 {result.data?.unknown_child_count || 0} 个。
+        {result.data?.aggregate_label}：{result.data?.known_child_sales_total ?? '—'}
       </p>
       <div className='overflow-auto'>
         <table className='w-full text-left text-sm'>
           <thead>
             <tr>
-              {['子 ASIN', '规格', '价格 USD', '子体销量', '销量口径', '人工结论'].map((v) => (
+              {['子 ASIN', '规格', '价格 USD', '销量', '人工结论'].map((v) => (
                 <th key={v} className='whitespace-nowrap p-2'>
                   {v}
                 </th>
@@ -65,13 +64,12 @@ export default function FamilyPanel({
                 <td className='p-2'>{p.asin}</td>
                 <td>{p.title_zh || p.title}</td>
                 <td>{formatMoney(p.price_usd)}</td>
-                <td>{p.monthly_sales ?? '—'}</td>
                 <td>
                   {p.sales_scope === 'child'
-                    ? '已确认子体'
+                    ? (p.monthly_sales ?? '—')
                     : p.sales_scope === 'parent'
-                      ? '父体汇总，另表保存'
-                      : '未知，不参与合计'}
+                      ? '父体汇总，见下方'
+                      : '归属待确认'}
                 </td>
                 <td>
                   <Badge value={p.review_status} />

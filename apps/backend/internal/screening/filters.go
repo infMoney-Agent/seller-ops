@@ -34,6 +34,10 @@ func validateFilters(values url.Values) error {
 				if !uuidPattern.MatchString(value) {
 					return fail(422, "批次ID无效")
 				}
+			case "child_sales_min":
+				if _, err := parseNonnegativeInt(value); err != nil {
+					return fail(422, "最低子体销量必须为非负整数")
+				}
 			case "profit_min", "profit_max":
 				if !regexp.MustCompile(`^-?[0-9]{1,12}(\.[0-9]{1,6})?$`).MatchString(value) {
 					return fail(422, "利润区间无效")

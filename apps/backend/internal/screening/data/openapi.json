@@ -3,7 +3,7 @@
   "info": {
     "title": "Seller Ops Go Screening API",
     "version": "2.0.0",
-    "description": "Go 服务。浏览器使用 /api/ecom/screening 同源代理；内部路径须通过带工作区及角色的 HMAC 身份校验。商品参数在主表，价格销量在月份副表。"
+    "description": "Go 服务。浏览器使用 /api/ecom/screening 同源代理；内部路径须通过带工作区及角色的 HMAC 身份校验。商品参数在主表，价格销量在月份副表。 SellerSprite imports retain every raw column. Structured product attributes are stored in ps_products, operating columns in ps_product_monthly, and source FBA/gross-margin snapshots in ps_profit_scenarios with record_kind=imported. Source estimates are not calculated profits."
   },
   "paths": {
     "/api/v1/screening/products": {
@@ -112,6 +112,16 @@
             "description": "SHA256 HMAC，签名由Next.js代理生成",
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "child_sales_min",
+            "in": "query",
+            "required": false,
+            "description": "最低子体销量参考值，仅返回已知值达到门槛的商品，不使用父体销量补全",
+            "schema": {
+              "type": "integer",
+              "minimum": 0
             }
           }
         ],
@@ -360,6 +370,16 @@
             "description": "SHA256 HMAC，签名由Next.js代理生成",
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "child_sales_min",
+            "in": "query",
+            "required": false,
+            "description": "最低子体销量参考值，仅返回已知值达到门槛的商品，不使用父体销量补全",
+            "schema": {
+              "type": "integer",
+              "minimum": 0
             }
           }
         ]
@@ -2055,6 +2075,36 @@
                 }
               }
             }
+          }
+        }
+      },
+      "delete": {
+        "summary": "撤销导入批次及经营数据，保留其他来源与审计",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "记录已从历史列表移除"
+          },
+          "409": {
+            "description": "文件正在处理中，不能删除"
           }
         }
       }
@@ -6294,6 +6344,116 @@
           }
         ]
       }
+    },
+    "/api/v1/screening/imports/{id}/removal-preview": {
+      "get": {
+        "summary": "查询删除导入的影响范围",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "涉及商品数、独有商品数、来源行数"
+          }
+        }
+      }
+    },
+    "/api/v1/screening/products/{id}/observations/{row_id}": {
+      "get": {
+        "summary": "获取当前商品指定来源行的原始数据与文件定位",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "row_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "原始字段、文件ID、名称、工作表和行号"
+          },
+          "404": {
+            "description": "来源不存在、已撤销或不属于该商品/工作区"
+          }
+        }
+      }
+    },
+    "/api/v1/screening/review-workspace": {
+      "get": {
+        "summary": "按类目浏览全部商品与参考样本",
+        "description": "选择父类目包含全部子类目；商品和样本独立分页，每页50项。不按机器类型二次分组。",
+        "parameters": [
+          {
+            "name": "member_page",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sample_page",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "selected_ids",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "category_path",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "JSON编码的类目名称数组，选择父节点包含其全部后代。"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "groups, counts, group, items, page, page_size, samples"
+          },
+          "422": {
+            "description": "无效查询参数"
+          }
+        }
+      }
+    },
+    "/api/v1/screening/review-categories": {
+      "get": {
+        "summary": "真实商品类目目录树",
+        "description": "按现有筛选与明确商品ID返回真实类目层级、商品数和待复核数，不受当前类目选择限制。",
+        "responses": {
+          "200": {
+            "description": "items: recursive nodes with id, name, path, products, pending, children"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -7253,6 +7413,63 @@
                 "type": "integer",
                 "minimum": 1,
                 "maximum": 2147483647
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "product_length_cm": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^[0-9]{1,12}(?:\\.[0-9]{1,6})?$"
+                  },
+                  {
+                    "type": "number",
+                    "minimum": 0
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "product_width_cm": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^[0-9]{1,12}(?:\\.[0-9]{1,6})?$"
+                  },
+                  {
+                    "type": "number",
+                    "minimum": 0
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "product_height_cm": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^[0-9]{1,12}(?:\\.[0-9]{1,6})?$"
+                  },
+                  {
+                    "type": "number",
+                    "minimum": 0
+                  }
+                ]
               },
               {
                 "type": "null"

@@ -1,0 +1,2 @@
+CREATE INDEX ps_monthly_family_period_idx
+ ON ps_product_monthly(tenant_id,parent_asin_snapshot,period_type,period_start,period_end,product_id);

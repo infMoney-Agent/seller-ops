@@ -76,6 +76,13 @@ func normalizeRow(raw Object, mapping Object) (Object, []string) {
 			continue
 		}
 		text := strings.TrimSpace(str(value))
+		if field == "child_monthly_sales" || field == "parent_monthly_sales" {
+			if text == "-" || text == "—" || strings.EqualFold(text, "N/A") {
+				out[field] = nil
+				continue
+			}
+			text = strings.TrimSpace(strings.TrimSuffix(text, "+"))
+		}
 		out[field] = text
 		switch field {
 		case "price_usd", "monthly_revenue", "parent_monthly_revenue", "child_monthly_revenue", "rating", "weight_g", "package_weight_g", "package_length_cm", "package_width_cm", "package_height_cm", "carton_weight_g", "carton_length_cm", "carton_width_cm", "carton_height_cm":
@@ -88,7 +95,7 @@ func normalizeRow(raw Object, mapping Object) (Object, []string) {
 					errs = append(errs, "评分超出范围")
 				}
 			}
-		case "monthly_sales", "review_count", "bsr_rank", "units_per_pack", "carton_units", "parent_monthly_sales", "child_monthly_sales":
+		case "monthly_sales", "review_count", "bsr_rank", "units_per_pack", "carton_units", "parent_monthly_sales", "child_monthly_sales", "variant_count":
 			text = strings.ReplaceAll(text, ",", "")
 			n, e := parseNonnegativeInt(text)
 			if e != nil {
@@ -100,6 +107,9 @@ func normalizeRow(raw Object, mapping Object) (Object, []string) {
 			}
 		}
 	}
+	hasChildSource := out["child_monthly_sales"] != nil
+	out["source_monthly_sales"] = out["monthly_sales"]
+	out["source_monthly_revenue"] = out["monthly_revenue"]
 	out["asin"] = strings.ToUpper(str(out["asin"]))
 	out["parent_asin"] = strings.ToUpper(str(out["parent_asin"]))
 	role := strings.ToLower(str(out["listing_role"]))
@@ -147,6 +157,26 @@ func normalizeRow(raw Object, mapping Object) (Object, []string) {
 	if role != "parent" && str(out["title"]) == "" {
 		errs = append(errs, "缺少商品标题")
 	}
+	// A self-parent ASIN with exactly one variant represents the same sales unit.
+	// Never infer this for multi-variant listings or missing variant counts.
+	if role != "parent" && parent == str(out["asin"]) && integer(out["variant_count"]) == 1 {
+		sales := out["child_monthly_sales"]
+		if sales == nil {
+			sales = out["monthly_sales"]
+		}
+		if sales == nil {
+			sales = out["parent_monthly_sales"]
+		}
+		if sales != nil {
+			out["child_monthly_sales"] = sales
+			out["parent_monthly_sales"] = sales
+			out["sales_basis"] = "single_variant_self_parent"
+			scope = "child"
+			if out["child_monthly_revenue"] == nil {
+				out["child_monthly_revenue"] = out["monthly_revenue"]
+			}
+		}
+	}
 	if out["child_monthly_sales"] != nil || out["child_monthly_revenue"] != nil {
 		if scope == "parent" {
 			errs = append(errs, "子体专用字段与父体口径冲突")
@@ -165,6 +195,25 @@ func normalizeRow(raw Object, mapping Object) (Object, []string) {
 	if str(out["image_url"]) != "" && !strings.HasPrefix(str(out["image_url"]), "https://") {
 		out["image_url"] = nil
 	}
+	if out["child_monthly_sales"] != nil && str(out["parent_asin"]) != "" && out["sales_basis"] != "single_variant_self_parent" && out["parent_monthly_sales"] == nil {
+		out["parent_monthly_sales"] = out["source_monthly_sales"]
+		out["parent_monthly_revenue"] = out["source_monthly_revenue"]
+	}
+	out["sales_quantity_kind"] = "missing"
+	if out["sales_scope"] == "child" && out["monthly_sales"] != nil {
+		out["sales_quantity_kind"] = "reported"
+		if (hasChildSource && str(raw["子体销量"]) != "") || strings.Contains(str(raw["子体月销量"]), "+") || strings.Contains(str(raw["Child Monthly Sales"]), "+") {
+			out["sales_quantity_kind"] = "lower_bound"
+		}
+		if out["sales_basis"] == "single_variant_self_parent" && !hasChildSource {
+			out["sales_quantity_kind"] = "single_variant_estimate"
+		}
+	}
+	out["child_sales_raw"] = raw["子体销量"]
+	if out["child_sales_raw"] == nil {
+		out["child_sales_raw"] = raw["子体月销量"]
+	}
+	normalizeImportedColumns(out)
 	out["specs"] = Object{"详细参数": str(raw["详细参数"])}
 	return out, errs
 }
@@ -505,10 +554,13 @@ func (s *service) upload(w http.ResponseWriter, r *http.Request) (any, error) {
 		return nil, e
 	}
 	var actual string
-	if e = tx.QueryRow(r.Context(), "SELECT id::text FROM ps_imports WHERE tenant_id=$1 AND file_sha256=$2 AND mapping_hash=$3 AND source_period=$4 AND observed_on IS NOT DISTINCT FROM $5::date AND source_type=$6 AND period_type=$7 AND period_start IS NOT DISTINCT FROM $8::date AND period_end IS NOT DISTINCT FROM $9::date AND default_sales_scope=$10", a.Tenant, hash, shaDigest(encoded(mapping)), str(b["source_period"]), b["observed_on"], str(b["source_type"]), str(b["period_type"]), b["period_start"], b["period_end"], str(b["default_sales_scope"])).Scan(&actual); e != nil {
+	if e = tx.QueryRow(r.Context(), "SELECT id::text FROM ps_imports WHERE tenant_id=$1 AND file_sha256=$2 AND mapping_hash=$3 AND source_period=$4 AND observed_on IS NOT DISTINCT FROM $5::date AND source_type=$6 AND period_type=$7 AND period_start IS NOT DISTINCT FROM $8::date AND period_end IS NOT DISTINCT FROM $9::date AND default_sales_scope=$10 AND NOT(counts ? 'data_deleted_at')", a.Tenant, hash, shaDigest(encoded(mapping)), str(b["source_period"]), b["observed_on"], str(b["source_type"]), str(b["period_type"]), b["period_start"], b["period_end"], str(b["default_sales_scope"])).Scan(&actual); e != nil {
 		return nil, e
 	}
 	if actual != id {
+		if _, e = tx.Exec(r.Context(), "UPDATE ps_imports SET counts=counts-'history_deleted_at'-'history_deleted_by' WHERE tenant_id=$1 AND id=$2::uuid", a.Tenant, actual); e != nil {
+			return nil, e
+		}
 		os.Remove(target)
 		if e = tx.Commit(r.Context()); e != nil {
 			return nil, e

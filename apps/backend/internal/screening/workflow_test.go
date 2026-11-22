@@ -158,7 +158,15 @@ func TestImportHTTPWorkflow(t *testing.T) {
 		writer.Close()
 		job := call("POST", "imports", writer.FormDataContentType(), body.Bytes())
 		wait(str(job["job_id"]))
+		duplicate := call("POST", "imports", writer.FormDataContentType(), body.Bytes())
+		if duplicate["import_id"] != job["import_id"] || duplicate["job_id"] != job["job_id"] {
+			t.Fatal("duplicate upload created new batch", duplicate, job)
+		}
 		commit := call("POST", "imports/"+str(job["import_id"])+"/commit", "application/json", nil)
+		again := call("POST", "imports/"+str(job["import_id"])+"/commit", "application/json", nil)
+		if again["job_id"] != commit["job_id"] {
+			t.Fatal("duplicate commit created new task", again, commit)
+		}
 		finished := wait(str(commit["job_id"]))
 		if screen, ok := finished["result"].(map[string]any)["screen"].(map[string]any); ok {
 			wait(str(screen["job_id"]))
@@ -333,6 +341,49 @@ func TestImportHTTPWorkflow(t *testing.T) {
 			t.Fatal("old month leaked", item)
 		}
 	}
+	// Sort numeric values across all pages, keeping missing values last.
+	var source string
+	if e = pool.QueryRow(ctx, "SELECT id::text FROM ps_import_rows WHERE tenant_id=501 LIMIT 1").Scan(&source); e != nil {
+		t.Fatal(e)
+	}
+	fixtureIDs := []string{uuid(), uuid(), uuid()}
+	for i, pid := range fixtureIDs {
+		parent := any(nil)
+		if i < 2 {
+			parent = "SORTPARENT"
+		}
+		if _, e = pool.Exec(ctx, "INSERT INTO ps_products(tenant_id,id,asin,title,parent_asin) VALUES(501,$1,$2,'sort fixture',$3)", pid, fmt.Sprintf("SORT%06d", i+1), parent); e != nil {
+			t.Fatal(e)
+		}
+		mid := uuid()
+		prices := []any{"2", "10", nil}
+		sales := []any{100, 9, nil}
+		if _, e = pool.Exec(ctx, "INSERT INTO ps_product_monthly(tenant_id,id,product_id,stat_month,period_type,period_start,period_end,observed_on,source_type,source_row_id,price_usd,monthly_sales,sales_scope) VALUES(501,$1,$2,'2026-10-01','calendar_month','2026-10-01','2026-10-31','2026-11-01','sellersprite',$3,$4,$5,'child')", mid, pid, source, prices[i], sales[i]); e != nil {
+			t.Fatal(e)
+		}
+		if _, e = pool.Exec(ctx, "UPDATE ps_products SET current_monthly_id=$1,current_monthly_revision=1 WHERE tenant_id=501 AND id=$2", mid, pid); e != nil {
+			t.Fatal(e)
+		}
+		if i < 2 {
+			profit := []string{"1.9", "-2"}[i]
+			if _, e = pool.Exec(ctx, "INSERT INTO ps_profit_scenarios(tenant_id,id,product_id,name,inputs,output,formula_version,product_data_revision,created_by,monthly_id,monthly_revision) VALUES(501,$1,$2,'test','{}',$3,'test',0,7,$4,1)", uuid(), pid, encoded(Object{"profit_usd": profit}), mid); e != nil {
+				t.Fatal(e)
+			}
+		}
+	}
+	for sort, want := range map[string][]int{"price_usd": {0, 1, 2}, "-price_usd": {1, 0, 2}, "monthly_sales": {1, 0, 2}, "-monthly_sales": {0, 1, 2}, "profit_usd": {1, 0, 2}, "-profit_usd": {0, 1, 2}} {
+		for page, index := range want {
+			result := call("GET", fmt.Sprintf("products?q=sort+fixture&show_merged=true&sort=%s&page_size=1&page=%d", sort, page+1), "", nil)
+			if str(result["items"].([]any)[0].(map[string]any)["id"]) != fixtureIDs[index] {
+				t.Fatal(sort, page, result)
+			}
+		}
+	}
+	summary = call("GET", "summary?q=sort+fixture", "", nil)
+	if integer(summary["displayed"]) != 2 || integer(summary["products"]) != 3 || integer(summary["pending_displayed"]) != 2 {
+		t.Fatal("grouped counts", summary)
+	}
+
 }
 
 func TestExplanatorySheets(t *testing.T) {
