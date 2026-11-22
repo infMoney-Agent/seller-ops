@@ -217,7 +217,9 @@ func TestBrowserGroupedReview(t *testing.T) {
 		chromedp.Evaluate(`(()=>{const s=document.querySelector('#screening-page-size');s.value='50';s.dispatchEvent(new Event('change',{bubbles:true}))})()`, nil),
 		chromedp.Poll(`document.querySelector('#screening-page-size').value==='50'&&document.querySelectorAll('[data-screening-table] > tbody > tr').length===28`, nil),
 	); e != nil {
-		t.Fatal("page sizes and unfolded-mode representative labels", e)
+		var detail string
+		chromedp.Run(ctx, chromedp.Evaluate(`JSON.stringify({size:document.querySelector('#screening-page-size')?.value,rows:document.querySelectorAll('[data-screening-table] > tbody > tr').length,all:document.querySelector('input[aria-label="展示全部子体"]')?.checked,footer:document.querySelector('[data-products-pagination]')?.innerText,representativeCaption:document.querySelector('[data-screening-table]')?.innerText.includes('销量代表')})`, &detail))
+		t.Fatal("page sizes and unfolded-mode representative labels", e, detail)
 	}
 
 }
