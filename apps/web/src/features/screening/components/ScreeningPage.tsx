@@ -129,7 +129,7 @@ export default function ScreeningPage() {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
-  const [filters, setFilters] = useState<Record<string, string>>({ show_merged: 'false' });
+  const [filters, setFilters] = useState<Record<string, string>>({});
   const [selected, setSelected] = useState<RowSelectionState>({});
   const [columnSizing, setColumnSizing] = useState<ColumnSizingState>({});
   const [tableContainer, setTableContainer] = useState<HTMLDivElement | null>(null);
@@ -162,6 +162,7 @@ export default function ScreeningPage() {
   const [activeJob, setActiveJob] = useState<string | null>(null);
   const query = new URLSearchParams({
     ...filters,
+    show_merged: 'false',
     page: String(page),
     page_size: String(pageSize)
   }).toString();
@@ -176,6 +177,7 @@ export default function ScreeningPage() {
       return;
     const params = new URLSearchParams({
       ...filters,
+      show_merged: 'false',
       page: String(page + 1),
       page_size: String(pageSize)
     });
@@ -227,10 +229,10 @@ export default function ScreeningPage() {
   ];
   const advancedCount = advancedKeys.filter((key) => Boolean(filters[key])).length;
   const filterCount = Object.entries(filters).filter(
-    ([key, value]) => key !== 'sort' && value && (key !== 'show_merged' || value === 'true')
+    ([key, value]) => key !== 'sort' && value
   ).length;
   function resetFilters() {
-    setFilters({ show_merged: 'false' });
+    setFilters({});
     setPage(1);
     setSelected({});
     setFamilyRows({});
@@ -349,7 +351,7 @@ export default function ScreeningPage() {
                   {row.original.asin}
                 </button>
                 <AsinTools asin={row.original.asin} />
-                {filters.show_merged !== 'true' && (row.original.family_count || 1) > 1 && (
+                {(row.original.family_count || 1) > 1 && (
                   <Button
                     size='sm'
                     variant='ghost'
@@ -370,7 +372,7 @@ export default function ScreeningPage() {
                   </Button>
                 )}
               </div>
-              {filters.show_merged !== 'true' && (row.original.family_count || 1) > 1 && (
+              {(row.original.family_count || 1) > 1 && (
                 <p className='text-muted-foreground text-xs'>
                   {row.original.sales_scope === 'child' && row.original.monthly_sales !== null
                     ? row.original.family_sales_pending
@@ -555,7 +557,7 @@ export default function ScreeningPage() {
         )
       }
     ],
-    [familyRows, filters.show_merged, products.isPlaceholderData, today]
+    [familyRows, products.isPlaceholderData, today]
   );
   const sizedColumns = useMemo(
     () =>
@@ -768,16 +770,7 @@ export default function ScreeningPage() {
                     </select>
                   </Field>
                 </div>
-                <div className='flex items-center justify-between gap-3'>
-                  <label className='flex items-center gap-2 text-xs'>
-                    <input
-                      type='checkbox'
-                      aria-label='展示全部子体'
-                      checked={filters.show_merged === 'true'}
-                      onChange={(e) => filter('show_merged', String(e.target.checked))}
-                    />
-                    全部子体（不折叠）
-                  </label>
+                <div className='flex items-center justify-end gap-3'>
                   <Button
                     size='sm'
                     variant='ghost'
@@ -1021,7 +1014,7 @@ export default function ScreeningPage() {
                                 </td>
                               ))}
                             </tr>
-                            {filters.show_merged !== 'true' && familyRows[row.original.id] && (
+                            {familyRows[row.original.id] && (
                               <FamilyChildren
                                 product={row.original}
                                 columns={columns}
