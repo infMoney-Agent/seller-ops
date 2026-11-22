@@ -370,7 +370,7 @@ export default function ScreeningPage() {
                   </Button>
                 )}
               </div>
-              {(row.original.family_count || 1) > 1 && (
+              {filters.show_merged !== 'true' && (row.original.family_count || 1) > 1 && (
                 <p className='text-muted-foreground text-xs'>
                   {row.original.sales_scope === 'child' && row.original.monthly_sales !== null
                     ? row.original.family_sales_pending
