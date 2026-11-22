@@ -47,7 +47,16 @@ jobs:
         run: npm run test:web-guidance
       - run: npm run typecheck
       - run: ./node_modules/.bin/oxlint src/features/screening "src/app/api/ecom/[...path]/route.ts" "src/app/api/ecom/screening/[...path]/route.ts"
-      - run: npm run build
+      - name: Build Web
+        run: |
+          set +e
+          npm run build > /tmp/seller-web-build.log 2>&1
+          build_status=$?
+          cat /tmp/seller-web-build.log
+          if [ "$build_status" -ne 0 ]; then
+            node ../../scripts/report-ci-web-build.mjs /tmp/seller-web-build.log
+          fi
+          exit "$build_status"
         env:
           NEXT_PUBLIC_SENTRY_DISABLED: 'true'
           NEXT_TELEMETRY_DISABLED: '1'
@@ -92,6 +101,7 @@ jobs:
         with:
           name: screening-browser-qa
           path: |
+            /tmp/seller-web-build.log
             /tmp/screening-go-qa
             /tmp/screening-api.log
             /tmp/ecom-api.log
