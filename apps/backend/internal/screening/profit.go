@@ -16,8 +16,15 @@ func mul(a, b *big.Rat) *big.Rat { return new(big.Rat).Mul(a, b) }
 func div(a, b *big.Rat) *big.Rat { return new(big.Rat).Quo(a, b) }
 
 // Rational arithmetic keeps decimal inputs exact until formatting final outputs.
-func calculate(in map[string]any) (map[string]any, error) {
-	allowed := map[string]bool{"name": true, "monthly_units": true, "fee_source": true, "note": true}
+func calculate(in map[string]any) (map[string]any, error) { return calculateWithFreight(in, nil) }
+func calculateWithFreight(in map[string]any, freightOverride *big.Rat) (map[string]any, error) {
+	return calculateWithReferral(in, freightOverride, nil)
+}
+func calculateWithReferral(in map[string]any, freightOverride, commissionOverride *big.Rat) (map[string]any, error) {
+	allowed := map[string]bool{"name": true, "monthly_units": true, "fee_source": true, "note": true, "commission_mode": true, "commission_category": true, "storage_mode": true, "storage_days": true, "storage_month": true, "supplier_url": true, "freight_rate_cny_per_kg": true, "volumetric_divisor_cm3_per_kg": true}
+	if err := validateProfitExtras(in); err != nil {
+		return nil, err
+	}
 	for _, field := range profitFields {
 		allowed[field] = true
 	}
@@ -43,6 +50,13 @@ func calculate(in map[string]any) (map[string]any, error) {
 	missing := []string{}
 	one := big.NewRat(1, 1)
 	for _, key := range profitFields {
+		if key == "freight_cny" && freightOverride != nil {
+			if freightOverride.Sign() < 0 || freightOverride.Cmp(big.NewRat(999999999999, 1)) > 0 {
+				return nil, fmt.Errorf("头程成本超出允许范围")
+			}
+			vals[key] = new(big.Rat).Set(freightOverride)
+			continue
+		}
 		raw := in[key]
 		if raw == nil || raw == "" {
 			missing = append(missing, key)
@@ -85,10 +99,16 @@ func calculate(in map[string]any) (map[string]any, error) {
 	}
 	cost := div(add(add(vals["purchase_cny"], vals["packaging_cny"]), add(vals["freight_cny"], vals["other_landed_cny"])), vals["fx_cny_per_usd"])
 	f := add(add(cost, vals["fba_fee_usd"]), add(vals["storage_usd"], add(vals["other_usd"], mul(vals["return_rate"], vals["loss_per_return_usd"]))))
+	if commissionOverride != nil {
+		vals["commission_rate"] = commissionOverride
+	}
 	denom := sub(sub(one, vals["commission_rate"]), vals["ad_rate"])
 	profit := sub(mul(p, denom), f)
 	out["state"] = "complete"
 	out["profit_usd"] = profit.FloatString(2)
+	out["profit_cny"] = mul(profit, vals["fx_cny_per_usd"]).FloatString(2)
+	out["commission_usd"] = mul(p, vals["commission_rate"]).FloatString(2)
+	out["freight_cny"] = vals["freight_cny"].FloatString(6)
 	out["margin"] = div(profit, p).FloatString(6)
 	out["roi"] = nil
 	if cost.Sign() > 0 {

@@ -6402,7 +6402,7 @@
     "/api/v1/screening/review-workspace": {
       "get": {
         "summary": "按类目浏览全部商品与参考样本",
-        "description": "选择父类目包含全部子类目；商品和样本独立分页，每页50项。不按机器类型二次分组。",
+        "description": "候选商品、展开子体及其计数分页均不包含已排除商品。已复核参考样本继续保留，包括已排除样本。",
         "parameters": [
           {
             "name": "member_page",
@@ -6447,12 +6447,256 @@
     "/api/v1/screening/review-categories": {
       "get": {
         "summary": "真实商品类目目录树",
-        "description": "按现有筛选与明确商品ID返回真实类目层级、商品数和待复核数，不受当前类目选择限制。",
+        "description": "分组复核候选分类树，不计入已排除商品，隐藏待复核为零的分支。",
         "responses": {
           "200": {
             "description": "items: recursive nodes with id, name, path, products, pending, children"
           }
         }
+      }
+    },
+    "/api/v1/screening/profit/products": {
+      "get": {
+        "tags": [
+          "Product Screening"
+        ],
+        "summary": "利润商品表格",
+        "operationId": "screening_profit_products",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Page Size"
+            }
+          },
+          {
+            "name": "stat_month",
+            "in": "query",
+            "required": false,
+            "description": "经营数据月份 YYYY-MM；不传则各商品最新一期",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "period_type",
+            "in": "query",
+            "required": false,
+            "description": "自然月、滚动30天或自定义；指定月份时默认自然月",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "calendar_month",
+                "rolling_30d",
+                "custom"
+              ]
+            }
+          },
+          {
+            "name": "source_type",
+            "in": "query",
+            "required": false,
+            "description": "sellersprite、manual、other、legacy_import或明确来源代码",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-user",
+            "in": "header",
+            "required": true,
+            "description": "真实操作人ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-workspace",
+            "in": "header",
+            "required": true,
+            "description": "真实工作区ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-role",
+            "in": "header",
+            "required": true,
+            "description": "owner或member",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-time",
+            "in": "header",
+            "required": true,
+            "description": "Unix秒，允许60秒偏差",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-signature",
+            "in": "header",
+            "required": true,
+            "description": "SHA256 HMAC，签名由Next.js代理生成",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "child_sales_min",
+            "in": "query",
+            "required": false,
+            "description": "最低子体销量参考值，仅返回已知值达到门槛的商品，不使用父体销量补全",
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "支持价格、FBA、仓租、体积重、计费重、头程单价、头程、供货价、佣金比、佣金、人民币利润、利润率；字段前加 - 降序。"
+          },
+          {
+            "name": "product_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "selected_ids",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "最多100个商品UUID，以逗号分隔。"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "按页返回利润商品及费用输入、当前测算结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "items",
+                    "total",
+                    "page",
+                    "page_size"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ProfitTableProduct"
+                      }
+                    },
+                    "total": {
+                      "type": "integer"
+                    },
+                    "page": {
+                      "type": "integer"
+                    },
+                    "page_size": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录或签名无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "权限不足",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或不属于当前工作区",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "并发冲突或需重新预览",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "内容过大",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "字段无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "description": "默认列出当前租户已保留子体，按 ASIN 独立测算；支持当前商品或明确勾选集合。派生金额在服务端对全量结果排序后分页，空值始终在最后。"
       }
     }
   },
@@ -6517,9 +6761,11 @@
             "type": "string",
             "enum": [
               "selected",
-              "family"
+              "family",
+              "selected_families"
             ],
-            "default": "selected"
+            "default": "selected",
+            "description": "selected_families includes pending siblings at preview time for exclusion; maximum 100 products."
           },
           "action": {
             "type": "string",
@@ -6944,6 +7190,113 @@
             "maxLength": 2000,
             "title": "Note",
             "default": ""
+          },
+          "freight_rate_cny_per_kg": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Freight Cny",
+            "description": "头程单价 CNY/kg；填写后按商品包装参数自动计算头程成本。"
+          },
+          "volumetric_divisor_cm3_per_kg": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Freight Cny",
+            "description": "体积重换算分母 cm³/kg，必须大于零，由使用者填写。"
+          },
+          "supplier_url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "供应商 HTTP/HTTPS 链接；允许留空。"
+          },
+          "storage_mode": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "manual"
+            ],
+            "description": "Automatic source/base storage estimate or explicit manual amount"
+          },
+          "storage_days": {
+            "type": "string",
+            "pattern": "^[0-9]+(?:\\.[0-9]+)?$",
+            "description": "Expected storage duration in days, default 30"
+          },
+          "storage_month": {
+            "type": "string",
+            "pattern": "^[0-9]{4}-[0-9]{2}$",
+            "description": "US storage fee month; defaults to current Los Angeles month"
+          },
+          "commission_mode": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "manual"
+            ],
+            "description": "Automatic US category schedule or manual percentage; old nonempty rates retain manual mode"
+          },
+          "commission_category": {
+            "type": "string",
+            "enum": [
+              "printers",
+              "amazon",
+              "compact",
+              "appliances",
+              "auto",
+              "power",
+              "baby",
+              "bags",
+              "beauty",
+              "industrial",
+              "clothing",
+              "computers",
+              "electronics",
+              "accessories",
+              "eyewear",
+              "art",
+              "shoes",
+              "furniture",
+              "gifts",
+              "grocery",
+              "home",
+              "jewelry",
+              "garden",
+              "mower",
+              "mattress",
+              "media",
+              "services",
+              "music",
+              "office",
+              "pets",
+              "prescription",
+              "sports",
+              "tires",
+              "tools",
+              "toys",
+              "games",
+              "consoles",
+              "watches",
+              "other"
+            ],
+            "description": "Optional explicit fee category; blank infers from browse path"
           }
         },
         "additionalProperties": false,
@@ -7922,6 +8275,13 @@
                 "type": "null"
               }
             ]
+          },
+          "family_items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Product"
+            },
+            "description": "First child page preloaded for grouped review."
           }
         }
       },
@@ -7976,6 +8336,43 @@
             ]
           }
         }
+      },
+      "ProfitTableProduct": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Product"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "scenario": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "scenario_stale": {
+                "type": "boolean"
+              },
+              "draft_inputs": {
+                "$ref": "#/components/schemas/ProfitInputs"
+              },
+              "preview_output": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "imported_fees": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            }
+          }
+        ]
       }
     }
   }

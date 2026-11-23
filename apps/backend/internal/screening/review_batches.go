@@ -47,7 +47,7 @@ func (s *service) previewBatch(ctx context.Context, a identity, b Object) (any, 
 	if action == "" {
 		action = "review"
 	}
-	if (scope != "selected" && scope != "family") || (action != "review" && action != "categorize") {
+	if (scope != "selected" && scope != "family" && scope != "selected_families") || (action != "review" && action != "categorize") {
 		return nil, fail(422, "作用范围或动作无效")
 	}
 	payload := Object{"scope": scope, "action": action, "status": str(b["status"]), "reason": str(b["reason"]), "note": str(b["note"]), "category": b["category"]}
@@ -61,7 +61,7 @@ func (s *service) previewBatch(ctx context.Context, a identity, b Object) (any, 
 			return nil, fail(422, "商品没有已确认父体关系")
 		}
 		payload["anchor"] = Object{"id": anchor["id"], "parent_asin": parent, "data_revision": anchor["data_revision"]}
-		rows, e := tx.Query(ctx, "SELECT id::text FROM ps_products WHERE tenant_id=$1 AND marketplace=$2 AND parent_asin=$3 ORDER BY id LIMIT 101", a.Tenant, anchor["marketplace"], parent)
+		rows, e := tx.Query(ctx, "SELECT id::text FROM ps_products WHERE tenant_id=$1 AND marketplace=$2 AND parent_asin=$3 AND archived_at IS NULL ORDER BY id LIMIT 101", a.Tenant, anchor["marketplace"], parent)
 		if e != nil {
 			return nil, e
 		}
@@ -114,6 +114,17 @@ func (s *service) previewBatch(ctx context.Context, a identity, b Object) (any, 
 			return nil, fail(422, "请填写有效人工分类")
 		}
 		payload["category"] = category
+	}
+	if scope == "selected_families" {
+		if action != "review" || str(payload["status"]) != "excluded" {
+			return nil, fail(422, "同父体同步仅用于排除")
+		}
+		var anchors []Object
+		ids, anchors, e = expandExcludedFamilies(ctx, tx, a, ids)
+		if e != nil {
+			return nil, e
+		}
+		payload["anchors"] = anchors
 	}
 	targets := []Object{}
 	for _, id := range ids {
@@ -178,7 +189,7 @@ func (s *service) applyBatch(ctx context.Context, a identity, id string, undo bo
 	if !undo {
 		expires, e := time.Parse(time.RFC3339Nano, str(job["expires_at"]))
 		if e != nil || time.Now().After(expires) {
-			return nil, fail(409, "预览已过期，请重新预览")
+			return nil, fail(409, "操作已过期，请重新提交")
 		}
 		if ref, ok := payload["reference"].(map[string]any); ok {
 			p, e := txProduct(ctx, tx, a, str(ref["id"]), true)
@@ -186,7 +197,7 @@ func (s *service) applyBatch(ctx context.Context, a identity, id string, undo bo
 				return nil, e
 			}
 			if !sameRevision(p, ref) {
-				return nil, fail(409, "参考样本已变化，请重新预览")
+				return nil, fail(409, "参考样本已变化，请重新提交")
 			}
 		}
 		if anchor, ok := payload["anchor"].(map[string]any); ok {
@@ -195,7 +206,19 @@ func (s *service) applyBatch(ctx context.Context, a identity, id string, undo bo
 				return nil, e
 			}
 			if p["parent_asin"] != anchor["parent_asin"] || integer(p["data_revision"]) != integer(anchor["data_revision"]) {
-				return nil, fail(409, "父体关系或锚点已变化，请重新预览")
+				return nil, fail(409, "父体关系或锚点已变化，请重新提交")
+			}
+		}
+		if anchors, ok := payload["anchors"].([]any); ok {
+			for _, entry := range anchors {
+				anchor := entry.(map[string]any)
+				p, err := txProduct(ctx, tx, a, str(anchor["id"]), true)
+				if err != nil {
+					return nil, err
+				}
+				if str(p["parent_asin"]) != str(anchor["parent_asin"]) || integer(p["data_revision"]) != integer(anchor["data_revision"]) {
+					return nil, fail(409, "父体关系已变化，请重新提交")
+				}
 			}
 		}
 		for _, entry := range payload["targets"].([]any) {
@@ -210,7 +233,7 @@ func (s *service) applyBatch(ctx context.Context, a identity, id string, undo bo
 			if e != nil {
 				return nil, e
 			}
-			if !sameRevision(p, target) || (str(payload["scope"]) == "family" && p["parent_asin"] != target["parent_asin"]) {
+			if !sameRevision(p, target) || ((str(payload["scope"]) == "family" || str(payload["scope"]) == "selected_families") && p["parent_asin"] != target["parent_asin"]) {
 				item["reason"] = "商品数据或人工结论已变化"
 				items = append(items, item)
 				continue

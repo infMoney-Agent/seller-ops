@@ -1165,8 +1165,9 @@ export default function ScreeningPage() {
           )}
           {tab === 3 && (
             <ProfitPanel
-              key={`${focus?.id || 'none'}:${focus?.monthly_id || 'latest'}`}
+              key={`${session.workspaceId}:${focus?.id || 'none'}:${focus?.monthly_id || 'latest'}`}
               product={focus}
+              onClearFocus={() => setFocus(null)}
               selected={selectedIds}
               filters={filters}
               act={act}

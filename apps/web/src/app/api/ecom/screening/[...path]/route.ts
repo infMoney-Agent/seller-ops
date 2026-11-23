@@ -8,7 +8,7 @@ const uuid = '[0-9a-fA-F-]{36}';
 const routes = [
   [
     'GET',
-    'parents/monthly|summary|months|products|imports|policies|review-batches|review-workspace|review-categories|profit/templates'
+    'parents/monthly|summary|months|products|imports|policies|review-batches|review-workspace|review-categories|profit/templates|profit/products'
   ],
   [
     'POST',
@@ -147,7 +147,7 @@ async function proxy(request: Request, { params }: { params: Promise<{ path: str
     }
     let responseBody = response.body;
     const compressibleJSON =
-      ['products', 'review-categories', 'review-workspace'].includes(path) ||
+      ['products', 'profit/products', 'review-categories', 'review-workspace'].includes(path) ||
       /^products\/[^/]+\/family$/.test(path);
     if (
       !write &&

@@ -63,7 +63,9 @@ func (s *service) reviewCategories(r *http.Request) (any, error) {
 	if e != nil {
 		return nil, e
 	}
-	rows, e := s.query(r.Context(), "SELECT jsonb_build_object('path',"+reviewCategoryPathSQL+",'products',count(*),'pending',count(*) FILTER(WHERE p.review_status='pending')) FROM ps_products p "+filterJoins(q, false)+" WHERE "+q.where+" GROUP BY "+reviewCategoryPathSQL, q.args...)
+	// Excluded products remain available as samples, not review candidates.
+	q.where += " AND p.review_status<>'excluded'"
+	rows, e := s.query(r.Context(), "WITH candidates AS (SELECT "+reviewCategoryPathSQL+" AS path,"+parentFamilySQL+" AS family,p.review_status FROM ps_products p "+filterJoins(q, false)+" WHERE "+q.where+") SELECT jsonb_build_object('path',path[1:depth],'products',count(*),'pending',count(DISTINCT family) FILTER(WHERE review_status='pending')) FROM candidates CROSS JOIN LATERAL generate_subscripts(path,1) AS depth GROUP BY path[1:depth] ORDER BY cardinality(path[1:depth])", q.args...)
 	if e != nil {
 		return nil, e
 	}
@@ -90,8 +92,11 @@ func (s *service) reviewCategories(r *http.Request) (any, error) {
 					parent.Children = append(parent.Children, node)
 				}
 			}
-			node.Products += integer(row["products"])
-			node.Pending += integer(row["pending"])
+			// Every prefix is aggregated independently so families spanning child categories count once.
+			if len(path) == len(raw) {
+				node.Products = integer(row["products"])
+				node.Pending = integer(row["pending"])
+			}
 			parent = node
 		}
 	}
@@ -102,6 +107,20 @@ func (s *service) reviewCategories(r *http.Request) (any, error) {
 			order(n.Children)
 		}
 	}
+	roots = pendingReviewCategories(roots)
 	order(roots)
 	return Object{"items": roots}, nil
+}
+
+// Keep ancestor totals intact while removing completed branches from the review queue.
+func pendingReviewCategories(nodes []*reviewCategoryNode) []*reviewCategoryNode {
+	pending := make([]*reviewCategoryNode, 0, len(nodes))
+	for _, node := range nodes {
+		if node.Pending == 0 {
+			continue
+		}
+		node.Children = pendingReviewCategories(node.Children)
+		pending = append(pending, node)
+	}
+	return pending
 }

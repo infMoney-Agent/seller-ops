@@ -9,17 +9,24 @@ export async function request<T>(
   method = 'GET',
   body?: unknown,
   signal?: AbortSignal,
-  priority: RequestPriority = 'auto'
+  priority: RequestPriority = 'auto',
+  writeOptions?: { idempotencyKey?: string; keepalive?: boolean; workspaceId?: string }
 ): Promise<T> {
   const upload = body instanceof FormData;
   const options: RequestInit = {
     method,
     signal,
     priority,
+    ...(writeOptions?.keepalive ? { keepalive: true } : {}),
     cache: 'no-store',
     headers: {
       ...workspaceHeader(),
-      ...(method !== 'GET' ? { 'Idempotency-Key': crypto.randomUUID() } : {}),
+      ...(writeOptions?.workspaceId !== undefined
+        ? { 'X-Seller-Workspace': writeOptions.workspaceId }
+        : {}),
+      ...(method !== 'GET'
+        ? { 'Idempotency-Key': writeOptions?.idempotencyKey || crypto.randomUUID() }
+        : {}),
       ...(body && !upload ? { 'Content-Type': 'application/json' } : {})
     }
   };

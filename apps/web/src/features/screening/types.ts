@@ -2,6 +2,7 @@ export type Json = string | number | boolean | null | Json[] | { [key: string]: 
 export type ReviewStatus = 'pending' | 'kept' | 'excluded' | 'unsure';
 export interface Product {
   family_count?: number;
+  family_items?: Product[];
   family_sales_pending?: boolean;
   id: string;
   asin: string;
@@ -160,6 +161,23 @@ export interface Policy {
   config: Record<string, Json>;
 }
 export interface ProfitOutput {
+  commission_source?: string;
+  commission_category?: string;
+  commission_category_label?: string;
+  commission_rate?: string;
+  commission_minimum_usd?: string;
+  commission_rule_version?: string;
+  storage_source?: string;
+  storage_rate_usd_ft3?: string;
+  storage_month?: string;
+  storage_usd?: string;
+  storage_rate_version?: string;
+  profit_cny?: string;
+  commission_usd?: string;
+  freight_cny?: string;
+  volumetric_weight_kg?: string;
+  billable_weight_kg?: string;
+  freight_missing?: string;
   state: string;
   missing?: string[];
   formula_version: string;
@@ -171,6 +189,14 @@ export interface ProfitOutput {
   break_even_ad_rate?: string;
 }
 export interface ProfitInputs {
+  commission_mode?: string | null;
+  commission_category?: string | null;
+  storage_mode?: string | null;
+  storage_days?: string | null;
+  storage_month?: string | null;
+  supplier_url?: string;
+  freight_rate_cny_per_kg?: string | null;
+  volumetric_divisor_cm3_per_kg?: string | null;
   name: string;
   sale_price_usd: string | null;
   discount_usd: string | null;
