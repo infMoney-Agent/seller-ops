@@ -59,6 +59,27 @@ func TestGroupedFamilyReview(t *testing.T) {
 	other := add(9912, "PARENT0001", "pending", false)
 	archived := add(a.Tenant, "PARENT0001", "pending", true)
 	req := httptest.NewRequest("GET", "http://screening/api/v1/screening/review-workspace", nil).WithContext(context.WithValue(ctx, identityKey{}, a))
+	catalog, err := svc.products(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantMembers := map[string]bool{a1: true, a2: true, kept: true, b1: true, b2: true}
+	gotMembers := map[string]bool{}
+	for _, item := range catalog.(Object)["items"].([]Object) {
+		ids, ok := item["family_member_ids"].([]any)
+		if !ok || int64(len(ids)) != integer(item["family_count"]) {
+			t.Fatal("catalog selection must include all live family members", item)
+		}
+		for _, id := range ids {
+			if !wantMembers[str(id)] {
+				t.Fatal("selection leaked an archived or other-tenant product", id)
+			}
+			gotMembers[str(id)] = true
+		}
+	}
+	if len(gotMembers) != len(wantMembers) {
+		t.Fatal("collapsed family selection omitted children", gotMembers)
+	}
 	workspace, err := svc.reviewWorkspace(req)
 	if err != nil {
 		t.Fatal(err)

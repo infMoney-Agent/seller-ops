@@ -148,6 +148,7 @@ function BatchReviewForm({
         <input
           id='batch-review-overwrite'
           name='overwrite'
+          aria-label='覆盖已有人工结论'
           type='checkbox'
           className='accent-primary mt-1 size-4'
           checked={overwrite}
