@@ -8,7 +8,7 @@
   },
   "scripts": {
     "dev": "NODE_OPTIONS='--max-old-space-size=2048' next dev",
-    "build": "next build",
+    "build": "next build --webpack",
     "start": "next start",
     "cleanup": "node scripts/cleanup.js",
     "typecheck": "tsc --noEmit",
