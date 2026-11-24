@@ -1,6 +1,6 @@
 import { createHmac } from 'node:crypto';
 import { acceptsGzip, serverTiming } from '@/lib/http-performance';
-import { backendURL } from '@/lib/backend';
+import { backendURL, isAllowedAppOrigin } from '@/lib/backend';
 import type { SellerSession } from '@/features/auth/session';
 
 export const runtime = 'nodejs';
@@ -8,7 +8,7 @@ const uuid = '[0-9a-fA-F-]{36}';
 const routes = [
   [
     'GET',
-    'parents/monthly|summary|months|products|imports|policies|review-batches|review-workspace|review-categories|profit/templates|profit/products'
+    'parents/monthly|summary|months|trademark-options|products|imports|policies|review-batches|review-workspace|review-categories|profit/templates|profit/products'
   ],
   [
     'POST',
@@ -42,7 +42,7 @@ async function proxy(request: Request, { params }: { params: Promise<{ path: str
   }
   const url = new URL(request.url);
   const write = !['GET', 'HEAD'].includes(request.method);
-  if (write && request.headers.get('origin') !== (process.env.SELLER_APP_ORIGIN || url.origin)) {
+  if (write && !isAllowedAppOrigin(request)) {
     return Response.json({ message: '请求来源无效。' }, { status: 403 });
   }
   const secret = process.env.SCREENING_INTERNAL_SECRET || '';

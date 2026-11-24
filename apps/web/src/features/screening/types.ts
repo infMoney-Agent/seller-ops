@@ -2,6 +2,7 @@ export type Json = string | number | boolean | null | Json[] | { [key: string]: 
 export type ReviewStatus = 'pending' | 'kept' | 'excluded' | 'unsure';
 export interface Product {
   family_count?: number;
+  family_member_ids?: string[];
   family_items?: Product[];
   family_sales_pending?: boolean;
   id: string;
@@ -125,6 +126,7 @@ export interface Target {
   title?: string;
   eligible?: boolean;
   skip_reason?: string;
+  review_status?: ReviewStatus;
   success?: boolean;
   reason?: string;
 }
@@ -134,6 +136,7 @@ export interface BatchPreview {
   action?: string;
   category?: string | null;
   scope?: string;
+  overwrite?: boolean;
   targets: Target[];
   status: string;
   reason: string;

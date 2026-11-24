@@ -50,7 +50,15 @@ func (s *service) previewBatch(ctx context.Context, a identity, b Object) (any, 
 	if (scope != "selected" && scope != "family" && scope != "selected_families") || (action != "review" && action != "categorize") {
 		return nil, fail(422, "作用范围或动作无效")
 	}
-	payload := Object{"scope": scope, "action": action, "status": str(b["status"]), "reason": str(b["reason"]), "note": str(b["note"]), "category": b["category"]}
+	overwrite := false
+	if raw, present := b["overwrite"]; present {
+		value, ok := raw.(bool)
+		if !ok {
+			return nil, fail(422, "覆盖选项无效")
+		}
+		overwrite = value
+	}
+	payload := Object{"scope": scope, "action": action, "overwrite": overwrite, "status": str(b["status"]), "reason": str(b["reason"]), "note": str(b["note"]), "category": b["category"]}
 	if scope == "family" {
 		anchor, e := txProduct(ctx, tx, a, ids[0], false)
 		if e != nil {
@@ -120,7 +128,7 @@ func (s *service) previewBatch(ctx context.Context, a identity, b Object) (any, 
 			return nil, fail(422, "同父体同步仅用于排除")
 		}
 		var anchors []Object
-		ids, anchors, e = expandExcludedFamilies(ctx, tx, a, ids)
+		ids, anchors, e = expandExcludedFamilies(ctx, tx, a, ids, overwrite)
 		if e != nil {
 			return nil, e
 		}
@@ -132,12 +140,12 @@ func (s *service) previewBatch(ctx context.Context, a identity, b Object) (any, 
 		if e != nil {
 			return nil, e
 		}
-		eligible := action == "categorize" || p["review_status"] == "pending"
+		eligible := action == "categorize" || overwrite || p["review_status"] == "pending"
 		skip := ""
 		if !eligible {
-			skip = "已有人工结论，请单条修改"
+			skip = "已有人工结论，请勾选覆盖后重试"
 		}
-		targets = append(targets, Object{"id": id, "asin": p["asin"], "title": p["title"], "eligible": eligible, "skip_reason": skip, "data_revision": p["data_revision"], "review_revision": p["review_revision"], "parent_asin": p["parent_asin"], "status": payload["status"], "reason": payload["reason"], "note": payload["note"], "category": payload["category"]})
+		targets = append(targets, Object{"id": id, "asin": p["asin"], "title": p["title"], "eligible": eligible, "skip_reason": skip, "data_revision": p["data_revision"], "review_revision": p["review_revision"], "review_status": p["review_status"], "parent_asin": p["parent_asin"], "status": payload["status"], "reason": payload["reason"], "note": payload["note"], "category": payload["category"]})
 	}
 	id := uuid()
 	expires := time.Now().UTC().Add(15 * time.Minute)

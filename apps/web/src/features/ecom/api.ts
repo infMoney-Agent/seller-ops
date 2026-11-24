@@ -8,12 +8,12 @@ import type {
 } from './types';
 
 async function request<T>(path: string, method = 'GET', body?: object): Promise<T> {
-  const response = await fetch('/api/ecom' + path, {
-    method,
-    headers: body ? { 'Content-Type': 'application/json' } : undefined,
-    body: body ? JSON.stringify(body) : undefined,
-    cache: 'no-store'
-  });
+  const options: RequestInit = { method, cache: 'no-store' };
+  if (method !== 'GET' && body) {
+    options.headers = { 'Content-Type': 'application/json' };
+    options.body = JSON.stringify(body);
+  }
+  const response = await fetch('/api/ecom' + path, options);
   if (response.status === 401) {
     window.location.assign('/auth/sign-in');
     throw new Error('请登录后继续。');

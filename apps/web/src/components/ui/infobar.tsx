@@ -649,10 +649,9 @@ function InfobarMenuSkeleton({
 }: React.ComponentProps<'div'> & {
   showIcon?: boolean;
 }) {
-  // Random width between 50 to 90%.
-  const width = React.useMemo(() => {
-    return `${Math.floor(Math.random() * 40) + 50}%`;
-  }, []);
+  // Stable pseudo-random width between 50% and 90% without impure render calls.
+  const id = React.useId();
+  const width = `${50 + ([...id].reduce((total, char) => total + char.charCodeAt(0), 0) % 40)}%`;
 
   return (
     <div

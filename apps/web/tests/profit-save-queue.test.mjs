@@ -5,6 +5,22 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import ts from 'typescript';
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const task = (id, value) => ({
+  id,
+  inputs: { name: 'test', purchase_cny: value },
+  dataRevision: 1,
+  monthlyId: null,
+  monthlyRevision: null
+});
+const result = (current) => ({ inputs: current.inputs, output: { state: 'incomplete' } });
+
+const cryptoDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'crypto');
+const nativeCrypto = globalThis.crypto;
+let randomReads = 0;
+Object.defineProperty(globalThis, 'crypto', { configurable: true, value: { getRandomValues(bytes) { randomReads++; return nativeCrypto.getRandomValues(bytes); } } });
+assert.equal(typeof globalThis.crypto.randomUUID, 'undefined');
+const browserUUID = new URL('../node_modules/uuid/dist/esm-browser/index.js', import.meta.url).href;
 const directory = await mkdtemp(join(tmpdir(), 'profit-queue-test-'));
 try {
   const source = await readFile(
@@ -14,12 +30,11 @@ try {
   const modulePath = join(directory, 'queue.mjs');
   await writeFile(
     modulePath,
-    ts.transpileModule(source, {
+    ts.transpileModule(source.replace("from 'uuid'", "from '" + browserUUID + "'"), {
       compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 }
     }).outputText
   );
   const { ProfitSaveQueue } = await import(pathToFileURL(modulePath).href);
-  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
   const until = async (predicate) => {
     for (let i = 0; i < 200; i++) {
       if (predicate()) return;
@@ -27,14 +42,6 @@ try {
     }
     assert.fail('queue did not settle');
   };
-  const task = (id, value) => ({
-    id,
-    inputs: { name: 'test', purchase_cny: value },
-    dataRevision: 1,
-    monthlyId: null,
-    monthlyRevision: null
-  });
-  const result = (current) => ({ inputs: current.inputs, output: { state: 'incomplete' } });
   const observer = { state() {}, saved() {} };
   let calls = [];
   let queue = new ProfitSaveQueue(
@@ -91,6 +98,16 @@ try {
   await until(() => !queue.hasPending());
   assert.equal(keys.length, 2);
   assert.equal(keys[0], keys[1]);
+  const failureStates = [];
+  const failedTask = task('failed-row', '7');
+  const failedQueue = new ProfitSaveQueue(async () => { throw Error('具体保存错误'); }, { state(_task, state, error) { if (state === 'failed') failureStates.push(error); }, saved() {} }, 5);
+  failedQueue.enqueue(failedTask);
+  await until(() => failureStates.length === 1);
+  for (let i=0;i<100;i++) failedQueue.enqueue(failedTask);
+  assert.deepEqual(failureStates, ['具体保存错误'], 'unchanged failed input must not trigger a render feedback loop');
+  failedQueue.enqueue({ ...failedTask, inputs: { ...failedTask.inputs } });
+  assert.deepEqual(failureStates, ['具体保存错误','具体保存错误'], 'cloned input must retain original failure details');
+  process.stdout.write('PASS: failed autosave settles without re-render feedback\n');
   let active = 0,
     maximum = 0,
     completed = 0;
@@ -111,9 +128,26 @@ try {
   await until(() => !queue.hasPending());
   assert.equal(completed, 10);
   assert.equal(maximum, 3);
-  console.log(
-    'PASS: debounce, deduplication, serialized edits, retained failures, stable retry key, concurrency limit and navigation flush'
+  process.stdout.write(
+    'PASS: debounce, deduplication, serialized edits, retained failures, stable retry key, concurrency limit and navigation flush\n'
   );
+  const serviceSource = await readFile(new URL('../src/features/screening/service.ts', import.meta.url), 'utf8');
+  const servicePath = join(directory, 'service.mjs');
+  await writeFile(servicePath, ts.transpileModule(serviceSource.replace("from 'uuid'", "from '" + browserUUID + "'"), { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText);
+  const originalFetch = globalThis.fetch, originalDocument = globalThis.document;
+  let generatedKey;
+  try {
+    globalThis.document = { querySelector() { return null; } };
+    globalThis.fetch = async (_url, options) => { generatedKey = options.headers['Idempotency-Key']; return Response.json({ saved: true }); };
+    const { request } = await import(pathToFileURL(servicePath).href);
+    assert.deepEqual(await request('/example', 'POST', { value: 1 }), { saved: true });
+    assert.match(generatedKey, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    await request('/example', 'POST', {}, undefined, 'auto', { idempotencyKey: 'retry-original' });
+    assert.equal(generatedKey, 'retry-original');
+    process.stdout.write('PASS: public HTTP queue and API writes without crypto.randomUUID\n');
+  } finally { globalThis.fetch = originalFetch; if (originalDocument === undefined) delete globalThis.document; else globalThis.document = originalDocument; }
 } finally {
+  assert.ok(randomReads > 0, 'HTTP fallback must use cryptographic random values');
+  if (cryptoDescriptor) Object.defineProperty(globalThis, 'crypto', cryptoDescriptor);
   await rm(directory, { recursive: true, force: true });
 }

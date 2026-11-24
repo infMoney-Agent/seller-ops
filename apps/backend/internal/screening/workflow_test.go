@@ -235,6 +235,39 @@ func TestImportHTTPWorkflow(t *testing.T) {
 	if integer(undo["success"]) != 1 || integer(undo["skipped"]) != 1 {
 		t.Fatal(undo)
 	}
+	// Existing conclusions are skipped unless the batch explicitly overwrites them.
+	blocked := call("POST", "review-batches/preview", "application/json", encoded(Object{"product_ids": []any{first["id"]}, "mode": "direct", "status": "excluded", "reason": "覆盖测试"}))
+	if blocked["targets"].([]any)[0].(map[string]any)["eligible"] != false {
+		t.Fatal(blocked)
+	}
+	if skipped := call("POST", "review-batches/"+str(blocked["id"])+"/apply", "application/json", nil); integer(skipped["success"]) != 0 || integer(skipped["skipped"]) != 1 {
+		t.Fatal(skipped)
+	}
+	overwrite := call("POST", "review-batches/preview", "application/json", encoded(Object{"product_ids": []any{first["id"]}, "mode": "direct", "status": "excluded", "reason": "覆盖测试", "overwrite": true}))
+	if overwrite["targets"].([]any)[0].(map[string]any)["eligible"] != true {
+		t.Fatal(overwrite)
+	}
+	if applied := call("POST", "review-batches/"+str(overwrite["id"])+"/apply", "application/json", nil); integer(applied["success"]) != 1 {
+		t.Fatal(applied)
+	}
+	overwritten := call("GET", "products/"+str(first["id"]), "", nil)
+	if str(overwritten["review_status"]) != "excluded" || str(overwritten["review_reason"]) != "覆盖测试" {
+		t.Fatal("overwrite did not change conclusion", overwritten)
+	}
+	var beforeStatus, afterStatus string
+	if e = pool.QueryRow(ctx, "SELECT before_value->>'review_status',after_value->>'review_status' FROM ps_review_events WHERE tenant_id=$1 AND product_id=$2::uuid AND batch_id=$3::uuid", a.Tenant, first["id"], overwrite["id"]).Scan(&beforeStatus, &afterStatus); e != nil || beforeStatus != "kept" || afterStatus != "excluded" {
+		t.Fatal("overwrite audit event missing", beforeStatus, afterStatus, e)
+	}
+	if restored := call("POST", "review-batches/"+str(overwrite["id"])+"/undo", "application/json", nil); integer(restored["success"]) != 1 {
+		t.Fatal(restored)
+	}
+	// A concurrent manual review still invalidates an overwrite batch at apply time.
+	concurrent := call("GET", "products/"+str(first["id"]), "", nil)
+	conflict := call("POST", "review-batches/preview", "application/json", encoded(Object{"product_ids": []any{first["id"]}, "mode": "direct", "status": "excluded", "reason": "并发检查", "overwrite": true}))
+	call("PATCH", "products/"+str(first["id"])+"/review", "application/json", encoded(Object{"expected_data_revision": concurrent["data_revision"], "expected_review_revision": concurrent["review_revision"], "status": "kept", "reason": "并发修改"}))
+	if stale := call("POST", "review-batches/"+str(conflict["id"])+"/apply", "application/json", nil); integer(stale["success"]) != 0 || integer(stale["skipped"]) != 1 {
+		t.Fatal("overwrite ignored revision conflict", stale)
+	}
 	upload("2026-10", "2026-10-31", "10.00")
 	current := call("GET", "products/"+str(first["id"]), "", nil)
 	if str(current["price_usd"]) != "19.990000" || current["review_status"] != "kept" {

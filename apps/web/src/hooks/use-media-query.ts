@@ -1,19 +1,21 @@
-import { useEffect, useState } from 'react';
+import { useSyncExternalStore } from 'react';
+
+const query = '(max-width: 768px)';
+
+function subscribe(onStoreChange: () => void) {
+  const mediaQuery = window.matchMedia(query);
+  mediaQuery.addEventListener('change', onStoreChange);
+  return () => mediaQuery.removeEventListener('change', onStoreChange);
+}
+
+function getSnapshot() {
+  return window.matchMedia(query).matches;
+}
+
+function getServerSnapshot() {
+  return false;
+}
 
 export function useMediaQuery() {
-  const [isOpen, setIsOpen] = useState(false);
-
-  useEffect(() => {
-    const mediaQuery = window.matchMedia('(max-width: 768px)');
-    setIsOpen(mediaQuery.matches);
-
-    const handler = (e: MediaQueryListEvent) => {
-      setIsOpen(e.matches);
-    };
-
-    mediaQuery.addEventListener('change', handler);
-    return () => mediaQuery.removeEventListener('change', handler);
-  }, []);
-
-  return { isOpen };
+  return { isOpen: useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot) };
 }

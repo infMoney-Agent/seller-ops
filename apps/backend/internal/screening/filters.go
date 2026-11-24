@@ -26,6 +26,10 @@ func validateFilters(values url.Values) error {
 				if value != "calendar_month" && value != "rolling_30d" && value != "custom" {
 					return fail(422, "统计口径无效")
 				}
+			case "trademark":
+				if value != "pending" && !trademarkCodePattern.MatchString(value) {
+					return fail(422, "商标分类无效")
+				}
 			case "source_type":
 				if !regexp.MustCompile(`^[A-Za-z0-9_-]{1,50}$`).MatchString(value) {
 					return fail(422, "数据来源无效")

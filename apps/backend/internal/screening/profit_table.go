@@ -8,11 +8,22 @@ import (
 	"strings"
 )
 
-// Profit rows are individual ASINs. Keep parent folding exclusive to catalog
-// browsing: differently sized children must never share a cost snapshot.
+// Parent folding only changes browsing. Each child retains its own cost snapshot.
 func (s *service) profitProducts(r *http.Request) (any, error) {
 	values := r.URL.Query()
 	sortBy := values.Get("sort")
+	grouped := values.Get("group_by_parent") == "true"
+	if v := values.Get("group_by_parent"); v != "" && v != "true" && v != "false" {
+		return nil, fail(422, "父体分组参数无效")
+	}
+	family := values.Get("family_product_id")
+	values.Del("group_by_parent")
+	values.Del("family_product_id")
+	completion := values.Get("completion")
+	values.Del("completion")
+	if completion != "" && completion != "complete" && completion != "incomplete" {
+		return nil, fail(422, "不支持的填写状态")
+	}
 	focus := values.Get("product_id")
 	selected := values.Get("selected_ids")
 	values.Del("sort")
@@ -47,6 +58,13 @@ func (s *service) profitProducts(r *http.Request) (any, error) {
 		q.args = append(q.args, ids)
 		q.where += fmt.Sprintf(" AND p.id=ANY($%d::uuid[])", len(q.args))
 	}
+	if family != "" {
+		if !uuidPattern.MatchString(family) {
+			return nil, fail(422, "父体商品ID无效")
+		}
+		q.args = append(q.args, family)
+		q.where += fmt.Sprintf(" AND EXISTS(SELECT 1 FROM ps_products anchor WHERE anchor.tenant_id=p.tenant_id AND anchor.id=$%d::uuid AND anchor.archived_at IS NULL AND anchor.marketplace=p.marketplace AND (anchor.id=p.id OR (NULLIF(anchor.parent_asin,'') IS NOT NULL AND anchor.parent_asin=p.parent_asin)))", len(q.args))
+	}
 	scenarioJoin := ` LEFT JOIN LATERAL(SELECT s.id,s.name,s.inputs,s.output,s.formula_version,s.product_data_revision,s.monthly_id,s.monthly_revision,s.template_id,s.created_by,s.created_at,s.revision,s.record_kind FROM ps_profit_scenarios s WHERE s.tenant_id=p.tenant_id AND s.product_id=p.id AND s.record_kind='calculated' ORDER BY s.created_at DESC,s.id DESC LIMIT 1)q ON true `
 	feeJoin := ` LEFT JOIN LATERAL(SELECT s.imported_fba_fee_usd,s.imported_gross_margin_rate,s.source_row_id FROM ps_profit_scenarios s WHERE s.tenant_id=p.tenant_id AND s.product_id=p.id AND s.record_kind='imported' AND (s.source_row_id=p.current_row_id OR s.monthly_id=m.id) ORDER BY (s.source_row_id=p.current_row_id) DESC,s.created_at DESC,s.id DESC LIMIT 1)fees ON true `
 	joins := q.sets + scenarioJoin + feeJoin
@@ -55,8 +73,10 @@ func (s *service) profitProducts(r *http.Request) (any, error) {
 		countJoins += scenarioJoin
 	}
 	var total int64
-	if err := s.db.QueryRow(r.Context(), "SELECT count(*) FROM ps_products p "+countJoins+" WHERE "+q.where, q.args...).Scan(&total); err != nil {
-		return nil, err
+	if completion == "" && !grouped {
+		if err := s.db.QueryRow(r.Context(), "SELECT count(*) FROM ps_products p "+countJoins+" WHERE "+q.where, q.args...).Scan(&total); err != nil {
+			return nil, err
+		}
 	}
 
 	direction := "ASC"
@@ -76,22 +96,69 @@ func (s *service) profitProducts(r *http.Request) (any, error) {
 	pageNo, size := page(r)
 	computedSort := sortBy != "updated_at" && sortBy != "asin" && sortBy != "price_usd" && sortBy != "monthly_sales"
 	tail := fmt.Sprintf(" ORDER BY %s %s NULLS LAST,p.id", column, direction)
-	if computedSort {
+	familyCounts := map[string]int{}
+	var productTotal int64
+	if computedSort || completion != "" || grouped {
 		// Formula inputs determine the full ordering; fetch heavy details for one page.
 		lightProjection := "jsonb_build_object('id',p.id,'marketplace',p.marketplace,'category_path',p.category_path,'category',p.category,'main_category',p.main_category,'package_length_cm',p.package_length_cm::text,'package_width_cm',p.package_width_cm::text,'package_height_cm',p.package_height_cm::text,'package_weight_g',p.package_weight_g::text,'price_usd',m.price_usd::text,'scenario',jsonb_build_object('inputs',q.inputs),'imported_fees',jsonb_build_object('fba_fee_usd',fees.imported_fba_fee_usd::text))||" + profitSourceProjection
+		if grouped {
+			lightProjection += "||jsonb_build_object('family_key'," + parentFamilySQL + ",'family_rank',row_number() OVER(PARTITION BY " + parentFamilySQL + " ORDER BY " + familyRankSQL + "))"
+		}
 		candidates, err := s.query(r.Context(), "SELECT "+lightProjection+" FROM ps_products p "+joins+" WHERE "+q.where, q.args...)
 		if err != nil {
 			return nil, err
 		}
 		populateProfitRows(candidates)
-		ids := profitPageIDs(candidates, sortBy, direction, pageNo, size)
+		if completion != "" {
+			filtered := candidates[:0]
+			for _, item := range candidates {
+				output, _ := item["preview_output"].(Object)
+				if str(output["state"]) == completion {
+					filtered = append(filtered, item)
+				}
+			}
+			candidates = filtered
+			total = int64(len(candidates))
+		}
+		if grouped {
+			productTotal = int64(len(candidates))
+			representatives := map[string]Object{}
+			counts := map[string]int{}
+			for _, item := range candidates {
+				key := str(item["family_key"])
+				counts[key]++
+				old := representatives[key]
+				if old == nil || integer(item["family_rank"]) < integer(old["family_rank"]) {
+					representatives[key] = item
+				}
+			}
+			candidates = make([]Object, 0, len(representatives))
+			for key, item := range representatives {
+				candidates = append(candidates, item)
+				familyCounts[str(item["id"])] = counts[key]
+			}
+			total = int64(len(candidates))
+		}
+		ids := make([]string, 0, len(candidates))
+		if computedSort {
+			ids = profitPageIDs(candidates, sortBy, direction, pageNo, size)
+		} else {
+			for _, item := range candidates {
+				ids = append(ids, str(item["id"]))
+			}
+		}
 		if len(ids) == 0 {
-			return Object{"items": []Object{}, "total": total, "page": pageNo, "page_size": size, "referral_categories": referralOptions()}, nil
+			return Object{"items": []Object{}, "total": total, "product_total": productTotal, "page": pageNo, "page_size": size, "referral_categories": referralOptions()}, nil
 		}
 		q.args = append(q.args, ids)
 		position := len(q.args)
 		q.where += fmt.Sprintf(" AND p.id=ANY($%d::uuid[])", position)
-		tail = fmt.Sprintf(" ORDER BY array_position($%d::uuid[],p.id)", position)
+		if computedSort {
+			tail = fmt.Sprintf(" ORDER BY array_position($%d::uuid[],p.id)", position)
+		} else {
+			q.args = append(q.args, size, (pageNo-1)*size)
+			tail += fmt.Sprintf(" LIMIT $%d OFFSET $%d", len(q.args)-1, len(q.args))
+		}
 	} else {
 		q.args = append(q.args, size, (pageNo-1)*size)
 		tail += fmt.Sprintf(" LIMIT $%d OFFSET $%d", len(q.args)-1, len(q.args))
@@ -104,7 +171,14 @@ func (s *service) profitProducts(r *http.Request) (any, error) {
 		return nil, err
 	}
 	populateProfitRows(items)
-	return Object{"items": items, "total": total, "page": pageNo, "page_size": size, "referral_categories": referralOptions()}, nil
+	if grouped {
+		for _, item := range items {
+			item["family_count"] = familyCounts[str(item["id"])]
+		}
+	} else {
+		productTotal = total
+	}
+	return Object{"items": items, "total": total, "product_total": productTotal, "page": pageNo, "page_size": size, "referral_categories": referralOptions()}, nil
 }
 
 func populateProfitRows(items []Object) {

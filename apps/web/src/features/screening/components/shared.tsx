@@ -88,7 +88,8 @@ export function TableScroll({
       aria-label={label}
       tabIndex={0}
       className={cn(
-        'overflow-auto rounded border focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
+        // Keep absolute accessibility labels inside this scroll region, not the page.
+        'relative overflow-auto rounded border focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
         className
       )}
     >

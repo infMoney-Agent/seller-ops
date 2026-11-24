@@ -1,8 +1,12 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useSyncExternalStore } from 'react';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import { LoadingButton } from '@/components/ui/loading-button';
+
+const subscribe = () => () => {};
+const getSnapshot = () => true;
+const getServerSnapshot = () => false;
 
 interface AlertModalProps {
   isOpen: boolean;
@@ -23,11 +27,7 @@ export function AlertModal({
   description = 'This action cannot be undone.',
   confirmLabel = 'Continue'
 }: AlertModalProps) {
-  const [isMounted, setIsMounted] = useState(false);
-
-  useEffect(() => {
-    setIsMounted(true);
-  }, []);
+  const isMounted = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 
   if (!isMounted) {
     return null;

@@ -36,7 +36,7 @@ export default function BatchReviewDialog({
       <DataDialogContent
         closeDisabled={busy}
         title='批量复核已选商品'
-        description={'已选 ' + selected.length + ' 项；仅修改待复核商品'}
+        description={'已选 ' + selected.length + ' 项；默认仅修改待复核商品，可勾选覆盖已有结论'}
       >
         <BatchReviewForm
           selected={selected}
@@ -70,6 +70,7 @@ function BatchReviewForm({
   excludeFamilies: boolean;
 }) {
   const [mode, setMode] = useState(reference ? 'reference' : 'direct');
+  const [overwrite, setOverwrite] = useState(false);
   const [status, setStatus] = useState('kept'),
     [reason, setReason] = useState(''),
     [note, setNote] = useState('');
@@ -113,6 +114,7 @@ function BatchReviewForm({
                 mode,
                 reference_product_id: mode === 'reference' ? reference?.id : null,
                 action: 'review',
+                overwrite,
                 status,
                 reason,
                 note
@@ -120,7 +122,11 @@ function BatchReviewForm({
               preparedBatch.current = batch;
             }
             if (!batch.targets.some((target) => target.eligible))
-              throw new Error('所选商品均已复核，请刷新列表后重新选择。');
+              throw new Error(
+                overwrite
+                  ? '所选商品均无需修改，请刷新列表后重新选择。'
+                  : '所选商品均已有人工结论；如需覆盖请勾选下方选项。'
+              );
             const result = await request<BatchResult>(
               '/review-batches/' + batch.id + '/apply',
               'POST'
@@ -138,6 +144,26 @@ function BatchReviewForm({
         });
       }}
     >
+      <div className='flex items-start gap-2'>
+        <input
+          id='batch-review-overwrite'
+          name='overwrite'
+          type='checkbox'
+          className='accent-primary mt-1 size-4'
+          checked={overwrite}
+          disabled={disabled}
+          onChange={(event) => {
+            setOverwrite(event.target.checked);
+            edited();
+          }}
+        />
+        <label htmlFor='batch-review-overwrite' className='text-sm'>
+          覆盖已有人工结论
+          <span className='text-muted-foreground block text-xs'>
+            修改前的结果会保留在操作历史中，可按需撤销；未勾选时仅修改待复核商品。
+          </span>
+        </label>
+      </div>
       {reference && (
         <Field label='复核方式'>
           <select

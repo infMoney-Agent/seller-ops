@@ -54,6 +54,7 @@ export function useProfitAutosave(
             if (lifecycle.isActive())
               setDrafts((old) => {
                 const row = old[task.id];
+                if (row?.saveState === state && row.error === error) return old;
                 return row?.inputs === task.inputs
                   ? { ...old, [task.id]: { ...row, saveState: state, error } }
                   : old;

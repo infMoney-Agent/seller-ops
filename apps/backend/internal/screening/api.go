@@ -63,6 +63,8 @@ func (s *service) route(w http.ResponseWriter, r *http.Request) (any, error) {
 			return s.products(r)
 		case "profit/products":
 			return s.profitProducts(r)
+		case "trademark-options":
+			return s.trademarkOptions(r)
 		case "summary":
 			return s.summary(r)
 		case "imports":

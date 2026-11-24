@@ -1,3 +1,4 @@
+import { v4 as randomUUID } from 'uuid';
 import type { ProfitInputs, ProfitScenario } from './types';
 export interface ProfitSaveTask {
   id: string;
@@ -15,6 +16,7 @@ type Entry = {
   running: boolean;
   failed: boolean;
   result?: ProfitScenario;
+  error?: string;
 };
 type Callbacks = {
   state: (task: ProfitSaveTask, state: 'queued' | 'saving' | 'failed', error?: string) => void;
@@ -40,8 +42,10 @@ export class ProfitSaveQueue {
     ]);
     const old = this.entries.get(task.id);
     if (old?.fingerprint === fingerprint) {
+      const sameInputs = old.task.inputs === task.inputs;
       old.task = task;
-      if (old.failed) this.callbacks.state(task, 'failed', '自动保存未成功，请重试');
+      if (old.failed && !sameInputs)
+        this.callbacks.state(task, 'failed', old.error || '自动保存未成功，请重试');
       if (old.result) this.callbacks.saved(task, old.result);
       return;
     }
@@ -49,7 +53,7 @@ export class ProfitSaveQueue {
     const entry: Entry = {
       task,
       fingerprint,
-      key: crypto.randomUUID(),
+      key: randomUUID(),
       ready: false,
       running: old?.running || false,
       failed: false
@@ -94,11 +98,8 @@ export class ProfitSaveQueue {
         })
         .catch((error: unknown) => {
           entry.failed = true;
-          this.callbacks.state(
-            entry.task,
-            'failed',
-            error instanceof Error ? error.message : '自动保存失败，请重试'
-          );
+          entry.error = error instanceof Error ? error.message : '自动保存失败，请重试';
+          this.callbacks.state(entry.task, 'failed', entry.error);
         })
         .finally(() => {
           this.active--;

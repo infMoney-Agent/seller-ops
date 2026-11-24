@@ -43,7 +43,7 @@ func (s *service) loadReviewFamilies(ctx context.Context, q productQuery, items 
 
 // Expansion happens at preview time and is frozen in the batch. Apply/undo
 // keep the existing revision checks and audit events for each actual child.
-func expandExcludedFamilies(ctx context.Context, tx pgx.Tx, a identity, selected []string) ([]string, []Object, error) {
+func expandExcludedFamilies(ctx context.Context, tx pgx.Tx, a identity, selected []string, overwrite bool) ([]string, []Object, error) {
 	anchors := []Object{}
 	for _, id := range selected {
 		p, err := txProduct(ctx, tx, a, id, false)
@@ -56,10 +56,10 @@ func expandExcludedFamilies(ctx context.Context, tx pgx.Tx, a identity, selected
 		anchors = append(anchors, Object{"id": id, "parent_asin": p["parent_asin"], "data_revision": p["data_revision"]})
 	}
 	rows, err := tx.Query(ctx, `SELECT p.id::text FROM ps_products p WHERE p.tenant_id=$1 AND p.archived_at IS NULL AND
- (p.id=ANY($2::uuid[]) OR (p.review_status='pending' AND EXISTS(
+ (p.id=ANY($2::uuid[]) OR (($3::boolean OR p.review_status='pending') AND EXISTS(
  SELECT 1 FROM ps_products anchor WHERE anchor.tenant_id=p.tenant_id AND anchor.id=ANY($2::uuid[])
  AND anchor.archived_at IS NULL AND anchor.marketplace=p.marketplace AND NULLIF(anchor.parent_asin,'') IS NOT NULL AND anchor.parent_asin=p.parent_asin)))
- ORDER BY p.id LIMIT 101`, a.Tenant, selected)
+ ORDER BY p.id LIMIT 101`, a.Tenant, selected, overwrite)
 	if err != nil {
 		return nil, nil, err
 	}

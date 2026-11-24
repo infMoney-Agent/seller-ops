@@ -12,7 +12,8 @@ func (s *server) session(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var name, email string
-	if err := s.db.QueryRow(r.Context(), "SELECT name,email FROM users WHERE id=$1", a.UserID).Scan(&name, &email); err != nil {
+	var verified bool
+	if err := s.db.QueryRow(r.Context(), "SELECT name,email,email_verified FROM users WHERE id=$1", a.UserID).Scan(&name, &email, &verified); err != nil {
 		httpresponse.Internal(w, err)
 		return
 	}
@@ -37,5 +38,5 @@ func (s *server) session(w http.ResponseWriter, r *http.Request) {
 		httpresponse.Internal(w, err)
 		return
 	}
-	httpresponse.JSON(w, 200, map[string]any{"id": a.UserID, "name": name, "email": email, "workspaceId": a.TenantID, "role": a.Role, "workspaces": workspaces})
+	httpresponse.JSON(w, 200, map[string]any{"id": a.UserID, "name": name, "email": email, "emailVerified": verified, "workspaceId": a.TenantID, "role": a.Role, "workspaces": workspaces})
 }

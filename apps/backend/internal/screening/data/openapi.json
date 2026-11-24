@@ -123,6 +123,15 @@
               "type": "integer",
               "minimum": 0
             }
+          },
+          {
+            "name": "trademark",
+            "in": "query",
+            "description": "商品用途商标分类（01至34）；pending 包含缺失及多类待核实，沿用旧资料库口径",
+            "schema": {
+              "type": "string",
+              "pattern": "^(0[1-9]|[12][0-9]|3[0-4]|pending)$"
+            }
           }
         ],
         "responses": {
@@ -380,6 +389,15 @@
             "schema": {
               "type": "integer",
               "minimum": 0
+            }
+          },
+          {
+            "name": "trademark",
+            "in": "query",
+            "description": "商品用途商标分类（01至34）；pending 包含缺失及多类待核实，沿用旧资料库口径",
+            "schema": {
+              "type": "string",
+              "pattern": "^(0[1-9]|[12][0-9]|3[0-4]|pending)$"
             }
           }
         ]
@@ -6599,6 +6617,46 @@
               "type": "string"
             },
             "description": "最多100个商品UUID，以逗号分隔。"
+          },
+          {
+            "name": "completion",
+            "in": "query",
+            "required": false,
+            "description": "按当前已保存参数和自动补齐费用计算填写状态；省略为全部，筛选在排序及分页前执行。",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "complete",
+                "incomplete"
+              ]
+            }
+          },
+          {
+            "name": "group_by_parent",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            },
+            "description": "同父体归组后分页，total为组数、product_total为匹配子体数，代表行含family_count；各子体独立测算。"
+          },
+          {
+            "name": "family_product_id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "展开该商品的同站点同父体子体，沿用已保留及填写状态筛选，支持分页。"
+          },
+          {
+            "name": "trademark",
+            "in": "query",
+            "description": "商品用途商标分类（01至34）；pending 包含缺失及多类待核实，沿用旧资料库口径",
+            "schema": {
+              "type": "string",
+              "pattern": "^(0[1-9]|[12][0-9]|3[0-4]|pending)$"
+            }
           }
         ],
         "responses": {
@@ -6698,6 +6756,131 @@
         },
         "description": "默认列出当前租户已保留子体，按 ASIN 独立测算；支持当前商品或明确勾选集合。派生金额在服务端对全量结果排序后分页，空值始终在最后。"
       }
+    },
+    "/api/v1/screening/trademark-options": {
+      "get": {
+        "summary": "当前筛选范围的商标分类选项及子体数量（忽略自身分类筛选）",
+        "responses": {
+          "200": {
+            "description": "分类选项",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "value": {
+                            "type": "string"
+                          },
+                          "label": {
+                            "type": "string"
+                          },
+                          "count": {
+                            "type": "integer"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "stat_month",
+            "in": "query",
+            "required": false,
+            "description": "经营数据月份 YYYY-MM；不传则各商品最新一期",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "period_type",
+            "in": "query",
+            "required": false,
+            "description": "自然月、滚动30天或自定义；指定月份时默认自然月",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "calendar_month",
+                "rolling_30d",
+                "custom"
+              ]
+            }
+          },
+          {
+            "name": "source_type",
+            "in": "query",
+            "required": false,
+            "description": "sellersprite、manual、other、legacy_import或明确来源代码",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-user",
+            "in": "header",
+            "required": true,
+            "description": "真实操作人ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-workspace",
+            "in": "header",
+            "required": true,
+            "description": "真实工作区ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-seller-role",
+            "in": "header",
+            "required": true,
+            "description": "owner或member",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-time",
+            "in": "header",
+            "required": true,
+            "description": "Unix秒，允许60秒偏差",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-screening-signature",
+            "in": "header",
+            "required": true,
+            "description": "SHA256 HMAC，签名由Next.js代理生成",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "child_sales_min",
+            "in": "query",
+            "required": false,
+            "description": "最低子体销量参考值，仅返回已知值达到门槛的商品，不使用父体销量补全",
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        ]
+      }
     }
   },
   "components": {
@@ -6774,6 +6957,11 @@
               "categorize"
             ],
             "default": "review"
+          },
+          "overwrite": {
+            "type": "boolean",
+            "default": false,
+            "description": "Allow review to replace an existing manual conclusion; previous values remain in audit history."
           },
           "category": {
             "anyOf": [

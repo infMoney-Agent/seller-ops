@@ -23,13 +23,17 @@ export function Messenger() {
   } = useChatStore();
 
   const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [previousConversationId, setPreviousConversationId] = useState(selectedConversationId);
+  if (previousConversationId !== selectedConversationId) {
+    setPreviousConversationId(selectedConversationId);
+    setAttachments([]);
+  }
   const shouldReduceMotion = useReducedMotion();
   const replyTimeoutRef = useRef<number | null>(null);
   const selectedRef = useRef(selectedConversationId);
 
   useEffect(() => {
     selectedRef.current = selectedConversationId;
-    setAttachments([]);
   }, [selectedConversationId]);
 
   useEffect(() => {

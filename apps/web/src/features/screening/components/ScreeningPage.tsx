@@ -1,6 +1,6 @@
 'use client';
 /* oxlint-disable react/no-unstable-nested-components -- TanStack column renderers are stable useMemo callbacks. */
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Image from 'next/image';
 import { useQueryClient } from '@tanstack/react-query';
 import {
@@ -29,6 +29,7 @@ import type {
   FamilyResult
 } from '../types';
 import { childSales } from '../sales';
+import { productTrademark, trademarkOptionLabel } from '../trademark';
 import { useTableTextAlignment } from '../use-table-text-alignment';
 import { countryCode, listingAge, shanghaiToday } from '../product-display';
 import ImportDialog from './ImportDialog';
@@ -40,8 +41,7 @@ import PolicyPanel from './PolicyPanel';
 import ProductParameters from './ProductParameters';
 import FamilyPanel from './FamilyPanel';
 import ParentMonthlyPanel from './ParentMonthlyPanel';
-import MonthlyHistory, { periodLabels, sourceLabels } from './MonthlyHistory';
-import type { MonthOption } from '../types';
+import MonthlyHistory, { periodLabels } from './MonthlyHistory';
 import {
   Badge,
   Button,
@@ -64,7 +64,8 @@ const minimumColumnWidths: ColumnSizingState = {
   seller: 92,
   decision: 96,
   review_status: 88,
-  profit: 132,
+  margin: 88,
+  profit: 104,
   actions: 56
 };
 function fittedColumnWidths(width: number): ColumnSizingState {
@@ -94,6 +95,7 @@ const sortFields: Record<string, string> = {
   price_usd: 'price_usd',
   monthly_sales: 'monthly_sales',
   rating_reviews: 'rating',
+  margin: 'margin',
   profit: 'profit_usd'
 };
 function sortDirection(
@@ -211,7 +213,16 @@ export default function ScreeningPage() {
       )
   );
   const imports = useScreeningQuery<PageResult<ImportRecord>>('/imports');
-  const months = useScreeningQuery<{ items: MonthOption[] }>('/months');
+  const trademarks = useScreeningQuery<{
+    items: { value: string; label: string; count: number }[];
+  }>(
+    '/trademark-options?' +
+      new URLSearchParams(
+        Object.fromEntries(
+          Object.entries(filters).filter(([key]) => key !== 'trademark' && key !== 'sort')
+        )
+      )
+  );
   const [groupPage, setGroupPage] = useState(1);
   const expanded = useScreeningQuery<PageResult<Product>>(
     group ? `/groups/${group}/products?page=${groupPage}&${new URLSearchParams(filters)}` : null
@@ -242,6 +253,27 @@ export default function ScreeningPage() {
     setShowAdvanced(false);
   }
   const selectedIds = Object.keys(selected).filter((id) => selected[id]);
+  const pageSelectionIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const product of products.data?.items ?? []) {
+      ids.add(product.id);
+      for (const member of product.family_member_ids ?? []) ids.add(member);
+    }
+    return [...ids];
+  }, [products.data?.items]);
+  const pageSelectedCount = pageSelectionIds.filter((id) => selected[id]).length;
+  const allPageSelected =
+    pageSelectionIds.length > 0 && pageSelectedCount === pageSelectionIds.length;
+  const toggleAllPage = useCallback(() => {
+    setSelected((old) => {
+      const next = { ...old };
+      for (const id of pageSelectionIds) {
+        if (allPageSelected) delete next[id];
+        else next[id] = true;
+      }
+      return next;
+    });
+  }, [allPageSelected, pageSelectionIds]);
   const refresh = async () => {
     await Promise.all([
       client.invalidateQueries({ queryKey: ['screening', session.workspaceId] }),
@@ -307,13 +339,13 @@ export default function ScreeningPage() {
         size: 40,
         minSize: 40,
         maxSize: 40,
-        header: ({ table }) => (
-          <input
-            aria-label='选择当前页代表商品'
-            disabled={products.isPlaceholderData}
-            type='checkbox'
-            checked={table.getIsAllPageRowsSelected()}
-            onChange={table.getToggleAllPageRowsSelectedHandler()}
+        header: () => (
+          <SelectAllCheckbox
+            label={`全选本页商品及同父体子体（共 ${pageSelectionIds.length} 项）`}
+            disabled={products.isPlaceholderData || pageSelectionIds.length === 0}
+            checked={allPageSelected}
+            indeterminate={pageSelectedCount > 0 && !allPageSelected}
+            onChange={toggleAllPage}
           />
         ),
         cell: ({ row }) => (
@@ -352,11 +384,21 @@ export default function ScreeningPage() {
                   {row.original.asin}
                 </button>
                 <AsinTools asin={row.original.asin} />
+                <span
+                  className='bg-muted text-muted-foreground rounded border px-1.5 py-0.5 text-[11px]'
+                  title={productTrademark(row.original).title}
+                >
+                  {productTrademark(row.original).label}
+                </span>
+              </div>
+              <BilingualProductTitle product={row.original} />
+              <div className='flex flex-wrap items-center gap-x-1 gap-y-0.5 text-xs'>
+                <span>父体：{row.original.parent_asin || '未知'}</span>
                 {(row.original.family_count || 1) > 1 && (
                   <Button
                     size='sm'
                     variant='ghost'
-                    className='h-7 px-2 text-xs'
+                    className='h-6 px-1 text-xs'
                     aria-label={`${familyRows[row.original.id] ? '收起' : '展开'} ${row.original.parent_asin} 的子体`}
                     aria-expanded={Boolean(familyRows[row.original.id])}
                     aria-controls={`family-${row.original.id}`}
@@ -372,21 +414,10 @@ export default function ScreeningPage() {
                     {row.original.family_count} 个子体
                   </Button>
                 )}
+                {row.original.manual_category && (
+                  <span>· 人工分类：{row.original.manual_category}</span>
+                )}
               </div>
-              {(row.original.family_count || 1) > 1 && (
-                <p className='text-muted-foreground text-xs'>
-                  {row.original.sales_scope === 'child' && row.original.monthly_sales !== null
-                    ? row.original.family_sales_pending
-                      ? '已知销量代表 · 部分待确认'
-                      : '最新一期销量代表'
-                    : '代表商品 · 销量待确认'}
-                </p>
-              )}
-              <BilingualProductTitle product={row.original} />
-              <p className='text-xs'>
-                父体：{row.original.parent_asin || '未知'}{' '}
-                {row.original.manual_category && `· 人工分类：${row.original.manual_category}`}
-              </p>
               <p className='text-muted-foreground text-xs'>
                 {row.original.stat_month?.slice(0, 7)} ·{' '}
                 {periodLabels[row.original.period_type || ''] || '暂无分期数据'}
@@ -504,8 +535,18 @@ export default function ScreeningPage() {
         )
       },
       {
+        id: 'margin',
+        header: '利润率',
+        cell: ({ row }) => {
+          const margin = row.original.profit_output?.margin;
+          return margin !== undefined && margin !== null && margin !== ''
+            ? (Number(margin) * 100).toFixed(2) + '%'
+            : '待测算';
+        }
+      },
+      {
         id: 'profit',
-        header: '预计单件利润',
+        header: '预计利润',
         cell: ({ row }) => (
           <div>
             {row.original.profit_output?.profit_usd
@@ -553,7 +594,15 @@ export default function ScreeningPage() {
         )
       }
     ],
-    [familyRows, products.isPlaceholderData, today]
+    [
+      allPageSelected,
+      familyRows,
+      pageSelectedCount,
+      pageSelectionIds,
+      products.isPlaceholderData,
+      today,
+      toggleAllPage
+    ]
   );
   const sizedColumns = useMemo(
     () =>
@@ -745,24 +794,31 @@ export default function ScreeningPage() {
                       <option value='unscreened'>未初筛</option>
                     </select>
                   </Field>
-                  <Field label='经营数据来源'>
+                  <Field label='商标分类'>
                     <select
-                      className='rounded border bg-transparent p-2'
-                      value={filters.source_type || ''}
+                      name='trademark'
+                      className='h-9 w-full min-w-0 rounded-md border bg-background px-2 text-sm'
+                      value={filters.trademark || ''}
                       onChange={(e) => {
-                        filter('source_type', e.target.value);
+                        filter('trademark', e.target.value);
                         setFocus(null);
                         setSelected({});
                       }}
                     >
-                      <option value=''>全部来源 · 最新一期</option>
-                      {[...new Set((months.data?.items || []).map((m) => m.source_type))].map(
-                        (source) => (
-                          <option key={source} value={source}>
-                            {sourceLabels[source] || source}
+                      <option value=''>全部商标分类</option>
+                      {filters.trademark &&
+                        !trademarks.data?.items.some(
+                          (item) => item.value === filters.trademark
+                        ) && (
+                          <option value={filters.trademark}>
+                            {trademarkOptionLabel(filters.trademark)}
                           </option>
-                        )
-                      )}
+                        )}
+                      {(trademarks.data?.items || []).map((item) => (
+                        <option key={item.value} value={item.value}>
+                          {trademarkOptionLabel(item.value)} · {item.count.toLocaleString('zh-CN')}
+                        </option>
+                      ))}
                     </select>
                   </Field>
                 </div>
@@ -848,7 +904,10 @@ export default function ScreeningPage() {
                 )}
               </section>
               <div className='bg-card flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2'>
-                <span className='text-sm'>跨页已选 {selectedIds.length} 个</span>
+                <p role='status' className='text-sm'>
+                  本页已选 {pageSelectedCount} / {pageSelectionIds.length} 项（含未展开子体） ·
+                  跨页已选 {selectedIds.length} 项
+                </p>
                 <Button variant='outline' onClick={() => setSelected({})}>
                   清空
                 </Button>
@@ -1212,6 +1271,35 @@ export default function ScreeningPage() {
         }}
       />
     </div>
+  );
+}
+
+function SelectAllCheckbox({
+  label,
+  checked,
+  indeterminate,
+  disabled,
+  onChange
+}: {
+  label: string;
+  checked: boolean;
+  indeterminate: boolean;
+  disabled: boolean;
+  onChange: () => void;
+}) {
+  const ref = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (ref.current) ref.current.indeterminate = indeterminate;
+  }, [indeterminate]);
+  return (
+    <input
+      ref={ref}
+      aria-label={label}
+      type='checkbox'
+      disabled={disabled}
+      checked={checked}
+      onChange={onChange}
+    />
   );
 }
 

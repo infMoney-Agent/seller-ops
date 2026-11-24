@@ -144,6 +144,34 @@ func TestProfitTableQueries(t *testing.T) {
 			t.Fatal("must sort all child ASINs before pagination and leave missing results last", v)
 		}
 	}
+	for _, sortBy := range []string{"updated_at", "margin", "-margin"} {
+		complete := list("completion=complete&sort=" + sortBy + "&page_size=1&page=2")
+		if integer(complete["total"]) != 2 || len(complete["items"].([]Object)) != 1 {
+			t.Fatal("completion must filter all results before pagination", complete)
+		}
+		incomplete := list("completion=incomplete&sort=" + sortBy)
+		items := incomplete["items"].([]Object)
+		if integer(incomplete["total"]) != 1 || len(items) != 1 || str(items[0]["id"]) != missing {
+			t.Fatal("missing costs must remain incomplete", incomplete)
+		}
+	}
+	for _, order := range []string{"updated_at", "-margin"} {
+		grouped := list("group_by_parent=true&page_size=1&sort=" + order)
+		items := grouped["items"].([]Object)
+		if integer(grouped["total"]) != 1 || integer(grouped["product_total"]) != 3 || len(items) != 1 || integer(items[0]["family_count"]) != 3 {
+			t.Fatal("parent grouping must precede pagination without losing children", grouped)
+		}
+		complete := list("group_by_parent=true&completion=complete&sort=" + order)
+		if integer(complete["total"]) != 1 || integer(complete["product_total"]) != 2 {
+			t.Fatal("group completion filter", complete)
+		}
+	}
+	if integer(list("family_product_id=" + first)["total"]) != 3 {
+		t.Fatal("family expansion must retain kept children")
+	}
+	if integer(list("family_product_id=" + other)["total"]) != 0 {
+		t.Fatal("family expansion leaked tenant")
+	}
 	row := list("product_id=" + first)["items"].([]Object)[0]
 	specs := row["specs"].(map[string]any)
 	if specs["material"] != "steel" || specs["legacy_site_snapshot"] != nil {

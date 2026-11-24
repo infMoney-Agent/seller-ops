@@ -991,6 +991,10 @@ const dropAnimation: DropAnimation = {
   })
 };
 
+const subscribeToMount = () => () => {};
+const getMountedSnapshot = () => true;
+const getServerMountedSnapshot = () => false;
+
 interface KanbanOverlayProps extends Omit<React.ComponentProps<typeof DragOverlay>, 'children'> {
   container?: Element | DocumentFragment | null;
   children?:
@@ -1003,9 +1007,11 @@ function KanbanOverlay(props: KanbanOverlayProps) {
 
   const context = useKanbanContext(OVERLAY_NAME);
 
-  const [mounted, setMounted] = React.useState(false);
-
-  React.useLayoutEffect(() => setMounted(true), []);
+  const mounted = React.useSyncExternalStore(
+    subscribeToMount,
+    getMountedSnapshot,
+    getServerMountedSnapshot
+  );
 
   const container = containerProp ?? (mounted ? globalThis.document?.body : null);
 

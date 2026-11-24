@@ -5,7 +5,9 @@ import (
 	_ "embed"
 	"encoding/json"
 	"log"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -22,9 +24,10 @@ import (
 var schema string
 
 type server struct {
-	db      *pgxpool.Pool
-	origins []string
-	auth    *auth.Service
+	db                     *pgxpool.Pool
+	origins                []string
+	auth                   *auth.Service
+	allowUnverifiedInvites bool
 }
 
 func main() {
@@ -61,12 +64,43 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	endpoint := provider.Endpoint()
+	if browserURL := os.Getenv("OIDC_BROWSER_AUTH_URL"); browserURL != "" {
+		u, err := url.Parse(browserURL)
+		if err != nil || u.Host == "" || (u.Scheme != "https" && !httpOriginAllowed(u.Scheme+"://"+u.Host)) {
+			log.Fatal("invalid OIDC_BROWSER_AUTH_URL")
+		}
+		endpoint.AuthURL = browserURL
+	}
 	oauth := oauth2.Config{
 		ClientID: clientID, ClientSecret: required("OIDC_CLIENT_SECRET"),
-		RedirectURL: origins[0] + "/api/auth/callback", Endpoint: provider.Endpoint(),
+		RedirectURL: origins[0] + "/api/auth/callback", Endpoint: endpoint,
 		Scopes: []string{oidc.ScopeOpenID, "profile", "email"},
 	}
-	s := &server{db: db, origins: origins, auth: auth.New(db, oauth, provider.Verifier(&oidc.Config{ClientID: clientID}))}
+	s := &server{db: db, origins: origins, auth: auth.New(db, oauth, provider.Verifier(&oidc.Config{ClientID: clientID})), allowUnverifiedInvites: os.Getenv("INVITATION_ALLOW_UNVERIFIED_EMAIL") == "true"}
+	if os.Getenv("OIDC_SHARED_APPLICATION") == "true" {
+		s.auth.EnableOrganizations(required("OIDC_DEFAULT_ORGANIZATION"), func(client string) *oidc.IDTokenVerifier { return provider.Verifier(&oidc.Config{ClientID: client}) })
+	}
+	if os.Getenv("SHORT_LOGIN_ENABLED") == "true" {
+		if err := s.auth.EnableShortLogin(required("CASDOOR_INTERNAL_URL"), required("CASDOOR_APPLICATION_NAME")); err != nil {
+			log.Fatal(err)
+		}
+	}
+	if os.Getenv("PUBLIC_REGISTRATION_ENABLED") == "true" {
+		if err := s.auth.EnableRegistration(required("CASDOOR_INTERNAL_URL"), required("CASDOOR_APPLICATION_NAME"), clientID, required("OIDC_CLIENT_SECRET"), required("OIDC_ISSUER")); err != nil {
+			log.Fatal(err)
+		}
+		go s.auth.RegistrationMaintenance(context.Background())
+	}
+	if legacyID := os.Getenv("LEGACY_OIDC_CLIENT_ID"); legacyID != "" {
+		legacy := oauth
+		legacy.ClientID = legacyID
+		legacy.ClientSecret = required("LEGACY_OIDC_CLIENT_SECRET")
+		s.auth.SetLegacy(legacy, provider.Verifier(&oidc.Config{ClientID: legacyID}))
+	}
+	if strings.HasPrefix(origins[0], "http://") && os.Getenv("SELLER_ALLOW_HTTP") == "true" {
+		s.auth.EnableHTTP()
+	}
 	mux := http.NewServeMux()
 	s.auth.Register(mux)
 	mux.HandleFunc("GET /api/auth/session", s.session)
@@ -86,6 +120,14 @@ func main() {
 	log.Fatal(httpServer.ListenAndServe())
 }
 
+func httpOriginAllowed(value string) bool {
+	if os.Getenv("SELLER_ALLOW_HTTP") != "true" {
+		return false
+	}
+	u, err := url.Parse(value)
+	return err == nil && u.Scheme == "http" && u.User == nil && u.Path == "" && u.RawQuery == "" && u.Fragment == "" && net.ParseIP(u.Hostname()) != nil
+}
+
 func allowedOrigins(value string) []string {
 	var origins []string
 	for _, raw := range strings.Split(value, ",") {
@@ -93,8 +135,8 @@ func allowedOrigins(value string) []string {
 		if origin == "" {
 			continue
 		}
-		if !strings.HasPrefix(origin, "https://") && !strings.HasPrefix(origin, "http://localhost:") {
-			log.Fatal("APP_ORIGIN entries must use HTTPS or http://localhost:<port>")
+		if !strings.HasPrefix(origin, "https://") && !strings.HasPrefix(origin, "http://localhost:") && !httpOriginAllowed(origin) {
+			log.Fatal("APP_ORIGIN requires HTTPS; public HTTP IP access requires SELLER_ALLOW_HTTP=true")
 		}
 		origins = append(origins, origin)
 	}

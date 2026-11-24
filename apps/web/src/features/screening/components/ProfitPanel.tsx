@@ -1,6 +1,6 @@
 'use client';
 import Image from 'next/image';
-import { memo, useCallback, useEffect, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   flexRender,
   getCoreRowModel,
@@ -8,9 +8,11 @@ import {
   type ColumnDef,
   type ColumnSizingState
 } from '@tanstack/react-table';
-import { Dialog } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import { useScreeningQuery } from '../queries';
+import { request } from '../service';
 import { useProfitAutosave } from '../use-profit-autosave';
 import { childSales } from '../sales';
 import {
@@ -35,17 +37,17 @@ const weight = (value: string | undefined) => (value ? profitNumber(value, 3) + 
 const columns: Array<{ id: string; label: string; min: number; sort?: string }> = [
   { id: 'product', label: '商品', min: 220 },
   { id: 'specs', label: '售价与规格', min: 170, sort: 'price_usd' },
-  { id: 'fba', label: 'FBA', min: 76, sort: 'fba_fee_usd' },
+  { id: 'fba', label: 'FBA', min: 80, sort: 'fba_fee_usd' },
   { id: 'storage', label: '仓租', min: 88, sort: 'storage_usd' },
   { id: 'volume', label: '体积重', min: 76, sort: 'volumetric_weight_kg' },
   { id: 'billable', label: '计费重', min: 76, sort: 'billable_weight_kg' },
-  { id: 'freight_rate', label: '头程单价', min: 78, sort: 'freight_rate_cny_per_kg' },
-  { id: 'freight', label: '头程', min: 76, sort: 'freight_cny' },
-  { id: 'purchase', label: '供货价', min: 88, sort: 'purchase_cny' },
+  { id: 'freight_rate', label: '头程单价', min: 88, sort: 'freight_rate_cny_per_kg' },
+  { id: 'freight', label: '头程', min: 88, sort: 'freight_cny' },
+  { id: 'purchase', label: '供货价', min: 104, sort: 'purchase_cny' },
   { id: 'supplier', label: '供应商链接', min: 120 },
-  { id: 'commission_rate', label: '佣金比', min: 120, sort: 'commission_rate' },
-  { id: 'commission', label: '佣金', min: 76, sort: 'commission_usd' },
-  { id: 'profit', label: '单件利润 CNY', min: 112, sort: 'profit_cny' },
+  { id: 'commission_rate', label: '佣金比 %', min: 120, sort: 'commission_rate' },
+  { id: 'commission', label: '佣金', min: 88, sort: 'commission_usd' },
+  { id: 'profit', label: '单件利润', min: 112, sort: 'profit_cny' },
   { id: 'margin', label: '利润率', min: 76, sort: 'margin' },
   { id: 'actions', label: '状态', min: 88 }
 ];
@@ -77,7 +79,14 @@ export default function ProfitPanel({
     [search, setSearch] = useState(''),
     [query, setQuery] = useState(''),
     [sort, setSort] = useState(''),
+    [completion, setCompletion] = useState(''),
     [onlySelected, setOnlySelected] = useState(false);
+  const [excludeTarget, setExcludeTarget] = useState<ProfitTableProduct | null>(null);
+  const [excludeReason, setExcludeReason] = useState('未找到供货商');
+  const openExclude = useCallback((p: ProfitTableProduct) => {
+    setExcludeReason('未找到供货商');
+    setExcludeTarget(p);
+  }, []);
   const [drafts, setDrafts] = useState<Record<string, ProfitRowDraft>>({});
   const autosave = useProfitAutosave(drafts, setDrafts);
   const [editor, setEditor] = useState<ProfitTableProduct | null>(null),
@@ -93,13 +102,21 @@ export default function ProfitPanel({
     observer.observe(container);
     return () => observer.disconnect();
   }, [container]);
-  const params = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
+  const params = new URLSearchParams({
+    page: String(page),
+    page_size: String(pageSize),
+    group_by_parent: 'true'
+  });
   if (query) params.set('q', query);
   if (sort) params.set('sort', sort);
+  if (completion) params.set('completion', completion);
   if (product) params.set('product_id', product.id);
   else if (onlySelected && selected.length) params.set('selected_ids', selected.join(','));
   const rows = useScreeningQuery<
-    PageResult<ProfitTableProduct> & { referral_categories: Array<{ id: string; label: string }> }
+    PageResult<ProfitTableProduct> & {
+      product_total: number;
+      referral_categories: Array<{ id: string; label: string }>;
+    }
   >('/profit/products?' + params, false, true);
   const data = rows.data?.items || [];
   const definitions = useMemo<ColumnDef<ProfitTableProduct>[]>(() => {
@@ -145,7 +162,8 @@ export default function ProfitPanel({
       <div className='flex flex-wrap items-center justify-between gap-3'>
         <p className='text-sm'>
           {product ? '当前商品' : onlySelected ? '已选商品' : '已保留商品'} ·{' '}
-          {total.toLocaleString()} 个子体
+          {total.toLocaleString()} 组 · {(rows.data?.product_total ?? total).toLocaleString()}{' '}
+          个子体
         </p>
         <form
           className='flex flex-wrap items-center gap-2'
@@ -186,6 +204,28 @@ export default function ProfitPanel({
             </Button>
           )}
         </form>
+      </div>
+      <div role='group' aria-label='填写状态' className='flex flex-wrap items-center gap-2'>
+        <span className='text-sm'>填写状态</span>
+        {[
+          ['', '全部'],
+          ['complete', '已填写完整'],
+          ['incomplete', '未填写完整']
+        ].map(([value, label]) => (
+          <Button
+            key={value}
+            type='button'
+            size='sm'
+            variant={completion === value ? 'default' : 'outline'}
+            aria-pressed={completion === value}
+            onClick={() => {
+              setCompletion(value);
+              setPage(1);
+            }}
+          >
+            {label}
+          </Button>
+        ))}
       </div>
       <details className='rounded-lg border p-3'>
         <summary className='cursor-pointer text-sm font-medium'>公共测算参数</summary>
@@ -281,7 +321,7 @@ export default function ProfitPanel({
           ? rows.data
             ? '正在更新利润表…'
             : '正在加载利润表…'
-          : total + ' 个商品 · 第 ' + page + ' 页'}
+          : total + ' 组商品 · 第 ' + page + ' 页'}
       </p>
       <TableScroll
         ref={setContainer}
@@ -383,21 +423,21 @@ export default function ProfitPanel({
               </tr>
             ))}
           </thead>
-          <tbody>
-            {data.map((p) => (
-              <ProfitTableRow
-                referralCategories={rows.data?.referral_categories || []}
-                key={p.id}
-                product={p}
-                draft={drafts[p.id]}
-                update={updateRow}
-                retry={() => autosave.retry(p.id)}
-                flush={() => autosave.flush(p.id)}
-                openEditor={openEditor}
-                busy={busy || rows.isFetching}
-              />
-            ))}
-          </tbody>
+          {data.map((p, index) => (
+            <ProfitFamilyRows
+              shaded={index % 2 === 1}
+              params={params.toString()}
+              drafts={drafts}
+              autosave={autosave}
+              referralCategories={rows.data?.referral_categories || []}
+              key={p.id}
+              product={p}
+              update={updateRow}
+              openEditor={openEditor}
+              openExclude={openExclude}
+              busy={busy || rows.isFetching}
+            />
+          ))}
         </table>
         {!rows.isLoading && !data.length && (
           <p className='p-8 text-center text-sm text-muted-foreground'>
@@ -418,7 +458,7 @@ export default function ProfitPanel({
           >
             {[10, 20, 50, 100].map((n) => (
               <option key={n} value={n}>
-                {n} 个
+                {n} 组
               </option>
             ))}
           </select>
@@ -443,6 +483,61 @@ export default function ProfitPanel({
           </Button>
         </div>
       </div>
+      {excludeTarget && (
+        <Dialog
+          open
+          onOpenChange={(open) => {
+            if (!open && !busy) setExcludeTarget(null);
+          }}
+        >
+          <DialogContent className='sm:max-w-md' showCloseButton={!busy}>
+            <DialogTitle>排除商品 · {excludeTarget.asin}</DialogTitle>
+            <DialogDescription>
+              保存人工排除结论后，该商品将从已保留商品和利润表中移除，测算记录仍保留。
+            </DialogDescription>
+            <form
+              className='space-y-4'
+              onSubmit={(event) => {
+                event.preventDefault();
+                if (busy || !excludeReason.trim()) return;
+                void act(async () => {
+                  await request('/products/' + excludeTarget.id + '/review', 'PATCH', {
+                    expected_review_revision: excludeTarget.review_revision,
+                    expected_data_revision: excludeTarget.data_revision,
+                    status: 'excluded',
+                    reason: excludeReason.trim(),
+                    note: excludeTarget.review_note || ''
+                  });
+                  setExcludeTarget(null);
+                }, '商品已排除');
+              }}
+            >
+              <Field label='排除原因'>
+                <Input
+                  required
+                  disabled={busy}
+                  value={excludeReason}
+                  onChange={(event) => setExcludeReason(event.target.value)}
+                />
+              </Field>
+              <div className='flex justify-end gap-2'>
+                <Button
+                  autoFocus
+                  type='button'
+                  variant='outline'
+                  disabled={busy}
+                  onClick={() => setExcludeTarget(null)}
+                >
+                  取消
+                </Button>
+                <Button type='submit' variant='destructive' disabled={busy}>
+                  {busy ? '保存中…' : '保存排除'}
+                </Button>
+              </div>
+            </form>
+          </DialogContent>
+        </Dialog>
+      )}
       {editor && editorDraft && (
         <Dialog
           open
@@ -490,6 +585,126 @@ export default function ProfitPanel({
   );
 }
 
+function ProfitFamilyRows({
+  product,
+  params,
+  drafts,
+  autosave,
+  shaded,
+  ...rowProps
+}: {
+  shaded: boolean;
+  product: ProfitTableProduct;
+  params: string;
+  drafts: Record<string, ProfitRowDraft>;
+  autosave: ReturnType<typeof useProfitAutosave>;
+  referralCategories: Array<{ id: string; label: string }>;
+  update: UpdateRow;
+  openEditor: (p: ProfitTableProduct) => void;
+  openExclude: (p: ProfitTableProduct) => void;
+  busy: boolean;
+}) {
+  const [open, setOpen] = useState(true),
+    [page, setPage] = useState(1);
+  const count = product.family_count ?? 1;
+  const query = new URLSearchParams(params);
+  query.delete('group_by_parent');
+  query.set('family_product_id', product.id);
+  query.set('page', String(page));
+  query.set('page_size', '100');
+  query.set('sort', '-monthly_sales');
+  const members = useScreeningQuery<PageResult<ProfitTableProduct>>(
+    open && count > 1 ? '/profit/products?' + query : null
+  );
+  const renderRow = (p: ProfitTableProduct, familyControl?: ReactNode) => (
+    <ProfitTableRow
+      key={p.id}
+      {...rowProps}
+      product={p}
+      draft={drafts[p.id]}
+      retry={() => autosave.retry(p.id)}
+      flush={() => autosave.flush(p.id)}
+      familyControl={familyControl}
+    />
+  );
+  return (
+    <tbody
+      data-profit-family={product.id}
+      aria-label={count > 1 ? '父体 ' + product.parent_asin + ' · ' + count + ' 个子体' : undefined}
+      className={cn(
+        '[&>tr>td]:border-border/50 [&>tr:first-child>td]:border-t [&>tr:first-child>td]:border-border',
+        shaded ? '[&>tr>td]:bg-muted' : '[&>tr>td]:bg-card'
+      )}
+    >
+      {renderRow(
+        product,
+        count > 1 ? (
+          <button
+            type='button'
+            aria-expanded={open}
+            className='inline-flex h-6 shrink-0 items-center gap-1 rounded px-1 text-[11px] hover:bg-muted focus-visible:outline-2 focus-visible:outline-primary'
+            onClick={() => setOpen(!open)}
+          >
+            <span aria-hidden='true'>{open ? '▾' : '▸'}</span>
+            {open ? '收起 ' : ''}
+            {count} 个子体
+          </button>
+        ) : undefined
+      )}
+      {open && members.data?.items.filter((p) => p.id !== product.id).map((p) => renderRow(p))}
+      {open &&
+        count > 1 &&
+        (members.isLoading || members.isError || (members.data?.total ?? 0) > 100) && (
+          <tr>
+            <td colSpan={columns.length} className='border-b p-2 text-left'>
+              {members.isLoading && <span role='status'>正在加载同父体子体…</span>}
+              {members.isError && (
+                <>
+                  <span role='alert' className='text-destructive'>
+                    {members.error.message}
+                  </span>
+                  <Button
+                    type='button'
+                    size='sm'
+                    variant='outline'
+                    onClick={() => members.refetch()}
+                  >
+                    重试
+                  </Button>
+                </>
+              )}
+              {(members.data?.total ?? 0) > 100 && (
+                <div className='flex items-center gap-2'>
+                  <Button
+                    type='button'
+                    size='sm'
+                    variant='outline'
+                    disabled={page <= 1 || members.isFetching}
+                    onClick={() => setPage(page - 1)}
+                  >
+                    上一页子体
+                  </Button>
+                  <span>
+                    {page} / {Math.ceil((members.data?.total ?? 0) / 100)}
+                  </span>
+                  <Button
+                    type='button'
+                    size='sm'
+                    variant='outline'
+                    disabled={page * 100 >= (members.data?.total ?? 0) || members.isFetching}
+                    onClick={() => setPage(page + 1)}
+                  >
+                    下一页子体
+                  </Button>
+                </div>
+              )}
+            </td>
+          </tr>
+        )}
+    </tbody>
+  );
+}
+
 const ProfitTableRow = memo(function ProfitTableRow({
   product: p,
   referralCategories,
@@ -498,8 +713,11 @@ const ProfitTableRow = memo(function ProfitTableRow({
   retry,
   flush,
   openEditor,
-  busy
+  openExclude,
+  busy,
+  familyControl
 }: {
+  familyControl?: ReactNode;
   product: ProfitTableProduct;
   referralCategories: Array<{ id: string; label: string }>;
   draft?: ProfitRowDraft;
@@ -507,6 +725,7 @@ const ProfitTableRow = memo(function ProfitTableRow({
   retry: () => void;
   flush: () => void;
   openEditor: (p: ProfitTableProduct) => void;
+  openExclude: (p: ProfitTableProduct) => void;
   busy: boolean;
 }) {
   const draft = cached || initialProfitDraft(p),
@@ -535,12 +754,16 @@ const ProfitTableRow = memo(function ProfitTableRow({
       p
     );
   };
+  const [editingSupplierInline, setEditingSupplierInline] = useState(false);
   const disabled = busy;
-  const field = (key: keyof ProfitInputs, label: string) => (
+  const field = (key: keyof ProfitInputs, label: string, emphasis = false) => (
     <Input
       aria-label={p.asin + ' ' + label}
       inputMode='decimal'
-      className='h-8 min-w-0 px-2 text-center text-xs'
+      className={cn(
+        'h-8 min-w-0 px-2 text-center text-xs tabular-nums',
+        emphasis && 'border-primary/30 bg-primary/5 font-semibold focus-visible:ring-primary/30'
+      )}
       disabled={disabled}
       value={String(
         key === 'storage_usd' && input.storage_mode === 'auto'
@@ -552,7 +775,7 @@ const ProfitTableRow = memo(function ProfitTableRow({
   );
   const output = draft.output,
     link = supplierLink(input.supplier_url);
-  const td = 'border-b p-2 align-middle';
+  const td = 'border-b px-2 py-2 align-middle tabular-nums';
   return (
     <tr
       data-profit-row={p.id}
@@ -571,7 +794,7 @@ const ProfitTableRow = memo(function ProfitTableRow({
               width={52}
               height={64}
               loading='lazy'
-              className='h-16 w-13 shrink-0 rounded border bg-white object-contain'
+              className='h-14 w-13 shrink-0 rounded border bg-white object-contain'
             />
           )}
           <div className='min-w-0'>
@@ -581,104 +804,175 @@ const ProfitTableRow = memo(function ProfitTableRow({
               rel='noreferrer'
               className='block focus-visible:outline-2'
             >
-              <BilingualProductTitle product={p} />
+              <BilingualProductTitle product={p} compact className='space-y-0.5 [&_p]:leading-4' />
             </a>
-            <p className='mt-1 text-[11px] text-muted-foreground'>
-              {p.asin} · 子体销量 {childSales(p)}
-            </p>
+            <div className='mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground'>
+              <span>
+                {p.asin} · 销量 {childSales(p)}
+              </span>
+              {familyControl}
+            </div>
           </div>
         </div>
       </td>
       <td className={cn(td, 'text-left space-y-1')}>
-        <div className='flex items-center gap-1'>
+        <div className='space-y-0.5 font-medium'>
           {field('sale_price_usd', '售价 USD')}
-          <span>USD</span>
+          <p className='text-center text-[10px] font-normal leading-3 text-muted-foreground'>USD</p>
         </div>
-        <p className='text-[11px] text-muted-foreground'>
-          {p.stat_month?.slice(0, 7) || '来源期未注明'} · 来源 ${p.price_usd ?? '—'}
-        </p>
-        <p className='font-medium'>商品规格</p>
-        <p className='break-words text-[11px] text-muted-foreground'>
-          {p.product_dimensions || p.product_dimensions_original || '—'} ·{' '}
+        <p
+          className='text-[11px] leading-4 text-muted-foreground'
+          title={'来源期：' + (p.stat_month?.slice(0, 7) || '未注明')}
+        >
+          商品：{p.product_dimensions || p.product_dimensions_original || '—'} ·{' '}
           {p.weight_g ? profitNumber(p.weight_g, 1) + ' g' : '—'}
         </p>
-        <p className='font-medium'>包装规格</p>
-        <p className='break-words text-[11px] text-muted-foreground'>
-          {p.package_dimensions || p.package_dimensions_original || '—'} ·{' '}
+        <p className='text-[11px] leading-4 text-muted-foreground'>
+          包装：{p.package_dimensions || p.package_dimensions_original || '—'} ·{' '}
           {p.package_weight_g ? profitNumber(p.package_weight_g, 1) + ' g' : '—'}
         </p>
       </td>
       <td className={td}>
         {field('fba_fee_usd', 'FBA USD')}
-        <p className='mt-1 text-[11px] text-muted-foreground'>USD / 单件</p>
+        <p className='mt-1 text-[10px] leading-3 text-muted-foreground'>USD</p>
       </td>
       <td className={td}>
-        {field('storage_usd', '仓租 USD')}
-        <Field label='预计在库天数'>{field('storage_days', '预计在库天数')}</Field>
-        <p className='mt-1 text-[11px] text-muted-foreground'>
-          {output?.storage_source === 'estimate'
-            ? '自动估算 · ' + output.storage_month
-            : output?.storage_source === 'import'
-              ? '来源金额'
-              : input.storage_mode === 'manual'
-                ? '手填'
-                : '待补充'}
-        </p>
-        {input.storage_mode === 'manual' && (
-          <Button
-            size='sm'
-            variant='ghost'
-            disabled={disabled}
-            onClick={() => set('storage_usd', null)}
+        <Popover
+          onOpenChange={(open) => {
+            if (!open) flush();
+          }}
+        >
+          <PopoverTrigger
+            className='inline-flex min-h-8 w-full items-center justify-center rounded border border-transparent px-1 font-medium underline decoration-dotted underline-offset-4 hover:border-border hover:bg-muted focus-visible:outline-2 focus-visible:outline-primary'
+            aria-label={p.asin + ' 仓租设置'}
+            title='点击设置仓租与预计在库天数'
           >
-            恢复自动
-          </Button>
-        )}
-        <p className='mt-1 text-[11px] text-muted-foreground'>USD / 单件</p>
+            {profitNumber(output?.storage_usd ?? input.storage_usd)}
+          </PopoverTrigger>
+          <PopoverContent
+            className='w-64 space-y-2 p-3'
+            onBlur={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget)) flush();
+            }}
+          >
+            <PopoverTitle>仓租设置 · {p.asin}</PopoverTitle>
+            <Field label='仓租 USD / 单件'>{field('storage_usd', '仓租 USD')}</Field>
+            <Field label='预计在库天数'>{field('storage_days', '预计在库天数')}</Field>
+            <p className='text-xs text-muted-foreground'>
+              {output?.storage_source === 'estimate'
+                ? '自动估算 · ' + output.storage_month
+                : output?.storage_source === 'import'
+                  ? '来源金额'
+                  : input.storage_mode === 'manual'
+                    ? '手填金额'
+                    : '待补充'}
+            </p>
+            {input.storage_mode === 'manual' && (
+              <Button
+                type='button'
+                size='sm'
+                variant='outline'
+                disabled={disabled}
+                onClick={() => set('storage_usd', null)}
+              >
+                恢复自动估算
+              </Button>
+            )}
+          </PopoverContent>
+        </Popover>
+        <p className='text-[10px] leading-3 text-muted-foreground'>USD</p>
       </td>
-      <td className={td}>
+      <td
+        className={td}
+        title={'包装长 × 宽 × 高 ÷ ' + (input.volumetric_divisor_cm3_per_kg || '待填写')}
+      >
         {weight(output?.volumetric_weight_kg)}
-        <p className='mt-1 break-words text-[11px] text-muted-foreground'>
-          长 × 宽 × 高<br />
-          {input.volumetric_divisor_cm3_per_kg
-            ? '÷ ' + input.volumetric_divisor_cm3_per_kg
-            : '分母待填写'}
-        </p>
       </td>
-      <td className={td}>
+      <td className={td} title='包装实重与体积重取大'>
         {weight(output?.billable_weight_kg)}
-        <p className='mt-1 text-[11px] text-muted-foreground'>
-          包装实重与
-          <br />
-          体积重取大
-        </p>
       </td>
       <td className={td}>
         {field('freight_rate_cny_per_kg', '头程单价 CNY/kg')}
-        <p className='mt-1 text-[11px] text-muted-foreground'>CNY/kg</p>
+        <p className='mt-1 text-[10px] leading-3 text-muted-foreground'>CNY/kg</p>
       </td>
       <td className={td}>
         {profitNumber(output?.freight_cny ?? input.freight_cny)}
-        <p className='mt-1 text-[11px] text-muted-foreground'>CNY</p>
+        <p className='mt-1 text-[10px] leading-3 text-muted-foreground'>CNY</p>
       </td>
       <td className={td}>
         {field('purchase_cny', '供货价 CNY')}
-        <p className='mt-1 text-[11px] text-muted-foreground'>CNY / 单件</p>
+        <p className='mt-1 text-[10px] leading-3 text-muted-foreground'>CNY</p>
       </td>
       <td className={cn(td, 'text-left')}>
-        <Input
-          aria-label={p.asin + ' 供应商链接'}
-          type='url'
-          className='h-8 min-w-0 px-2 text-xs'
-          disabled={disabled}
-          value={input.supplier_url || ''}
-          onChange={(e) => set('supplier_url', e.target.value)}
-        />
-        {link && (
-          <a href={link} target='_blank' rel='noreferrer' className='mt-1 inline-block underline'>
-            打开链接
-          </a>
-        )}
+        {/* Reserve the same 1rem helper line as the adjacent currency fields. */}
+        <div className='pb-4'>
+          {!link || editingSupplierInline ? (
+            <Input
+              aria-label={p.asin + ' 供应商链接'}
+              type='url'
+              autoCapitalize='none'
+              autoCorrect='off'
+              spellCheck={false}
+              className='h-8 min-w-0 px-2 text-xs'
+              placeholder='粘贴供应商链接'
+              disabled={disabled}
+              value={input.supplier_url || ''}
+              onFocus={() => setEditingSupplierInline(true)}
+              onChange={(e) => set('supplier_url', e.target.value)}
+              onBlur={() => {
+                setEditingSupplierInline(false);
+                flush();
+              }}
+            />
+          ) : (
+            <div className='flex flex-wrap items-center gap-x-2 gap-y-1 text-xs'>
+              {link ? (
+                <a
+                  href={link}
+                  target='_blank'
+                  rel='noreferrer'
+                  className='underline underline-offset-2'
+                >
+                  查看供应商
+                </a>
+              ) : (
+                <span className='text-muted-foreground'>未填写</span>
+              )}
+              <Popover
+                onOpenChange={(open) => {
+                  if (!open) flush();
+                }}
+              >
+                <PopoverTrigger
+                  className='min-h-8 rounded px-1 text-xs text-muted-foreground underline underline-offset-2 hover:bg-muted focus-visible:outline-2 focus-visible:outline-primary'
+                  aria-label={p.asin + ' 编辑供应商链接'}
+                >
+                  编辑
+                </PopoverTrigger>
+                <PopoverContent
+                  className='w-80 max-w-[calc(100vw-2rem)] space-y-2 p-3'
+                  onBlur={(event) => {
+                    if (!event.currentTarget.contains(event.relatedTarget)) flush();
+                  }}
+                >
+                  <PopoverTitle>供应商链接 · {p.asin}</PopoverTitle>
+                  <Field label='供应商链接'>
+                    <Input
+                      aria-label={p.asin + ' 供应商链接'}
+                      type='url'
+                      className='h-9 min-w-0 px-2 text-xs'
+                      placeholder='粘贴供应商商品链接'
+                      disabled={disabled}
+                      value={input.supplier_url || ''}
+                      onChange={(e) => set('supplier_url', e.target.value)}
+                    />
+                  </Field>
+                  <p className='text-xs text-muted-foreground'>输入后自动保存</p>
+                </PopoverContent>
+              </Popover>
+            </div>
+          )}
+        </div>
       </td>
       <td className={td}>
         <label className='sr-only' htmlFor={'commission-category-' + p.id}>
@@ -711,9 +1005,9 @@ const ProfitTableRow = memo(function ProfitTableRow({
         />
         <p className='mt-1 text-[11px] text-muted-foreground'>
           {input.commission_mode === 'manual'
-            ? '手填 %'
+            ? '手填'
             : output?.commission_source === 'auto'
-              ? '自动 %'
+              ? '自动'
               : '待匹配'}
         </p>
         {input.commission_mode === 'manual' && (
@@ -729,7 +1023,7 @@ const ProfitTableRow = memo(function ProfitTableRow({
       </td>
       <td className={td}>
         {profitNumber(output?.commission_usd)}
-        <p className='mt-1 text-[11px] text-muted-foreground'>USD</p>
+        <p className='mt-1 text-[10px] leading-3 text-muted-foreground'>USD</p>
       </td>
       <td
         className={cn(
@@ -737,25 +1031,27 @@ const ProfitTableRow = memo(function ProfitTableRow({
           output?.state === 'complete' && Number(output.profit_cny) < 0 ? 'text-destructive' : ''
         )}
       >
-        <p className='font-semibold'>
-          {output?.state === 'complete' ? profitNumber(output.profit_cny) + ' CNY' : '待补充'}
-        </p>
-        <p className='mt-1 text-[11px] text-muted-foreground'>汇率 {input.fx_cny_per_usd || '—'}</p>
-        {output?.state !== 'complete' && (
+        {output?.state === 'complete' ? (
+          <p className='text-sm font-semibold' title={'汇率：' + (input.fx_cny_per_usd || '—')}>
+            {profitNumber(output.profit_cny)}
+          </p>
+        ) : (
           <button
             type='button'
-            className='mt-1 text-[11px] underline'
+            className='text-[11px] font-medium underline underline-offset-2'
             onClick={() => openEditor(p)}
+            title={
+              output?.missing?.map((key) => profitFieldLabels[key] || key).join('、') || '测算参数'
+            }
           >
-            {output?.missing
-              ?.map((key) => profitFieldLabels[key] || key)
-              .slice(0, 3)
-              .join('、') || '测算参数'}
-            {(output?.missing?.length || 0) > 3 ? '等' : ''}
+            {output?.missing?.length === 1 && output.missing[0] === 'purchase_cny'
+              ? '待填写供货价'
+              : '待补充参数'}
           </button>
         )}
+        <p className='mt-1 text-[10px] leading-3 text-muted-foreground'>CNY</p>
       </td>
-      <td className={cn(td, 'font-semibold')}>
+      <td className={cn(td, 'text-sm font-semibold')}>
         {output?.state === 'complete' && output.margin !== undefined
           ? profitNumber(Number(output.margin) * 100) + '%'
           : '—'}
@@ -765,10 +1061,21 @@ const ProfitTableRow = memo(function ProfitTableRow({
           <span
             role='status'
             className={cn(
-              'text-[11px]',
+              'inline-flex items-center gap-1 text-[10px]',
               draft.saveState === 'failed' ? 'text-destructive' : 'text-muted-foreground'
             )}
           >
+            <span
+              aria-hidden='true'
+              className={cn(
+                'size-1.5 rounded-full',
+                draft.saveState === 'failed'
+                  ? 'bg-destructive'
+                  : draft.dirty
+                    ? 'bg-amber-500'
+                    : 'bg-emerald-500'
+              )}
+            />
             {draft.saveState === 'saving'
               ? '保存中…'
               : draft.saveState === 'failed'
@@ -787,10 +1094,21 @@ const ProfitTableRow = memo(function ProfitTableRow({
           <Button
             size='sm'
             variant='ghost'
+            className='h-6 px-1 text-[11px] text-muted-foreground'
             disabled={disabled || draft.dirty}
             onClick={() => openEditor(p)}
           >
             参数 / 历史
+          </Button>
+          <Button
+            type='button'
+            size='sm'
+            variant='ghost'
+            className='h-6 px-1 text-[11px] text-destructive hover:text-destructive'
+            disabled={disabled || draft.dirty || draft.saveState === 'saving'}
+            onClick={() => openExclude(p)}
+          >
+            排除
           </Button>
         </div>
         {p.scenario_stale && <p className='mt-1 text-[11px] text-amber-700'>来源已更新</p>}

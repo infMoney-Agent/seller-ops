@@ -1,3 +1,4 @@
+import { v4 as randomUUID } from 'uuid';
 const base = '/api/ecom/screening';
 export function workspaceHeader(): Record<string, string> {
   const workspace =
@@ -25,7 +26,7 @@ export async function request<T>(
         ? { 'X-Seller-Workspace': writeOptions.workspaceId }
         : {}),
       ...(method !== 'GET'
-        ? { 'Idempotency-Key': writeOptions?.idempotencyKey || crypto.randomUUID() }
+        ? { 'Idempotency-Key': writeOptions?.idempotencyKey || randomUUID() }
         : {}),
       ...(body && !upload ? { 'Content-Type': 'application/json' } : {})
     }

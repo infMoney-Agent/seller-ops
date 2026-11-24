@@ -42,3 +42,39 @@ CREATE TABLE IF NOT EXISTS products (
     updated_at timestamptz NOT NULL DEFAULT now(),
     PRIMARY KEY (tenant_id, id)
 );
+
+-- A signed-in account belongs to at most one company.
+CREATE UNIQUE INDEX IF NOT EXISTS memberships_one_company_per_user ON memberships(user_id);
+
+-- Stable identity organization mappings; display names are never authorization keys.
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS casdoor_org text;
+CREATE UNIQUE INDEX IF NOT EXISTS tenants_casdoor_org ON tenants(casdoor_org) WHERE casdoor_org IS NOT NULL;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS casdoor_org text NOT NULL DEFAULT '';
+
+CREATE TABLE IF NOT EXISTS auth_login_flows (
+    token_hash bytea PRIMARY KEY,
+    payload jsonb NOT NULL,
+    submitting boolean NOT NULL DEFAULT false,
+    expires_at timestamptz NOT NULL
+);
+CREATE INDEX IF NOT EXISTS auth_login_flows_expiry ON auth_login_flows(expires_at);
+
+CREATE TABLE IF NOT EXISTS registration_flows (
+ token_hash bytea PRIMARY KEY, csrf text NOT NULL,
+ mode text NOT NULL DEFAULT 'create' CHECK(mode IN ('create','join','invite')),
+ invitation_hash bytea, target_tenant bigint REFERENCES tenants,
+ payload jsonb NOT NULL DEFAULT '{}', result jsonb,
+ state text NOT NULL DEFAULT 'editing' CHECK(state IN ('editing','working','done','cleanup_required')),
+ error text NOT NULL DEFAULT '', expires_at timestamptz NOT NULL,
+ updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS registration_flows_expiry ON registration_flows(expires_at);
+CREATE TABLE IF NOT EXISTS company_join_requests (
+ id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+ tenant_id bigint NOT NULL REFERENCES tenants,
+ user_id bigint NOT NULL UNIQUE REFERENCES users,
+ state text NOT NULL DEFAULT 'pending' CHECK(state IN ('pending','approved','rejected')),
+ note text NOT NULL DEFAULT '', decided_by bigint REFERENCES users,
+ created_at timestamptz NOT NULL DEFAULT now(), decided_at timestamptz
+);
+CREATE INDEX IF NOT EXISTS company_pending_requests ON company_join_requests(tenant_id,state,created_at);
