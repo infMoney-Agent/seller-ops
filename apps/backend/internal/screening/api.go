@@ -61,6 +61,10 @@ func (s *service) route(w http.ResponseWriter, r *http.Request) (any, error) {
 		switch path {
 		case "products":
 			return s.products(r)
+		case "profit/products":
+			return s.profitProducts(r)
+		case "trademark-options":
+			return s.trademarkOptions(r)
 		case "summary":
 			return s.summary(r)
 		case "imports":
@@ -236,5 +240,5 @@ func (s *service) productView(ctx context.Context, a identity, id string) (Objec
 	q := newProductQuery(a, nil)
 	q.where += " AND p.id=$2::uuid"
 	q.args = append(q.args, id)
-	return s.one(ctx, "SELECT "+productProjection+" FROM ps_products p "+q.joins+" WHERE "+q.where, q.args...)
+	return s.one(ctx, "SELECT "+productProjection+"||"+profitSourceProjection+" FROM ps_products p "+q.joins+" WHERE "+q.where, q.args...)
 }

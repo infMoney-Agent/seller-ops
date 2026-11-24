@@ -34,6 +34,8 @@ func (s *service) reviewWorkspace(r *http.Request) (any, error) {
 	if e != nil {
 		return nil, e
 	}
+	// Excluded products remain available as samples, not review candidates.
+	q.where += " AND p.review_status<>'excluded'"
 	expanded := v.Get("family_product_id") != ""
 	if expanded {
 		id := v.Get("family_product_id")
@@ -52,7 +54,7 @@ func (s *service) reviewWorkspace(r *http.Request) (any, error) {
 			q.where += fmt.Sprintf(" AND p.parent_asin=$%d AND p.marketplace=$%d", len(q.args)-1, len(q.args))
 		}
 	}
-	counts, e := s.one(ctx, "SELECT jsonb_build_object('products',count(*),'families',count(DISTINCT "+parentFamilySQL+"),'pending',count(*) FILTER(WHERE p.review_status='pending')) FROM ps_products p "+filterJoins(q, false)+" WHERE "+q.where, q.args...)
+	counts, e := s.one(ctx, "SELECT jsonb_build_object('products',count(*),'families',count(DISTINCT "+parentFamilySQL+"),'pending',count(DISTINCT "+parentFamilySQL+") FILTER(WHERE p.review_status='pending'),'pending_products',count(*) FILTER(WHERE p.review_status='pending')) FROM ps_products p "+filterJoins(q, false)+" WHERE "+q.where, q.args...)
 	if e != nil {
 		return nil, e
 	}
@@ -110,6 +112,11 @@ func (s *service) reviewWorkspace(r *http.Request) (any, error) {
 	if e != nil {
 		return nil, e
 	}
+	if !expanded {
+		if e = s.loadReviewFamilies(ctx, q, items); e != nil {
+			return nil, e
+		}
+	}
 	sampleArgs := append(append([]any{}, sq.args...), 50, (sp-1)*50)
 	samples, e := s.query(ctx, "SELECT "+productProjection+" FROM ps_products p "+sq.joins+" WHERE "+sq.where+fmt.Sprintf(" ORDER BY p.reviewed_at DESC NULLS LAST,p.id LIMIT $%d OFFSET $%d", len(sampleArgs)-1, len(sampleArgs)), sampleArgs...)
 	if e != nil {
@@ -117,7 +124,7 @@ func (s *service) reviewWorkspace(r *http.Request) (any, error) {
 	}
 	var group any
 	if total > 0 {
-		group = Object{"id": shaDigest(encoded(path)), "title": title, "marketplace": "US", "products": total, "display_products": displayed, "pending": counts["pending"], "reviewed": total - integer(counts["pending"]), "samples": sampleCount}
+		group = Object{"id": shaDigest(encoded(path)), "title": title, "marketplace": "US", "products": total, "display_products": displayed, "pending": counts["pending"], "reviewed": total - integer(counts["pending_products"]), "samples": sampleCount}
 	}
 	counts["groups"] = 0
 	if total > 0 {

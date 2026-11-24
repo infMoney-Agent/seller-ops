@@ -8,6 +8,7 @@ import { requireSession } from '@/lib/backend';
 import { SellerSessionProvider } from '@/features/auth/session';
 import type { Metadata } from 'next';
 import { cookies } from 'next/headers';
+import { redirect } from 'next/navigation';
 
 export const metadata: Metadata = {
   title: '运营总览',
@@ -21,6 +22,7 @@ export const metadata: Metadata = {
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   // Gate the whole /dashboard segment: redirect to sign-in when signed out.
   const session = await requireSession();
+  if (!session.workspaceId) redirect('/company-required');
   // Persisting the sidebar state in the cookie.
   const cookieStore = await cookies();
   const defaultOpen = cookieStore.get('sidebar_state')?.value !== 'false';

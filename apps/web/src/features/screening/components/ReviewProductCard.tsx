@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils';
 import type { Product } from '../types';
 import { childSales } from '../sales';
 import { Badge, formatMoney } from './shared';
+import BilingualProductTitle from './BilingualProductTitle';
 
 function size(p: Product, packaging = false) {
   const dimensions = packaging
@@ -90,9 +91,7 @@ export default function ReviewProductCard({
               {asinActions}
               <Badge value={p.review_status} />
             </div>
-            <p className='line-clamp-2 break-words text-sm leading-5' title={p.title_zh || p.title}>
-              {p.title_zh || p.title}
-            </p>
+            <BilingualProductTitle product={p} />
             <p className='break-words text-xs text-muted-foreground'>
               父体：{p.parent_asin || '—'}
               {p.stat_month ? ' · ' + p.stat_month : ''}
@@ -202,17 +201,7 @@ export default function ReviewProductCard({
             </h4>
             {!onCheck && <Badge value={p.review_status} />}
           </div>
-          <p
-            className={cn(
-              'break-words leading-relaxed',
-              compact ? 'line-clamp-3 text-xs' : 'text-sm font-medium'
-            )}
-          >
-            {p.title_zh || p.title}
-          </p>
-          {!compact && p.title_zh && (
-            <p className='text-xs leading-relaxed text-muted-foreground'>{p.title}</p>
-          )}
+          <BilingualProductTitle product={p} compact={compact} />
           {!compact && (
             <dl className='grid grid-cols-2 gap-x-4 gap-y-2 text-xs @xl/card:grid-cols-3'>
               {(

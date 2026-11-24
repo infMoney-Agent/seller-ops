@@ -73,6 +73,11 @@ func newProductQuery(a identity, values url.Values) productQuery {
 			}
 		}
 	}
+	if v := values.Get("trademark"); v == "pending" {
+		q.where += " AND (" + trademarkClassSQL + "='' OR strpos(" + trademarkClassSQL + ", '待核实')>0)"
+	} else if v != "" {
+		q.where += " AND strpos(" + trademarkClassSQL + "," + add("第"+v+"类") + ")>0"
+	}
 	if v := values.Get("q"); v != "" {
 		bind := add("%" + v + "%")
 		q.where += " AND (p.asin ILIKE " + bind + " OR p.title ILIKE " + bind + ")"
@@ -127,12 +132,12 @@ func (s *service) products(r *http.Request) (any, error) {
 		field = strings.TrimPrefix(field, "-")
 		direction = "DESC"
 	}
-	column := map[string]string{"price_usd": "m.price_usd", "monthly_sales": displayChildSalesSQL, "rating": "m.rating", "updated_at": "p.updated_at", "asin": "p.asin", "profit_usd": "(q.output->>'profit_usd')::numeric"}[field]
+	column := map[string]string{"price_usd": "m.price_usd", "monthly_sales": displayChildSalesSQL, "rating": "m.rating", "updated_at": "p.updated_at", "asin": "p.asin", "profit_usd": "(q.output->>'profit_usd')::numeric", "margin": "(q.output->>'margin')::numeric"}[field]
 	if column == "" {
 		return nil, fail(422, "不支持的排序字段")
 	}
 	candidateJoins := filterJoins(q, true)
-	if field == "profit_usd" {
+	if field == "profit_usd" || field == "margin" {
 		candidateJoins = q.sets + profitJoin
 	}
 	sql := "WITH candidates AS (SELECT " + column + " AS sort_value,p.id,row_number() OVER(PARTITION BY " + group + " ORDER BY " + familyRankSQL + ") AS group_rank FROM ps_products p " + candidateJoins + " WHERE " + q.where + "), selected AS (SELECT id,sort_value FROM candidates"
@@ -140,7 +145,7 @@ func (s *service) products(r *http.Request) (any, error) {
 		sql += " WHERE group_rank=1"
 	}
 	q.args = append(q.args, n, (p-1)*n)
-	sql += fmt.Sprintf(" ORDER BY sort_value %s NULLS LAST,id LIMIT $%d OFFSET $%d) SELECT ", direction, len(q.args)-1, len(q.args)) + productProjection + "||jsonb_build_object('family_count',CASE WHEN NULLIF(p.parent_asin,'') IS NULL THEN 1 ELSE (SELECT count(*) FROM ps_products sibling WHERE sibling.tenant_id=p.tenant_id AND sibling.archived_at IS NULL AND sibling.marketplace=p.marketplace AND sibling.parent_asin=p.parent_asin) END,'family_sales_pending',EXISTS(SELECT 1 FROM ps_products sibling LEFT JOIN ps_product_monthly sm ON sm.tenant_id=sibling.tenant_id AND sm.id=sibling.current_monthly_id WHERE sibling.tenant_id=p.tenant_id AND sibling.marketplace=p.marketplace AND sibling.parent_asin=p.parent_asin AND (sm.sales_scope IS DISTINCT FROM 'child' OR sm.monthly_sales IS NULL)))" + " FROM selected JOIN ps_products p ON p.tenant_id=$1 AND p.id=selected.id " + q.joins + " ORDER BY selected.sort_value " + direction + " NULLS LAST,p.id"
+	sql += fmt.Sprintf(" ORDER BY sort_value %s NULLS LAST,id LIMIT $%d OFFSET $%d) SELECT ", direction, len(q.args)-1, len(q.args)) + productProjection + "||jsonb_build_object('family_count',CASE WHEN NULLIF(p.parent_asin,'') IS NULL THEN 1 ELSE (SELECT count(*) FROM ps_products sibling WHERE sibling.tenant_id=p.tenant_id AND sibling.archived_at IS NULL AND sibling.marketplace=p.marketplace AND sibling.parent_asin=p.parent_asin) END,'family_member_ids',CASE WHEN NULLIF(p.parent_asin,'') IS NULL THEN ARRAY[p.id::text] ELSE (SELECT COALESCE(array_agg(sibling.id::text ORDER BY sibling.id),ARRAY[]::text[]) FROM ps_products sibling WHERE sibling.tenant_id=p.tenant_id AND sibling.archived_at IS NULL AND sibling.marketplace=p.marketplace AND sibling.parent_asin=p.parent_asin) END,'family_sales_pending',EXISTS(SELECT 1 FROM ps_products sibling LEFT JOIN ps_product_monthly sm ON sm.tenant_id=sibling.tenant_id AND sm.id=sibling.current_monthly_id WHERE sibling.tenant_id=p.tenant_id AND sibling.marketplace=p.marketplace AND sibling.parent_asin=p.parent_asin AND (sm.sales_scope IS DISTINCT FROM 'child' OR sm.monthly_sales IS NULL)))" + " FROM selected JOIN ps_products p ON p.tenant_id=$1 AND p.id=selected.id " + q.joins + " ORDER BY selected.sort_value " + direction + " NULLS LAST,p.id"
 	items, e := s.query(r.Context(), sql, q.args...)
 	// List clients use the public aliases. Keep full machine evidence on detail responses.
 	for _, item := range items {

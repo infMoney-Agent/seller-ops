@@ -126,7 +126,7 @@ func (s *service) mutateProduct(ctx context.Context, a identity, id, action stri
 var decimalPattern = regexp.MustCompile(`^[0-9]{1,12}(\.[0-9]{1,6})?$`)
 
 func (s *service) calculateRequest(ctx context.Context, a identity, b Object) (any, error) {
-	p, e := s.product(ctx, a, str(b["product_id"]))
+	p, e := s.one(ctx, "SELECT to_jsonb(p)||"+profitSourceProjection+" FROM ps_products p WHERE tenant_id=$1 AND id=$2::uuid AND archived_at IS NULL", a.Tenant, str(b["product_id"]))
 	if e != nil {
 		return nil, e
 	}
@@ -146,7 +146,7 @@ func (s *service) calculateRequest(ctx context.Context, a identity, b Object) (a
 		if !ok {
 			return nil, fail(422, "方案无效")
 		}
-		out, e := calculate(in)
+		out, e := calculateProductProfit(in, p)
 		if e != nil {
 			return nil, fail(422, e.Error())
 		}
@@ -185,7 +185,7 @@ func (s *service) saveProfit(ctx context.Context, a identity, id string, b Objec
 		return previous, e
 	}
 	var raw []byte
-	if e = tx.QueryRow(ctx, "SELECT to_jsonb(p) FROM ps_products p WHERE tenant_id=$1 AND id=$2::uuid FOR SHARE", a.Tenant, id).Scan(&raw); e != nil {
+	if e = tx.QueryRow(ctx, "SELECT to_jsonb(p)||"+profitSourceProjection+" FROM ps_products p WHERE tenant_id=$1 AND id=$2::uuid FOR SHARE", a.Tenant, id).Scan(&raw); e != nil {
 		return nil, e
 	}
 	p := decodeObject(raw)
@@ -196,7 +196,7 @@ func (s *service) saveProfit(ctx context.Context, a identity, id string, b Objec
 	if !ok {
 		return nil, fail(422, "测算输入无效")
 	}
-	out, e := calculate(in)
+	out, e := calculateProductProfit(in, p)
 	if e != nil {
 		return nil, fail(422, e.Error())
 	}

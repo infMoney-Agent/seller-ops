@@ -30,7 +30,13 @@ func checkBrowserGuidance(t *testing.T, ctx context.Context, base string) {
 		run(chromedp.Focus(selector, chromedp.ByQuery), chromedp.KeyEvent("a", chromedp.KeyModifiers(input.ModifierCtrl)), chromedp.KeyEvent(kb.Backspace), chromedp.SendKeys(selector, value, chromedp.ByQuery))
 	}
 	run(
+		chromedp.KeyEvent(kb.Escape),
+		chromedp.KeyEvent(kb.Escape),
+		chromedp.Poll("document.querySelectorAll('[data-slot=dialog-content][data-open]').length===0", nil),
 		chromedp.Evaluate("(()=>{const popup=document.querySelector('[data-slot=popover-content]');if(popup)[...popup.querySelectorAll('button')].find(b=>b.textContent.trim()==='关闭').click();const area=document.querySelector('[data-screening-table]');if(area.tabIndex!==0||area.getAttribute('role')!=='region'||!area.getAttribute('aria-label')||!area.querySelector('caption'))throw Error('Named keyboard table region missing');const row=[...document.querySelectorAll('tbody tr')].find(r=>r.textContent.includes('BROWSER001'));[...row.querySelectorAll('button')].find(b=>b.textContent.trim()==='测算').click()})()", nil),
+		chromedp.WaitVisible("[data-profit-table-panel]", chromedp.ByQuery),
+		chromedp.Poll("[...document.querySelectorAll('tr[data-profit-row]')].some(r=>r.textContent.includes('BROWSER001')&&[...r.querySelectorAll('button')].some(b=>b.textContent.trim()==='参数 / 历史'&&!b.disabled))", nil),
+		chromedp.Evaluate("(()=>{const row=[...document.querySelectorAll('tr[data-profit-row]')].find(r=>r.textContent.includes('BROWSER001'));[...row.querySelectorAll('button')].find(b=>b.textContent.trim()==='参数 / 历史').click()})()", nil),
 		chromedp.WaitVisible("form[aria-label='利润测算方案']", chromedp.ByQuery),
 	)
 	run(chromedp.Poll("(async()=>{const r=await fetch('/api/ecom/screening/products?show_merged=false&page=1');if(r.headers.get('content-encoding')!=='gzip'||!r.headers.get('server-timing')?.includes('auth;dur='))throw Error('Compressed list or server timing missing');const data=await r.json();return data.items.length>0})()", nil))

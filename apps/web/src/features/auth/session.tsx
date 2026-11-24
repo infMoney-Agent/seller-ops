@@ -7,6 +7,7 @@ export type SellerSession = {
   id: number;
   name: string;
   email: string;
+  emailVerified?: boolean;
   workspaceId: number;
   role: Role | '';
 };
@@ -44,6 +45,8 @@ const accountErrors: Record<string, string> = {
   'invalid email': '邮箱地址无效。',
   'invitation not found': '未找到邀请。',
   'invitation unavailable': '此邀请已失效，或与当前登录邮箱不匹配。',
+  'email verification required': '请先在账号服务完成邮箱验证，再接受邀请。',
+  'account belongs to another company': '当前账号已绑定其他公司，无法接受此邀请。',
   'invalid request origin': '请求来源无效。',
   'invalid request': '请求参数无效。'
 };

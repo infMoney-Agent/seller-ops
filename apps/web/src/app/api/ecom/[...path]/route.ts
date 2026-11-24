@@ -1,5 +1,5 @@
 import { createHmac } from 'node:crypto';
-import { backendURL } from '@/lib/backend';
+import { backendURL, isAllowedAppOrigin } from '@/lib/backend';
 import type { SellerSession } from '@/features/auth/session';
 
 const allowed = new Map([
@@ -30,8 +30,7 @@ async function proxy(request: Request, { params }: { params: Promise<{ path: str
     return Response.json({ detail: '电商接口不存在。' }, { status: 404 });
   }
   const url = new URL(request.url);
-  const appOrigin = process.env.SELLER_APP_ORIGIN || url.origin;
-  if (request.method !== 'GET' && request.headers.get('origin') !== appOrigin) {
+  if (request.method !== 'GET' && !isAllowedAppOrigin(request)) {
     return Response.json({ detail: '请求来源无效。' }, { status: 403 });
   }
 
@@ -48,6 +47,13 @@ async function proxy(request: Request, { params }: { params: Promise<{ path: str
     if (!auth.ok) throw new Error('Session check failed');
     const session: SellerSession = await auth.json();
     if (!Number.isSafeInteger(session.id) || session.id <= 0) throw new Error('Invalid session');
+    if (
+      !Number.isSafeInteger(session.workspaceId) ||
+      session.workspaceId <= 0 ||
+      !['owner', 'member'].includes(session.role)
+    ) {
+      return Response.json({ detail: '请先通过邀请加入公司。' }, { status: 403 });
+    }
 
     let body: Uint8Array<ArrayBuffer> | undefined;
     if (request.body) {
@@ -74,10 +80,13 @@ async function proxy(request: Request, { params }: { params: Promise<{ path: str
     );
     target.search = url.search;
     const secret = process.env.ECOM_INTERNAL_SECRET || '';
-    if (secret.length < 32) return Response.json({ detail: '电商服务签名尚未配置。' }, { status: 503 });
+    if (secret.length < 32)
+      return Response.json({ detail: '电商服务签名尚未配置。' }, { status: 503 });
     const stamp = String(Math.floor(Date.now() / 1000));
     const internalSignature = createHmac('sha256', secret)
-      .update([stamp, request.method, target.pathname + target.search, String(session.id)].join('\n'))
+      .update(
+        [stamp, request.method, target.pathname + target.search, String(session.id)].join('\n')
+      )
       .digest('hex');
     const response = await fetch(target, {
       method: request.method,

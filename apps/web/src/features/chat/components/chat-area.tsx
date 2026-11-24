@@ -29,6 +29,7 @@ export function ChatArea({
   const shouldReduceMotion = useReducedMotion();
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const liveRegionRef = useRef<HTMLDivElement | null>(null);
+  const messageCount = conversation.messages.length;
 
   useEffect(() => {
     if (!messagesContainerRef.current) return;
@@ -36,7 +37,7 @@ export function ChatArea({
     const behavior = shouldReduceMotion ? 'auto' : 'smooth';
 
     const scrollToBottom = () => {
-      container.scrollTo({ top: container.scrollHeight, behavior });
+      container.scrollTo({ top: messageCount > 0 ? container.scrollHeight : 0, behavior });
     };
 
     if (behavior === 'smooth') {
@@ -44,7 +45,7 @@ export function ChatArea({
     } else {
       scrollToBottom();
     }
-  }, [conversation.messages, conversation.id, shouldReduceMotion]);
+  }, [messageCount, shouldReduceMotion]);
 
   useEffect(() => {
     if (!liveRegionRef.current) return;

@@ -27,10 +27,10 @@ export default function ImportDialog({
   const dialog = useRef<HTMLDialogElement>(null);
   const title = useId();
   const description = useId();
-  const [started, setStarted] = useState(false);
+  const [started, setStarted] = useState(open);
+  if (open && !started) setStarted(true);
   useEffect(() => {
     if (open) {
-      setStarted(true);
       if (!dialog.current?.open) dialog.current?.showModal();
     } else if (dialog.current?.open) {
       dialog.current.close();

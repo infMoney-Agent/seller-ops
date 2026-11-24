@@ -244,6 +244,7 @@ export function useDataTable<TData>(props: UseDataTableProps<TData>) {
     [debouncedSetFilterValues, filterableColumns, enableAdvancedFilter]
   );
 
+  // oxlint-disable-next-line react/incompatible-library -- TanStack Table intentionally returns functions React Compiler cannot memoize.
   const table = useReactTable({
     ...tableProps,
     columns,

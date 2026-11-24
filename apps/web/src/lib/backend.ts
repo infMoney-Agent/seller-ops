@@ -22,3 +22,11 @@ export async function backendFetch<T>(path: string): Promise<T> {
 export function requireSession() {
   return backendFetch<SellerSession>('/api/auth/session');
 }
+
+export function isAllowedAppOrigin(request: Request) {
+  const origins = (process.env.SELLER_APP_ORIGIN || new URL(request.url).origin)
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+  return origins.includes(request.headers.get('origin') || '');
+}

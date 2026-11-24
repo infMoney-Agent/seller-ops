@@ -27,6 +27,7 @@ func (s *server) registerBusiness(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/invitations", s.invitations)
 	mux.HandleFunc("DELETE /api/invitations/{id}", s.invitations)
 	mux.HandleFunc("POST /api/invitations/accept", s.accept)
+	mux.HandleFunc("POST /api/invitations/inspect", s.inspectInvitation)
 }
 
 func (s *server) workspace(w http.ResponseWriter, r *http.Request, owner bool) (auth.Principal, bool) {
@@ -383,30 +384,18 @@ func (s *server) invitations(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *server) accept(w http.ResponseWriter, r *http.Request) {
-	a, ok := s.auth.Authenticate(w, r)
-	if !ok {
-		return
-	}
-	var input struct {
-		Token string `json:"token"`
-	}
+func (s *server) inspectInvitation(w http.ResponseWriter, r *http.Request) {
+	var input struct{ Token string }
 	if !decode(w, r, &input) {
 		return
 	}
-	var tenant int64
-	err := s.db.QueryRow(r.Context(), `WITH active_session AS (
-  SELECT token_hash FROM sessions WHERE token_hash=$3 AND user_id=$2 AND expires_at>now() FOR UPDATE
- ), claimed AS (
-  UPDATE invitations i SET accepted_at=now() FROM users u
-  WHERE i.token_hash=$1 AND i.expires_at>now() AND i.accepted_at IS NULL AND i.revoked_at IS NULL
-  AND EXISTS(SELECT 1 FROM active_session) AND u.id=$2 AND u.email_verified AND lower(u.email)=i.email RETURNING i.tenant_id
- ), membership AS (
-  INSERT INTO memberships(tenant_id,user_id,role) SELECT tenant_id,$2,'member' FROM claimed
-  ON CONFLICT DO NOTHING
- )
- UPDATE sessions s SET tenant_id=claimed.tenant_id FROM claimed
- WHERE s.token_hash=$3 RETURNING s.tenant_id`, auth.HashToken(input.Token), a.UserID, auth.SessionHash(r)).Scan(&tenant)
+	if len(input.Token) != 43 {
+		httpresponse.Fail(w, 404, "invitation unavailable")
+		return
+	}
+	var name, email, organization string
+	var expires time.Time
+	err := s.db.QueryRow(r.Context(), "SELECT t.name,i.email,i.expires_at,coalesce(t.casdoor_org,'') FROM invitations i JOIN tenants t ON t.id=i.tenant_id WHERE i.token_hash=$1 AND i.expires_at>now() AND i.accepted_at IS NULL AND i.revoked_at IS NULL", auth.HashToken(input.Token)).Scan(&name, &email, &expires, &organization)
 	if errors.Is(err, pgx.ErrNoRows) {
 		httpresponse.Fail(w, 404, "invitation unavailable")
 		return
@@ -415,5 +404,105 @@ func (s *server) accept(w http.ResponseWriter, r *http.Request) {
 		httpresponse.Internal(w, err)
 		return
 	}
-	httpresponse.JSON(w, 200, map[string]int64{"workspaceId": tenant})
+	parts := strings.SplitN(email, "@", 2)
+	hint := "***"
+	if len(parts) == 2 {
+		hint = string([]rune(parts[0])[:1]) + "***@" + parts[1]
+	}
+	httpresponse.JSON(w, 200, map[string]any{"companyName": name, "emailHint": hint, "expiresAt": expires, "organization": organization})
+}
+
+func (s *server) accept(w http.ResponseWriter, r *http.Request) {
+	a, ok := s.auth.Authenticate(w, r)
+	if !ok {
+		return
+	}
+	var input struct{ Token string }
+	if !decode(w, r, &input) {
+		return
+	}
+	if len(input.Token) != 43 {
+		httpresponse.Fail(w, 404, "invitation unavailable")
+		return
+	}
+	ctx := r.Context()
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		httpresponse.Internal(w, err)
+		return
+	}
+	defer tx.Rollback(ctx)
+	var email string
+	var verified bool
+	if err = tx.QueryRow(ctx, "SELECT email,email_verified FROM users WHERE id=$1 FOR UPDATE", a.UserID).Scan(&email, &verified); err != nil {
+		httpresponse.Internal(w, err)
+		return
+	}
+	var active bool
+	if err = tx.QueryRow(ctx, "SELECT true FROM sessions WHERE token_hash=$1 AND user_id=$2 AND expires_at>now() FOR UPDATE", s.auth.SessionHash(r), a.UserID).Scan(&active); errors.Is(err, pgx.ErrNoRows) {
+		httpresponse.Fail(w, 401, "session expired")
+		return
+	}
+	if err != nil {
+		httpresponse.Internal(w, err)
+		return
+	}
+	var company int64
+	var invitedEmail string
+	var accepted *time.Time
+	err = tx.QueryRow(ctx, "SELECT tenant_id,email,accepted_at FROM invitations WHERE token_hash=$1 AND expires_at>now() AND revoked_at IS NULL FOR UPDATE", auth.HashToken(input.Token)).Scan(&company, &invitedEmail, &accepted)
+	if errors.Is(err, pgx.ErrNoRows) || (err == nil && !strings.EqualFold(email, invitedEmail)) {
+		httpresponse.Fail(w, 404, "invitation unavailable")
+		return
+	}
+	if err != nil {
+		httpresponse.Internal(w, err)
+		return
+	}
+	if !verified && !s.allowUnverifiedInvites {
+		httpresponse.Fail(w, 403, "email verification required")
+		return
+	}
+	var organizationMatches bool
+	if err = tx.QueryRow(ctx, `SELECT t.casdoor_org IS NULL OR t.casdoor_org=u.casdoor_org FROM tenants t CROSS JOIN users u WHERE t.id=$1 AND u.id=$2`, company, a.UserID).Scan(&organizationMatches); err != nil {
+		httpresponse.Internal(w, err)
+		return
+	}
+	if !organizationMatches {
+		httpresponse.Fail(w, 403, "please sign in to the invited company organization")
+		return
+	}
+	var bound int64
+	err = tx.QueryRow(ctx, "SELECT tenant_id FROM memberships WHERE user_id=$1", a.UserID).Scan(&bound)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		httpresponse.Internal(w, err)
+		return
+	}
+	if bound != 0 && bound != company {
+		httpresponse.Fail(w, 409, "account belongs to another company")
+		return
+	}
+	if accepted != nil {
+		httpresponse.Fail(w, 404, "invitation unavailable")
+		return
+	}
+	if bound == 0 {
+		if _, err = tx.Exec(ctx, "INSERT INTO memberships(tenant_id,user_id,role) VALUES($1,$2,'member')", company, a.UserID); err != nil {
+			httpresponse.Internal(w, err)
+			return
+		}
+	}
+	if _, err = tx.Exec(ctx, "UPDATE invitations SET accepted_at=now() WHERE token_hash=$1", auth.HashToken(input.Token)); err != nil {
+		httpresponse.Internal(w, err)
+		return
+	}
+	if _, err = tx.Exec(ctx, "UPDATE sessions SET tenant_id=$1 WHERE user_id=$2 AND expires_at>now()", company, a.UserID); err != nil {
+		httpresponse.Internal(w, err)
+		return
+	}
+	if err = tx.Commit(ctx); err != nil {
+		httpresponse.Internal(w, err)
+		return
+	}
+	httpresponse.JSON(w, 200, map[string]int64{"workspaceId": company})
 }

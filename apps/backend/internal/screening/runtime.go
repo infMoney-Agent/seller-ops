@@ -18,7 +18,15 @@ func NewRuntime(ctx context.Context) (*Runtime, error) {
 	if len(cfg.Secret) < 32 {
 		return nil, fmt.Errorf("SCREENING_INTERNAL_SECRET must contain at least 32 bytes")
 	}
-	pool, err := pgxpool.New(ctx, cfg.DatabaseURL)
+	poolConfig, err := pgxpool.ParseConfig(cfg.DatabaseURL)
+	if err != nil {
+		return nil, err
+	}
+	// Interactive catalog queries spend more time compiling complex expressions
+	// than executing them once JIT cost thresholds are crossed. Apply this to
+	// every screening connection, including replacements after reconnects.
+	poolConfig.ConnConfig.RuntimeParams["jit"] = "off"
+	pool, err := pgxpool.NewWithConfig(ctx, poolConfig)
 	if err != nil {
 		return nil, err
 	}

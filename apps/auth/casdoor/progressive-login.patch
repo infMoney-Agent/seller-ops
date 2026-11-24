@@ -1,0 +1,59 @@
+--- a/web/src/App.tsx
++++ b/web/src/App.tsx
+@@ -16,13 +16,14 @@
+ import {Navigate, Route, Routes, useLocation, useNavigate} from "react-router-dom";
+ import {ConsoleDisabledPage} from "@/components/common/ConsoleDisabledPage";
+ import {Loading} from "@/components/common/Loading";
+-import {AppLayout} from "@/components/layout/AppLayout";
+ import {useAccount} from "@/hooks/use-account";
+ import {useAccountHelmet} from "@/hooks/use-application-chrome";
+ import * as Auth from "@/auth/Auth";
+ import * as Conf from "@/Conf";
+ import * as Setting from "@/lib/setting";
+ 
++const AppLayout = React.lazy(() => import("@/components/layout/AppLayout").then(module => ({default: module.AppLayout})));
++
+ // ---- console pages -----------------------------------------------------------
+ const Dashboard = React.lazy(() => import("@/pages/Dashboard"));
+ const NotFoundPage = React.lazy(() => import("@/pages/NotFoundPage"));
+--- a/web/src/pages/auth/LoginPage.tsx
++++ b/web/src/pages/auth/LoginPage.tsx
+@@ -15,8 +15,6 @@
+ import {AgreementCheckbox, isSigninAgreementShown} from "@/components/auth/AgreementModal";
+ import {DeviceLoginPanel} from "@/components/auth/DeviceLoginPanel";
+ import {GoogleOneTap} from "@/components/auth/GoogleOneTap";
+-import {FaceRecognitionCommonModal} from "@/components/common/FaceRecognitionCommonModal";
+-import {FaceRecognitionModal} from "@/components/common/FaceRecognitionModal";
+ import {ProviderButtons, getVisibleProviders} from "@/components/auth/ProviderButtons";
+ import {WeChatLoginPanel} from "@/components/auth/WeChatLoginPanel";
+ import {QrCornerSwitch, WeChatQrConnectPanel} from "@/components/auth/WeChatQrConnectPanel";
+@@ -41,6 +39,9 @@
+ import * as OrganizationBackend from "@/backend/OrganizationBackend";
+ import * as Setting from "@/lib/setting";
+ 
++const FaceRecognitionModal = React.lazy(() => import("@/components/common/FaceRecognitionModal").then(module => ({default: module.FaceRecognitionModal})));
++const FaceRecognitionCommonModal = React.lazy(() => import("@/components/common/FaceRecognitionCommonModal").then(module => ({default: module.FaceRecognitionCommonModal})));
++
+ type LoginType = "login" | "code" | "cas" | "saml" | "device";
+ type LoginMethod = "password" | "verificationCode" | "verificationCodeEmail" | "verificationCodePhone" | "ldap" | "webAuthn" | "wechat" | "faceId" | "magicLink" | "device";
+ 
+@@ -1769,7 +1770,8 @@
+         {preview === "auto" || preview === "theme" ? null : <GoogleOneTap application={application} />}
+ 
+         {faceValues !== null ? (
+-          hasFaceIdProvider ? (
++          <React.Suspense fallback={<p role="status" className="text-sm text-muted-foreground">正在加载人脸验证…</p>}>
++          {hasFaceIdProvider ? (
+             <FaceRecognitionCommonModal
+               visible={true}
+               onOk={(faceIdImage) => {
+@@ -1793,7 +1795,8 @@
+                 setLoading(false);
+               }}
+             />
+-          )
++          )}
++          </React.Suspense>
+         ) : null}
+ 
+         {captchaProvider && !Setting.isInlineCaptchaEnabled(application) ? (

@@ -1,0 +1,65 @@
+--- a/web/src/lib/setting.tsx
++++ b/web/src/lib/setting.tsx
+@@ -18,6 +18,7 @@
+ // antd-specific renderer has been replaced by a shadcn/Tailwind equivalent.
+ 
+ import React from "react";
++import {isIdentityCallback} from "./self-redirect";
+ import i18next from "i18next";
+ import dayjs from "dayjs";
+ import copy from "copy-to-clipboard";
+@@ -83,23 +84,9 @@
+   return `${fullServerUrl}${BasePath}`;
+ }
+ 
+-// An OAuth redirect URI on Casdoor's own origin (under its base path) belongs to Casdoor
+-// itself: that whole path serves the frontend, so no client application can live there.
+-// Such a request is signed in directly instead of being answered with a code nobody can collect.
++// A same-origin client callback is still an OAuth client when apps share a gateway.
+ export function isSelfRedirectUri(redirectUri) {
+-  if (!redirectUri) {
+-    return false;
+-  }
+-
+-  try {
+-    const url = new URL(redirectUri);
+-    if (url.origin !== new URL(getFullServerUrl()).origin) {
+-      return false;
+-    }
+-    return BasePath === "" || url.pathname === BasePath || url.pathname.startsWith(`${BasePath}/`);
+-  } catch {
+-    return false;
+-  }
++ return isIdentityCallback(redirectUri, getFullServerUrl());
+ }
+ 
+ export function getOAuthIssuer() {
+--- /dev/null
++++ b/web/src/lib/self-redirect.ts
+@@ -0,0 +1,13 @@
++// Only Casdoor's own callback endpoints belong to its social-login round trip.
++// Other applications may share the origin behind a reverse proxy.
++export function isIdentityCallback(redirectUri: string | null | undefined, serverUrl: string): boolean {
++ if (!redirectUri) return false;
++ try {
++  const target = new URL(redirectUri);
++  const server = new URL(serverUrl);
++  if (target.origin !== server.origin) return false;
++  const base = server.pathname.replace(/\/+$/, "");
++  const callback = base + "/callback";
++  return target.pathname === callback || target.pathname.startsWith(callback + "/") || target.pathname === base + "/api/callback";
++ } catch { return false; }
++}
+--- /dev/null
++++ b/web/tests/self-redirect.test.mjs
+@@ -0,0 +1,10 @@
++import assert from 'node:assert/strict';
++import test from 'node:test';
++import {isIdentityCallback} from '../src/lib/self-redirect.ts';
++for (const [path, expected] of [['/api/auth/callback',false],['/dashboard',false],['/callback',true],['/callback/saml',true],['/api/callback',true],['/callback-other',false]]) {
++ test('shared gateway callback: '+path, () => assert.equal(isIdentityCallback('http://43.139.227.179'+path,'http://43.139.227.179'),expected));
++}
++test('foreign origin remains a client',()=>assert.equal(isIdentityCallback('https://client.test/callback','https://identity.test'),false));
++test('base path own callback',()=>assert.equal(isIdentityCallback('https://identity.test/idp/callback','https://identity.test/idp'),true));
++test('base path client callback',()=>assert.equal(isIdentityCallback('https://identity.test/api/auth/callback','https://identity.test/idp'),false));
++test('invalid and missing callbacks',()=>{assert.equal(isIdentityCallback('invalid','https://identity.test'),false);assert.equal(isIdentityCallback(null,'https://identity.test'),false)});

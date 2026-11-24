@@ -121,6 +121,65 @@ func TestWorkspaceIsolation(t *testing.T) {
 	inviteBody, err = json.Marshal(map[string]string{"token": token})
 	must(err)
 	call("POST", "/api/invitations/accept", invited, string(inviteBody), 404)
+
+	// A valid invite never moves an account away from an existing company.
+	payload, _ := json.Marshal(map[string]string{"email": "alice@example.com"})
+	result = call("POST", "/api/invitations", b, string(payload), 201)
+	must(json.Unmarshal(result.Body.Bytes(), &invite))
+	blockedToken := strings.SplitN(invite.URL, "#", 2)[1]
+	blockedBody, _ := json.Marshal(map[string]string{"token": blockedToken})
+	call("POST", "/api/invitations/accept", a, string(blockedBody), 409)
+	preview := call("POST", "/api/invitations/inspect", "", string(blockedBody), 200)
+	if strings.Contains(preview.Body.String(), "alice@example.com") {
+		t.Fatal("invitation preview leaked full email")
+	}
+	var company int64
+	must(db.QueryRow(ctx, "SELECT tenant_id FROM memberships WHERE user_id=$1", alice).Scan(&company))
+	if company != first {
+		t.Fatal("invitation changed existing company")
+	}
+	if _, err = db.Exec(ctx, "INSERT INTO memberships(tenant_id,user_id,role) VALUES($1,$2,'member')", second, alice); err == nil {
+		t.Fatal("database allowed multiple companies")
+	}
+	// Accepting a same-company invite preserves owner privileges.
+	result = call("POST", "/api/invitations", a, string(payload), 201)
+	must(json.Unmarshal(result.Body.Bytes(), &invite))
+	ownerToken := strings.SplitN(invite.URL, "#", 2)[1]
+	ownerBody, _ := json.Marshal(map[string]string{"token": ownerToken})
+	call("POST", "/api/invitations/accept", a, string(ownerBody), 200)
+	var ownerRole string
+	must(db.QueryRow(ctx, "SELECT role FROM memberships WHERE user_id=$1", alice).Scan(&ownerRole))
+	if ownerRole != "owner" {
+		t.Fatal("invitation downgraded owner")
+	}
+	call("GET", path, m, "", 200)
+	// Verification is required and a failed attempt does not consume the invitation.
+	unverified := makeUser("unverified")
+	runSQL("UPDATE users SET email_verified=false WHERE id=$1", unverified)
+	unverifiedSession := makeSession(unverified, 0)
+	payload, _ = json.Marshal(map[string]string{"email": "unverified@example.com"})
+	result = call("POST", "/api/invitations", a, string(payload), 201)
+	must(json.Unmarshal(result.Body.Bytes(), &invite))
+	verificationToken := strings.SplitN(invite.URL, "#", 2)[1]
+	verificationBody, _ := json.Marshal(map[string]string{"token": verificationToken})
+	call("POST", "/api/invitations/accept", unverifiedSession, string(verificationBody), 403)
+	call("POST", "/api/invitations/inspect", "", string(verificationBody), 200)
+	s.allowUnverifiedInvites = true
+	call("POST", "/api/invitations/accept", b, string(verificationBody), 404)
+	call("POST", "/api/invitations/accept", unverifiedSession, string(verificationBody), 200)
+	var emailStillUnverified bool
+	must(db.QueryRow(ctx, "SELECT NOT email_verified FROM users WHERE id=$1", unverified).Scan(&emailStillUnverified))
+	if !emailStillUnverified {
+		t.Fatal("verification bypass must not forge email ownership")
+	}
+	payload, _ = json.Marshal(map[string]string{"email": "unverified@example.com"})
+	result = call("POST", "/api/invitations", b, string(payload), 201)
+	must(json.Unmarshal(result.Body.Bytes(), &invite))
+	crossToken := strings.SplitN(invite.URL, "#", 2)[1]
+	crossBody, _ := json.Marshal(map[string]string{"token": crossToken})
+	call("POST", "/api/invitations/accept", unverifiedSession, string(crossBody), 409)
+	s.allowUnverifiedInvites = false
+
 	runSQL("UPDATE sessions SET expires_at=now() WHERE token_hash=$1", auth.HashToken(invited))
 	call("GET", path, invited, "", 401)
 	call("POST", "/api/auth/logout", a, "", 204)

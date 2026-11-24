@@ -60,6 +60,21 @@ export default function ReviewPanel({
     }
   }
   collect(categories.data?.items || []);
+  const [previousCategories, setPreviousCategories] = useState(categories.data);
+  if (categories.data && categories.data !== previousCategories) {
+    setPreviousCategories(categories.data);
+    const containsSelection = (nodes: ReviewCategory[]): boolean =>
+      nodes.some(
+        (node) =>
+          JSON.stringify(node.path) === JSON.stringify(categoryPath) ||
+          containsSelection(node.children)
+      );
+    if (categoryPath.length && !containsSelection(categories.data.items)) {
+      setCategoryPath(leaves[0]?.path || []);
+      setMemberPage(1);
+      setSamplePage(1);
+    }
+  }
   const currentIndex = leaves.findIndex(
     (node) => JSON.stringify(node.path) === JSON.stringify(categoryPath)
   );
@@ -379,7 +394,7 @@ function GroupReview({
           <div>
             <h3 className='break-words text-lg font-semibold'>{data.group?.title}</h3>
             <p className='mt-1 text-xs text-muted-foreground'>
-              同父体默认折叠，展开后可分别勾选子体。
+              同父体子体默认展开，排除时同步处理同父体待复核子体。
             </p>
           </div>
           {compare.length === 2 && (
@@ -452,11 +467,11 @@ function GroupReview({
         onClose={() => setReviewOpen(false)}
         selected={selected}
         reference={currentReference}
+        excludeFamilies
         act={act}
         busy={busy}
         onApplied={() => {
           setSelected([]);
-          setVisibleFamilies({});
         }}
       />
       <div
@@ -491,16 +506,20 @@ function ReviewFamilyCard({
   toggle: (id: string, checked: boolean) => void;
   onVisible: (id: string, products: Product[]) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState((product.family_count || 1) > 1);
   const [page, setPage] = useState(1);
   const contentID = useId();
   const params = new URLSearchParams(query);
   params.set('family_product_id', product.id);
   params.set('member_page', String(page));
-  const family = useScreeningQuery<ReviewWorkspace>(open ? '/review-workspace?' + params : null);
+  const initialMembers = product.family_items;
+  const family = useScreeningQuery<ReviewWorkspace>(
+    open && (page > 1 || !initialMembers) ? '/review-workspace?' + params : null
+  );
+  const members = page === 1 && initialMembers ? initialMembers : family.data?.items;
   useEffect(() => {
-    onVisible(product.id, open ? family.data?.items || [] : []);
-  }, [onVisible, product.id, open, family.data]);
+    onVisible(product.id, open ? members || [] : []);
+  }, [onVisible, product.id, open, members]);
   function card(p: Product, asinActions?: ReactNode) {
     return (
       <ReviewProductCard
@@ -551,8 +570,8 @@ function ReviewFamilyCard({
             </Button>
           </div>
         )}
-        {family.data?.items.filter((p) => p.id !== product.id).map((p) => card(p))}
-        {(family.data?.group?.products || 0) > 50 && (
+        {members?.filter((p) => p.id !== product.id).map((p) => card(p))}
+        {(product.family_count || 0) > 50 && (
           <div className='flex items-center justify-between gap-2'>
             <Button
               size='sm'
@@ -563,14 +582,12 @@ function ReviewFamilyCard({
               上一页子体
             </Button>
             <span className='text-xs'>
-              {page} / {Math.ceil((family.data?.group?.products || 0) / 50)}
+              {page} / {Math.ceil((product.family_count || 0) / 50)}
             </span>
             <Button
               size='sm'
               variant='outline'
-              disabled={
-                busy || family.isFetching || page * 50 >= (family.data?.group?.products || 0)
-              }
+              disabled={busy || family.isFetching || page * 50 >= (product.family_count || 0)}
               onClick={() => setPage(page + 1)}
             >
               下一页子体
