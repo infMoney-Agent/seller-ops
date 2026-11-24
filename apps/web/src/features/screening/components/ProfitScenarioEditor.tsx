@@ -206,6 +206,9 @@ export default function ProfitScenarioEditor({
         i === active
           ? {
               ...d,
+              ...(key === 'storage_usd' ? { storage_mode: value === '' ? 'auto' : 'manual' } : {}),
+              ...(key === 'commission_rate' ? { commission_mode: value === '' ? 'auto' : 'manual' } : {}),
+              ...(key === 'freight_cny' ? { freight_rate_cny_per_kg: null } : {}),
               [key]:
                 key === 'monthly_units'
                   ? value === ''
