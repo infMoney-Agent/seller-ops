@@ -143,7 +143,7 @@ func TestBrowserScreening(t *testing.T) {
 		t.Fatal(e)
 	}
 
-	for _, label := range []string{"价格 USD", "子体销量", "预计单件利润"} {
+	for _, label := range []string{"价格 USD", "子体销量", "利润率", "预计利润"} {
 		if e := chromedp.Run(ctx, chromedp.Evaluate(fmt.Sprintf(`[...document.querySelectorAll('[data-screening-table] th button')].find(b=>b.textContent.trim().startsWith(%q)).click()`, label), nil), chromedp.Poll(`document.querySelectorAll('[data-screening-table] th[aria-sort=ascending]').length===1 && !document.querySelector('[data-screening-table] tbody').inert`, nil)); e != nil {
 			t.Fatal(label, e)
 		}
