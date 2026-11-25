@@ -57,3 +57,5 @@ SCREENING_IMPORT_READS_TRANSPORT=legacy|connect 单独控制这三个只读接�
 领域查询继续使用普通 Go 数据，与 REST 和 Connect 共用，不修改 SQL 模式或业务数据。新增读取适配也将 pgx.ErrNoRows 映射为 Connect not_found，避免资源不存在错误变成 500。
 
 第二阶段验收：Web 类型检查、6 项 TS 单测（35 断言）、Go race 相关回归及安全/新旧投影测试、go vet、生产构建通过；相对于上一阶段 origin/codex/proto-imports-pilot 的 Buf breaking 检查通过。双 Connect 开关下浏览器完整验收通过（31.57 秒）。测试使用独立 PostgreSQL 与 Redis 数据库15。
+
+第二阶段已部署：新增只读开关已持久化为 connect，列表继续保持 connect。运行环境 11 条导入历史及详情、预览、任务查询核对通过；公网入口正常跳转登录。回滚备份：backups/proto-reads-1795581981999。上传与写操作仍沿用原 HTTP，业务数据无迁移。
