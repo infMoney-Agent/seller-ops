@@ -143,7 +143,12 @@ func (s *Service) ResearchProducts(ctx context.Context, req *connect.Request[eco
 }
 
 func (s *Service) ScoreProduct(ctx context.Context, req *connect.Request[ecomv1.ScoreProductRequest]) (*connect.Response[ecomv1.ScoreProductResponse], error) {
-	value, err := s.executeRPC(ctx, "GET", "product-research/score/"+req.Msg.GetAsin()+"", req.Msg.Query, req.Msg.Body)
+	asin, validationErr := validateASIN(req.Msg.GetAsin())
+	if validationErr != nil {
+		return nil, ecomRPCError(validationErr)
+	}
+
+	value, err := s.executeRPC(ctx, "GET", "product-research/score/"+asin+"", req.Msg.Query, req.Msg.Body)
 	if err != nil {
 		return nil, ecomRPCError(err)
 	}
@@ -203,7 +208,12 @@ func (s *Service) AnalyzeReviews(ctx context.Context, req *connect.Request[ecomv
 }
 
 func (s *Service) AnalyzeReviewsLegacy(ctx context.Context, req *connect.Request[ecomv1.AnalyzeReviewsLegacyRequest]) (*connect.Response[ecomv1.AnalyzeReviewsLegacyResponse], error) {
-	value, err := s.executeRPC(ctx, "GET", "reviews/analyze/"+req.Msg.GetAsin()+"", req.Msg.Query, req.Msg.Body)
+	asin, validationErr := validateASIN(req.Msg.GetAsin())
+	if validationErr != nil {
+		return nil, ecomRPCError(validationErr)
+	}
+
+	value, err := s.executeRPC(ctx, "GET", "reviews/analyze/"+asin+"", req.Msg.Query, req.Msg.Body)
 	if err != nil {
 		return nil, ecomRPCError(err)
 	}
@@ -251,7 +261,12 @@ func (s *Service) AddMonitor(ctx context.Context, req *connect.Request[ecomv1.Ad
 }
 
 func (s *Service) RemoveMonitor(ctx context.Context, req *connect.Request[ecomv1.RemoveMonitorRequest]) (*connect.Response[ecomv1.RemoveMonitorResponse], error) {
-	value, err := s.executeRPC(ctx, "DELETE", "monitor/remove/"+req.Msg.GetAsin()+"", req.Msg.Query, req.Msg.Body)
+	asin, validationErr := validateASIN(req.Msg.GetAsin())
+	if validationErr != nil {
+		return nil, ecomRPCError(validationErr)
+	}
+
+	value, err := s.executeRPC(ctx, "DELETE", "monitor/remove/"+asin+"", req.Msg.Query, req.Msg.Body)
 	if err != nil {
 		return nil, ecomRPCError(err)
 	}
@@ -263,7 +278,12 @@ func (s *Service) RemoveMonitor(ctx context.Context, req *connect.Request[ecomv1
 }
 
 func (s *Service) ListSnapshots(ctx context.Context, req *connect.Request[ecomv1.ListSnapshotsRequest]) (*connect.Response[ecomv1.ListSnapshotsResponse], error) {
-	value, err := s.executeRPC(ctx, "GET", "monitor/snapshots/"+req.Msg.GetAsin()+"", req.Msg.Query, req.Msg.Body)
+	asin, validationErr := validateASIN(req.Msg.GetAsin())
+	if validationErr != nil {
+		return nil, ecomRPCError(validationErr)
+	}
+
+	value, err := s.executeRPC(ctx, "GET", "monitor/snapshots/"+asin+"", req.Msg.Query, req.Msg.Body)
 	if err != nil {
 		return nil, ecomRPCError(err)
 	}
@@ -275,7 +295,12 @@ func (s *Service) ListSnapshots(ctx context.Context, req *connect.Request[ecomv1
 }
 
 func (s *Service) CreateSnapshot(ctx context.Context, req *connect.Request[ecomv1.CreateSnapshotRequest]) (*connect.Response[ecomv1.CreateSnapshotResponse], error) {
-	value, err := s.executeRPC(ctx, "POST", "monitor/snapshot/"+req.Msg.GetAsin()+"", req.Msg.Query, req.Msg.Body)
+	asin, validationErr := validateASIN(req.Msg.GetAsin())
+	if validationErr != nil {
+		return nil, ecomRPCError(validationErr)
+	}
+
+	value, err := s.executeRPC(ctx, "POST", "monitor/snapshot/"+asin+"", req.Msg.Query, req.Msg.Body)
 	if err != nil {
 		return nil, ecomRPCError(err)
 	}

@@ -78,3 +78,18 @@ func TestEcomRPCParity(t *testing.T) {
 		t.Fatal("unsigned RPC accepted", w.Code)
 	}
 }
+
+func TestRPCResourceASINRejectsPathSegments(t *testing.T) {
+	svc := &Service{secret: strings.Repeat("s", 32)}
+	procedure := RPCPrefix + "ScoreProduct"
+	for _, asin := range []string{"", "B000000001/other", "not-an-asin"} {
+		r := httptest.NewRequest("POST", procedure, bytes.NewReader(jsonBytes(Obj{"asin": asin})))
+		r.Header = signed(svc, "POST", procedure, 1, nil).Header
+		r.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		svc.Handler().ServeHTTP(w, r)
+		if w.Code != 400 {
+			t.Fatal("invalid ASIN accepted", asin, w.Code, w.Body.String())
+		}
+	}
+}
