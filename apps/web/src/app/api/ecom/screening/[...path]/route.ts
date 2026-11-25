@@ -83,7 +83,7 @@ async function proxy(request: Request, { params }: { params: Promise<{ path: str
       return Response.json({ message: '工作区已切换，请刷新页面。' }, { status: 409 });
     }
     if (screeningRPCRoute(request.method, path)) {
-      const mode = process.env.SCREENING_BUSINESS_TRANSPORT || 'legacy';
+      const mode = process.env.SCREENING_BUSINESS_TRANSPORT || 'connect';
       if (!['legacy', 'connect'].includes(mode))
         return Response.json({ message: '业务传输配置无效。' }, { status: 503 });
       if (mode === 'connect') {
@@ -122,7 +122,7 @@ async function proxy(request: Request, { params }: { params: Promise<{ path: str
       const mode =
         (path === 'imports'
           ? process.env.SCREENING_IMPORTS_TRANSPORT
-          : process.env.SCREENING_IMPORT_READS_TRANSPORT) || 'legacy';
+          : process.env.SCREENING_IMPORT_READS_TRANSPORT) || 'connect';
       if (!['legacy', 'connect'].includes(mode))
         return Response.json({ message: '导入查询传输配置无效。' }, { status: 503 });
       if (mode === 'connect') {
@@ -159,7 +159,7 @@ async function proxy(request: Request, { params }: { params: Promise<{ path: str
         `^(?:imports/${uuid}/(?:commit|mapping|removal-preview)|jobs/${uuid}/retry)$`
       ).test(path);
     if (importCommand) {
-      const mode = process.env.SCREENING_IMPORT_WRITES_TRANSPORT || 'legacy';
+      const mode = process.env.SCREENING_IMPORT_WRITES_TRANSPORT || 'connect';
       if (!['legacy', 'connect'].includes(mode))
         return Response.json({ message: '导入操作传输配置无效。' }, { status: 503 });
       if (mode === 'connect') {

@@ -23,7 +23,7 @@ Go 数据库集成测试需要一个空的临时 PostgreSQL 数据库。设置 `
 
 ## Proto 元数据传输
 
-详见 [Proto 迁移状态](proto-migration-status.md)。业务与认证镜像均使用仓库根目录作为构建上下文，包含 proto/gen/go 和 packages/rpccompat。Web 的六个 *_TRANSPORT 开关默认 legacy，更新两个 Go 服务后可逐组启用 connect；AUTH_TRANSPORT 要同时配置 SELLER_APP_ORIGIN，身份仍由 Go 认证服务验证。内部 RPC 不应映射到公网。回滚仅修改开关和恢复应用构建，不执行数据库降级。
+详见 [Proto 迁移状态](proto-migration-status.md)。业务与认证镜像均使用仓库根目录作为构建上下文，包含 proto/gen/go 和 packages/rpccompat。Web 的六个 *_TRANSPORT 开关现均默认 connect；AUTH_TRANSPORT 要同时配置 SELLER_APP_ORIGIN，身份仍由 Go 认证服务验证。内部 RPC 不应映射到公网。回滚可将对应开关显式设为 legacy 并重启 Web，或恢复应用构建，不执行数据库降级。
 
 ### Native build and Casdoor restart checks
 
