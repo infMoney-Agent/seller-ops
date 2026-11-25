@@ -82,7 +82,7 @@ func frontendPath(path string) bool {
 	if path == "/" || path == "/favicon.ico" || path == "/robots.txt" {
 		return true
 	}
-	for _, prefix := range []string{"/dashboard", "/auth", "/invite", "/company-required", "/branding", "/_next", "/api/auth", "/api/ecom", "/api/products", "/api/users", "/api/invitations"} {
+	for _, prefix := range []string{"/images/flags", "/dashboard", "/auth", "/invite", "/company-required", "/branding", "/_next", "/api/auth", "/api/ecom", "/api/products", "/api/users", "/api/invitations"} {
 		if path == prefix || strings.HasPrefix(path, prefix+"/") {
 			return true
 		}

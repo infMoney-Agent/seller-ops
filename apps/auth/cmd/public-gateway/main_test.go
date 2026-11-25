@@ -29,7 +29,7 @@ func TestGatewayRouting(t *testing.T) {
 	wu, _ := url.Parse(web.URL)
 	iu, _ := url.Parse(id.URL)
 	handler := gateway("http://43.139.227.179", wu, iu)
-	for _, tc := range []struct{ path, service string }{{"/invite", "web"}, {"/company-required", "web"}, {"/dashboard/ecom/screening", "web"}, {"/api/auth/callback", "web"}, {"/api/ecom/screening/products", "web"}, {"/branding/seller-ops-logo.svg", "web"}, {"/_next/static/file.js", "web"}, {"/login/oauth/authorize", "identity"}, {"/api/login", "identity"}, {"/static/js/main.js", "identity"}} {
+	for _, tc := range []struct{ path, service string }{{"/invite", "web"}, {"/company-required", "web"}, {"/dashboard/ecom/screening", "web"}, {"/api/auth/callback", "web"}, {"/api/ecom/screening/products", "web"}, {"/branding/seller-ops-logo.svg", "web"}, {"/_next/static/file.js", "web"}, {"/images/flags/US.svg", "web"}, {"/images/flags/CN.svg", "web"}, {"/images/casdoor-logo.svg", "identity"}, {"/login/oauth/authorize", "identity"}, {"/api/login", "identity"}, {"/static/js/main.js", "identity"}} {
 		r := httptest.NewRequest("POST", "http://43.139.227.179"+tc.path, strings.NewReader("payload"))
 		r.Header.Set("Origin", "http://foreign.test")
 		w := httptest.NewRecorder()
