@@ -11,8 +11,28 @@ elif [[ $command =~ ^upload\ ([a-f0-9]{40})\ (web|auth|backend)\ ([a-f0-9]{64})$
   revision=${BASH_REMATCH[1]}
   service=${BASH_REMATCH[2]}
   archive_digest=${BASH_REMATCH[3]}
+elif [[ $command =~ ^(begin|discard)\ ([a-f0-9]{40})\ (web|auth|backend)\ ([a-f0-9]{64})$ ]]; then
+  action=${BASH_REMATCH[1]}
+  revision=${BASH_REMATCH[2]}
+  service=${BASH_REMATCH[3]}
+  archive_digest=${BASH_REMATCH[4]}
+elif [[ $command =~ ^chunk\ ([a-f0-9]{40})\ (web|auth|backend)\ ([a-f0-9]{64})\ ([0-9]{3})\ ([a-f0-9]{64})$ ]]; then
+  action=chunk
+  revision=${BASH_REMATCH[1]}
+  service=${BASH_REMATCH[2]}
+  archive_digest=${BASH_REMATCH[3]}
+  chunk_index=${BASH_REMATCH[4]}
+  chunk_digest=${BASH_REMATCH[5]}
+  (( 10#$chunk_index < 256 )) || exit 2
+elif [[ $command =~ ^publish\ ([a-f0-9]{40})\ (web|auth|backend)\ ([a-f0-9]{64})\ ([1-9][0-9]{0,2})$ ]]; then
+  action=publish
+  revision=${BASH_REMATCH[1]}
+  service=${BASH_REMATCH[2]}
+  archive_digest=${BASH_REMATCH[3]}
+  chunk_count=${BASH_REMATCH[4]}
+  (( chunk_count <= 256 )) || exit 2
 else
-  echo 'Expected: deploy <commit SHA> or upload <commit SHA> <web|auth|backend> <archive SHA256>' >&2
+  echo 'Expected a restricted deploy, upload, begin, chunk, publish or discard command' >&2
   exit 2
 fi
 umask 077
@@ -24,10 +44,40 @@ HEALTH_HOST=${HEALTH_HOST:-127.0.0.1}
 CASDOOR_ADMIN_ADDR=${CASDOOR_ADMIN_ADDR:-127.0.0.1:18000}
 
 mkdir -p "$STATE_DIR/releases"
+artifact_dir=""
+if [[ $action != deploy ]]; then
+  artifact_dir="$STATE_DIR/incoming/$revision/$service/$archive_digest"
+fi
+
+if [[ $action == chunk ]]; then
+  test -f "$artifact_dir/.ready"
+  exec 9>"$artifact_dir/$chunk_index.lock"
+  flock -w 60 9
+  chunk_file=$(mktemp "$artifact_dir/chunk.XXXXXX")
+  trap 'rm -f -- "$chunk_file"' EXIT
+  # Bound disk use even if a sender accidentally streams the whole image here.
+  head -c 4194305 >"$chunk_file"
+  chunk_bytes=$(stat -c %s "$chunk_file")
+  (( chunk_bytes > 0 && chunk_bytes <= 4194304 )) || exit 2
+  actual_digest=$(sha256sum "$chunk_file")
+  if [[ ${actual_digest%% *} != "$chunk_digest" ]]; then
+    echo 'Chunk checksum mismatch' >&2
+    exit 2
+  fi
+  mv -f -- "$chunk_file" "$artifact_dir/$chunk_index.part"
+  echo "Received $service chunk $chunk_index"
+  exit 0
+fi
+
 lock=deploy
-[[ $action != upload ]] || lock="upload-$service"
+[[ $action == deploy ]] || lock="upload-$service"
 exec 9>"$STATE_DIR/$lock.lock"
 flock -w 60 9
+
+if [[ $action == discard ]]; then
+  rm -rf -- "$artifact_dir"
+  exit 0
+fi
 
 if [[ -n ${DOCKER_START_SCRIPT:-} ]]; then
   bash "$DOCKER_START_SCRIPT"
@@ -37,24 +87,46 @@ if [[ -n ${DOCKER_HOST_FILE:-} ]]; then
 fi
 docker info --format 'Deployment engine: {{.ServerVersion}}'
 
-# Upload jobs run in parallel; serialize updates to the shared Git repository.
-exec 8>"$STATE_DIR/git.lock"
-flock -w 180 8
-fetched=false
-for attempt in 1 2 3; do
-  if timeout 90 git -c http.version=HTTP/1.1 -C "$REPO_DIR" fetch --quiet --no-tags origin +refs/heads/main:refs/remotes/origin/main; then
-    fetched=true
-    break
+latest_revision=""
+if [[ $action != deploy ]]; then
+  # Public GitHub ref lookup avoids fetching source objects for each image job.
+  remote=$(git -C "$REPO_DIR" remote get-url origin)
+  repository=${remote#https://github.com/}
+  repository=${repository#git@github.com:}
+  repository=${repository%.git}
+  if [[ $repository =~ ^[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$ ]]; then
+    latest_revision=$(curl -fsS --connect-timeout 5 --max-time 15 --retry 2 --retry-delay 2 \
+      "https://api.github.com/repos/$repository/git/ref/heads/main" |
+      python3 -c 'import json,sys; print(json.load(sys.stdin)["object"]["sha"])') || latest_revision=""
   fi
-  [[ $attempt == 3 ]] || sleep 3
-done
-[[ $fetched == true ]] || exit 1
-latest_revision=$(git -C "$REPO_DIR" rev-parse refs/remotes/origin/main)
-flock -u 8
+fi
+if [[ ! $latest_revision =~ ^[a-f0-9]{40}$ ]]; then
+  # Source extraction needs Git objects. Private repositories also use this fallback.
+  exec 8>"$STATE_DIR/git.lock"
+  flock -w 300 8
+  fetched=false
+  for attempt in 1 2 3; do
+    if timeout 90 git -c http.version=HTTP/1.1 -C "$REPO_DIR" fetch --quiet --no-tags origin +refs/heads/main:refs/remotes/origin/main; then
+      fetched=true
+      break
+    fi
+    [[ $attempt == 3 ]] || sleep 3
+  done
+  [[ $fetched == true ]] || exit 1
+  latest_revision=$(git -C "$REPO_DIR" rev-parse refs/remotes/origin/main)
+  flock -u 8
+fi
 if [[ $latest_revision != "$revision" ]]; then
   echo "Skipping superseded main revision $revision"
   # Drain a superseded upload so the sender does not fail with a broken pipe.
   [[ $action != upload ]] || cat >/dev/null
+  exit 0
+fi
+
+if [[ $action == begin ]]; then
+  install -d -m 700 "$artifact_dir"
+  touch "$artifact_dir/.ready"
+  echo "Prepared $service image reception for $revision"
   exit 0
 fi
 
@@ -92,9 +164,21 @@ trap cleanup EXIT
 printf '%s\n' "$reg_pass" | docker login "$registry" -u "$reg_user" --password-stdin >/dev/null
 unset reg_pass
 
-if [[ $action == upload ]]; then
+if [[ $action == upload || $action == publish ]]; then
   incoming=$(mktemp "$STATE_DIR/upload.XXXXXX")
-  cat >"$incoming"
+  if [[ $action == publish ]]; then
+    test -f "$artifact_dir/.ready"
+    for (( index=0; index<chunk_count; index++ )); do
+      printf -v part '%03d' "$index"
+      if [[ ! -f "$artifact_dir/$part.part" ]]; then
+        echo "Missing image chunk $part" >&2
+        exit 2
+      fi
+      cat "$artifact_dir/$part.part" >>"$incoming"
+    done
+  else
+    cat >"$incoming"
+  fi
   actual_digest=$(sha256sum "$incoming")
   if [[ ${actual_digest%% *} != "$archive_digest" ]]; then
     echo 'Image archive checksum mismatch' >&2
@@ -126,6 +210,9 @@ PY
   docker push "$image"
   docker image tag "$image" "$prefix-$service:main"
   docker push "$prefix-$service:main"
+  if [[ $action == publish ]]; then
+    rm -rf -- "$artifact_dir"
+  fi
   echo "Published $service image for $revision from production server"
   exit 0
 fi

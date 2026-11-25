@@ -18,7 +18,7 @@ GitHub `dev-server` Environment 的变量为 `DEPLOY_HOST`、`DEPLOY_USER`，机
 
 将 `dev` 合并到 `main` 后，`.github/workflows/prod-cd.yaml` 自动复跑 `dev-ci.yaml`，在 GitHub 构建 `web`、`auth`、`backend` 三个 `linux/amd64` 镜像。压缩镜像通过现有受限 SSH 密钥传至生产服务器，由生产服务器推送镜像仓库，最后触发发布；生产服务器不编译应用。这避免 GitHub 海外构建机直接向广州 TCR 上传大镜像时长时间阻塞。
 
-部署助手仅接受 `deploy <SHA>` 或 `upload <SHA> <web|auth|backend> <SHA256>`，校验当前 main、压缩包 SHA256 和镜像 revision 标签。上传使用服务独立锁，Git fetch 使用共享锁与超时重试；镜像加载和仓库登录的临时文件在退出时清理。
+镜像按 4 MiB 分块，每个服务最多 8 个并行 SSH 连接，绕过高延迟跨境单连接的低吞吐。部署助手只接受 `deploy`、`begin`、`chunk`、`publish`、`discard` 及兼容的 `upload` 具名协议，限制完整 SHA、服务名和块编号，不提供 Shell。开始与发布时校验当前 main；每块校验大小与 SHA256，发布前检查连续块、完整压缩包 SHA256、唯一镜像标签、linux/amd64 和 revision。失败块独立重试，发布及作业退出时清理分块。上传使用独立锁，Git fetch 使用共享锁与超时重试；仓库登录临时文件在退出时清理。
 
 - 线上 80 端口仅暴露系统 Web 页面及 Go 认证短登录/注册入口（`apps/auth/casdoor/compose.prod-http.yaml` + `apps/auth/casdoor/Caddyfile.prod-http`），屏蔽 `/sellerops.*` 内部 RPC；Casdoor 管理界面仅绑定 `127.0.0.1:18000`，仅允许通过 SSH 隧道维护。
 - 生产服务器位于国内机房（如腾讯云广州）时，在 GitHub `prod-server` Environment 配置 `IMAGE_REGISTRY`（如 `ccr.ccs.tencentyun.com`）、`IMAGE_NAMESPACE` 及机密 `REGISTRY_USERNAME`、`REGISTRY_PASSWORD`，避免直连 GHCR 拉取超时；未配置时默认回退到 GHCR。
