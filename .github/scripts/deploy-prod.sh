@@ -3,11 +3,18 @@ set -euo pipefail
 
 # Invoked only as the forced command for the GitHub Actions production deployment key.
 command=${SSH_ORIGINAL_COMMAND:-}
-if [[ ! $command =~ ^deploy\ ([a-f0-9]{40})$ ]]; then
-  echo 'Expected: deploy <commit SHA>' >&2
+if [[ $command =~ ^deploy\ ([a-f0-9]{40})$ ]]; then
+  action=deploy
+  revision=${BASH_REMATCH[1]}
+elif [[ $command =~ ^upload\ ([a-f0-9]{40})\ (web|auth|backend)\ ([a-f0-9]{64})$ ]]; then
+  action=upload
+  revision=${BASH_REMATCH[1]}
+  service=${BASH_REMATCH[2]}
+  archive_digest=${BASH_REMATCH[3]}
+else
+  echo 'Expected: deploy <commit SHA> or upload <commit SHA> <web|auth|backend> <archive SHA256>' >&2
   exit 2
 fi
-revision=${BASH_REMATCH[1]}
 umask 077
 config_dir="$HOME/.config/seller-ops-cd"
 # shellcheck source=/dev/null
@@ -17,7 +24,9 @@ HEALTH_HOST=${HEALTH_HOST:-127.0.0.1}
 CASDOOR_ADMIN_ADDR=${CASDOOR_ADMIN_ADDR:-127.0.0.1:18000}
 
 mkdir -p "$STATE_DIR/releases"
-exec 9>"$STATE_DIR/deploy.lock"
+lock=deploy
+[[ $action != upload ]] || lock="upload-$service"
+exec 9>"$STATE_DIR/$lock.lock"
 flock -w 60 9
 
 if [[ -n ${DOCKER_START_SCRIPT:-} ]]; then
@@ -28,15 +37,30 @@ if [[ -n ${DOCKER_HOST_FILE:-} ]]; then
 fi
 docker info --format 'Deployment engine: {{.ServerVersion}}'
 
-git -C "$REPO_DIR" fetch --quiet origin +refs/heads/main:refs/remotes/origin/main
-if [[ $(git -C "$REPO_DIR" rev-parse refs/remotes/origin/main) != "$revision" ]]; then
+# Upload jobs run in parallel; serialize updates to the shared Git repository.
+exec 8>"$STATE_DIR/git.lock"
+flock -w 180 8
+fetched=false
+for attempt in 1 2 3; do
+  if timeout 90 git -c http.version=HTTP/1.1 -C "$REPO_DIR" fetch --quiet --no-tags origin +refs/heads/main:refs/remotes/origin/main; then
+    fetched=true
+    break
+  fi
+  [[ $attempt == 3 ]] || sleep 3
+done
+[[ $fetched == true ]] || exit 1
+latest_revision=$(git -C "$REPO_DIR" rev-parse refs/remotes/origin/main)
+flock -u 8
+if [[ $latest_revision != "$revision" ]]; then
   echo "Skipping superseded main revision $revision"
+  # Drain a superseded upload so the sender does not fail with a broken pipe.
+  [[ $action != upload ]] || cat >/dev/null
   exit 0
 fi
 
 current="$STATE_DIR/current"
 previous=""
-if [[ -L "$current" && -f "$current/images.yaml" ]]; then
+if [[ $action == deploy && -L "$current" && -f "$current/images.yaml" ]]; then
   previous=$(readlink "$current")
   if [[ "$previous" == "$STATE_DIR/releases/$revision" ]]; then
     echo "Revision $revision is already deployed"
@@ -55,7 +79,11 @@ if [[ ! $registry =~ ^[a-z0-9][a-z0-9.:-]*$ ]] || [[ ! $prefix =~ ^[a-z0-9][a-z0
 fi
 
 export DOCKER_CONFIG="$(mktemp -d "$STATE_DIR/registry.XXXXXX")"
+incoming=""
 cleanup() {
+  case "$incoming" in
+    "$STATE_DIR"/upload.*) rm -f -- "$incoming" ;;
+  esac
   case "$DOCKER_CONFIG" in
     "$STATE_DIR"/registry.*) rm -rf -- "$DOCKER_CONFIG" ;;
   esac
@@ -63,6 +91,44 @@ cleanup() {
 trap cleanup EXIT
 printf '%s\n' "$reg_pass" | docker login "$registry" -u "$reg_user" --password-stdin >/dev/null
 unset reg_pass
+
+if [[ $action == upload ]]; then
+  incoming=$(mktemp "$STATE_DIR/upload.XXXXXX")
+  cat >"$incoming"
+  actual_digest=$(sha256sum "$incoming")
+  if [[ ${actual_digest%% *} != "$archive_digest" ]]; then
+    echo 'Image archive checksum mismatch' >&2
+    exit 2
+  fi
+  image="$prefix-$service:$revision"
+  python3 - "$incoming" "$image" "$revision" <<'PY'
+import json
+import sys
+import tarfile
+
+with tarfile.open(sys.argv[1], 'r:gz') as archive:
+    manifest = json.load(archive.extractfile('manifest.json'))
+    if len(manifest) != 1 or manifest[0].get('RepoTags') != [sys.argv[2]]:
+        raise SystemExit('Image archive must contain only the expected image tag')
+    config = json.load(archive.extractfile(manifest[0]['Config']))
+    labels = config.get('config', {}).get('Labels') or {}
+    if config.get('os') != 'linux' or config.get('architecture') != 'amd64':
+        raise SystemExit('Expected a linux/amd64 image')
+    if labels.get('org.opencontainers.image.revision') != sys.argv[3]:
+        raise SystemExit('Image archive revision label mismatch')
+PY
+  gzip -dc "$incoming" | docker load
+  image_revision=$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$image")
+  if [[ $image_revision != "$revision" ]]; then
+    echo 'Image revision label mismatch' >&2
+    exit 2
+  fi
+  docker push "$image"
+  docker image tag "$image" "$prefix-$service:main"
+  docker push "$prefix-$service:main"
+  echo "Published $service image for $revision from production server"
+  exit 0
+fi
 
 release="$STATE_DIR/releases/$revision"
 rm -rf -- "$release"

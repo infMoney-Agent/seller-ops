@@ -64,23 +64,57 @@ jobs:
           echo "::add-mask::$password"
           echo "password=$password" >> "$GITHUB_OUTPUT"
       - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
-        with:
-          registry: ${{ steps.registry.outputs.registry }}
-          username: ${{ steps.registry.outputs.username }}
-          password: ${{ steps.registry.outputs.password }}
       - uses: docker/build-push-action@v6
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
           platforms: linux/amd64
-          push: true
+          load: true
           tags: |
             ${{ steps.registry.outputs.prefix }}-${{ matrix.image }}:${{ github.sha }}
             ${{ steps.registry.outputs.prefix }}-${{ matrix.image }}:main
           cache-from: type=gha,scope=prod-${{ matrix.image }}
           cache-to: type=gha,mode=max,scope=prod-${{ matrix.image }}
-          labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+      - name: Transfer image over SSH and publish from production server
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+          DEPLOY_PORT: ${{ vars.DEPLOY_PORT }}
+          DEPLOY_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_HOST_KEY: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          REGISTRY: ${{ steps.registry.outputs.registry }}
+          PREFIX: ${{ steps.registry.outputs.prefix }}
+          REG_USER: ${{ steps.registry.outputs.username }}
+          REG_PASS: ${{ steps.registry.outputs.password }}
+          IMAGE: ${{ matrix.image }}
+        run: |
+          set -euo pipefail
+          : "${DEPLOY_HOST:?Missing DEPLOY_HOST}" "${DEPLOY_USER:?Missing DEPLOY_USER}"
+          : "${DEPLOY_KEY:?Missing DEPLOY_SSH_KEY}" "${DEPLOY_HOST_KEY:?Missing DEPLOY_KNOWN_HOSTS}"
+          umask 077
+          transfer_dir=$(mktemp -d)
+          trap 'rm -rf -- "$transfer_dir"' EXIT
+          printf '%s\n' "$DEPLOY_KEY" > "$transfer_dir/key"
+          printf '%s\n' "$DEPLOY_HOST_KEY" > "$transfer_dir/known_hosts"
+          docker save "$PREFIX-$IMAGE:$GITHUB_SHA" | gzip -1 > "$transfer_dir/image.tar.gz"
+          digest=$(sha256sum "$transfer_dir/image.tar.gz")
+          digest=${digest%% *}
+          for attempt in 1 2 3; do
+            if {
+              printf '%s\n%s\n%s\n%s\n' "$REGISTRY" "$PREFIX" "$REG_USER" "$REG_PASS"
+              cat "$transfer_dir/image.tar.gz"
+            } | ssh -T -p "${DEPLOY_PORT:-22}" -o BatchMode=yes -o ConnectTimeout=15 \
+                -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -o IdentitiesOnly=yes \
+                -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$transfer_dir/known_hosts" \
+                -i "$transfer_dir/key" "$DEPLOY_USER@$DEPLOY_HOST" "upload $GITHUB_SHA $IMAGE $digest"; then
+              exit 0
+            fi
+            [[ $attempt == 3 ]] || sleep 5
+          done
+          exit 1
   deploy:
     name: Deploy to production server
     needs: images
