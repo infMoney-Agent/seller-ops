@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -30,14 +31,25 @@ func prompt(module, key string, values map[string]string) string {
 }
 func (s *Service) route(w http.ResponseWriter, r *http.Request) (any, error) {
 	path := strings.TrimPrefix(r.URL.Path, "/api/v1/")
+	body := Obj{}
+	if r.Method == "POST" && path != "ads/optimize" && (!strings.HasPrefix(path, "monitor/") || path == "monitor/add") {
+		var err error
+		body, err = decode(w, r)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return s.executeEcom(r.Context(), r.Context().Value(userKey{}).(int64), r.Method, path, r.URL.Query(), body)
+}
+func (s *Service) executeEcom(ctx context.Context, user int64, method, path string, query url.Values, b Obj) (any, error) {
 	parts := strings.Split(path, "/")
 	if len(parts) < 2 {
 		return nil, httpError{404, "接口不存在"}
 	}
 	if parts[0] == "monitor" {
-		return s.monitor(w, r, parts[1:])
+		return s.monitorUsecase(ctx, user, method, parts[1:], query, b)
 	}
-	if r.Method == "GET" {
+	if method == "GET" {
 		switch path {
 		case "product-research/categories":
 			keys := []string{}
@@ -54,47 +66,39 @@ func (s *Service) route(w http.ResponseWriter, r *http.Request) (any, error) {
 			if e != nil {
 				return nil, e
 			}
-			if p := r.URL.Query().Get("platform"); p != "" && p != "amazon" {
+			if p := query.Get("platform"); p != "" && p != "amazon" {
 				return nil, httpError{422, "不支持的平台"}
 			}
-			product, e := s.adapter.Product(r.Context(), asin)
+			product, e := s.adapter.Product(ctx, asin)
 			if e != nil {
 				return nil, e
 			}
-			return s.score(r.Context(), product)
+			return s.score(ctx, product)
 		}
 	}
-	if r.Method == "GET" && len(parts) == 3 && parts[0] == "reviews" && parts[1] == "analyze" {
+	if method == "GET" && len(parts) == 3 && parts[0] == "reviews" && parts[1] == "analyze" {
 		asin, e := validateASIN(parts[2])
 		if e != nil {
 			return nil, e
 		}
 		pages := 3
-		if value := r.URL.Query().Get("max_pages"); value != "" {
+		if value := query.Get("max_pages"); value != "" {
 			pages, e = strconv.Atoi(value)
 			if e != nil || pages < 1 || pages > 20 {
 				return nil, httpError{422, "评论页数无效"}
 			}
 		}
-		if value := r.URL.Query().Get("platform"); value != "" && value != "amazon" {
+		if value := query.Get("platform"); value != "" && value != "amazon" {
 			return nil, httpError{422, "不支持的平台"}
 		}
-		rows, e := s.adapter.Reviews(r.Context(), asin, pages)
+		rows, e := s.adapter.Reviews(ctx, asin, pages)
 		if e != nil {
 			return nil, e
 		}
-		return s.analyze(r.Context(), asin, rows)
+		return s.analyze(ctx, asin, rows)
 	}
-	if r.Method != "POST" {
+	if method != "POST" {
 		return nil, httpError{404, "接口不存在"}
-	}
-	b := Obj{}
-	if path != "ads/optimize" {
-		var e error
-		b, e = decode(w, r)
-		if e != nil {
-			return nil, e
-		}
 	}
 	if platform := text(b["platform"]); platform != "" && platform != "amazon" {
 		return nil, httpError{422, "不支持的平台"}
@@ -116,17 +120,17 @@ func (s *Service) route(w http.ResponseWriter, r *http.Request) (any, error) {
 		if limit < 1 || limit > 100 || min < 0 || min > 10 {
 			return nil, httpError{422, "数量或最低分无效"}
 		}
-		products, e := s.adapter.BestSellers(r.Context(), category, limit)
+		products, e := s.adapter.BestSellers(ctx, category, limit)
 		if e != nil {
 			return nil, e
 		}
 		results := []Obj{}
 		failed := 0
 		for _, p := range products {
-			if e := r.Context().Err(); e != nil {
+			if e := ctx.Err(); e != nil {
 				return nil, e
 			}
-			v, e := s.score(r.Context(), p)
+			v, e := s.score(ctx, p)
 			if e != nil {
 				failed++
 				continue
@@ -141,7 +145,7 @@ func (s *Service) route(w http.ResponseWriter, r *http.Request) (any, error) {
 		sort.SliceStable(results, func(i, j int) bool { return number(results[i]["overall_score"]) > number(results[j]["overall_score"]) })
 		return Obj{"category": category, "results": results, "failed": failed}, nil
 	case "listing/generate", "listing/optimize":
-		return s.listing(r.Context(), path, b)
+		return s.listing(ctx, path, b)
 	case "reviews/analyze":
 		asin, e := validateASIN(text(b["asin"]))
 		if e != nil {
@@ -154,24 +158,24 @@ func (s *Service) route(w http.ResponseWriter, r *http.Request) (any, error) {
 		if pages < 1 || pages > 20 {
 			return nil, httpError{422, "评论页数须在1到20之间"}
 		}
-		rows, e := s.adapter.Reviews(r.Context(), asin, pages)
+		rows, e := s.adapter.Reviews(ctx, asin, pages)
 		if e != nil {
 			return nil, e
 		}
-		return s.analyze(r.Context(), asin, rows)
+		return s.analyze(ctx, asin, rows)
 	case "ads/optimize":
-		if p := r.URL.Query().Get("platform"); p != "" && p != "amazon" {
+		if p := query.Get("platform"); p != "" && p != "amazon" {
 			return nil, httpError{422, "不支持的平台"}
 		}
 		target := 25.0
-		if raw := r.URL.Query().Get("target_acos"); raw != "" {
+		if raw := query.Get("target_acos"); raw != "" {
 			var e error
 			target, e = strconv.ParseFloat(raw, 64)
 			if e != nil || math.IsNaN(target) || math.IsInf(target, 0) || target <= 0 || target > 100 {
 				return nil, httpError{422, "目标ACoS须大于0且不超过100"}
 			}
 		}
-		return s.optimizeAds(r.Context(), target)
+		return s.optimizeAds(ctx, target)
 	}
 	return nil, httpError{404, "接口不存在"}
 }

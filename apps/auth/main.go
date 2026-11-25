@@ -103,6 +103,7 @@ func main() {
 	}
 	mux := http.NewServeMux()
 	s.auth.Register(mux)
+	s.registerAuthRPC(mux)
 	mux.HandleFunc("GET /api/auth/session", s.session)
 	s.registerBusiness(mux)
 	listenAddr := os.Getenv("SELLER_LISTEN_ADDR")

@@ -101,28 +101,35 @@ func newProductQuery(a identity, values url.Values) productQuery {
 	return q
 }
 func (s *service) products(r *http.Request) (any, error) {
-	if e := validateFilters(r.URL.Query()); e != nil {
+	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+	groupKey := ""
+	if len(parts) >= 3 && parts[len(parts)-3] == "groups" {
+		groupKey = parts[len(parts)-2]
+	}
+	return s.productsUsecase(r.Context(), actor(r), r.URL.Query(), groupKey)
+}
+func (s *service) productsUsecase(ctx context.Context, a identity, params url.Values, groupKey string) (any, error) {
+	if e := validateFilters(params); e != nil {
 		return nil, e
 	}
-	q := newProductQuery(actor(r), r.URL.Query())
-	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
-	expand := len(parts) >= 3 && parts[len(parts)-3] == "groups"
+	q := newProductQuery(a, params)
+	expand := groupKey != ""
 	if expand {
-		q.args = append(q.args, parts[len(parts)-2])
+		q.args = append(q.args, groupKey)
 		q.where += fmt.Sprintf(" AND p.machine_group_key=$%d", len(q.args))
 	}
-	collapse := !expand && r.URL.Query().Get("show_merged") != "true"
+	collapse := !expand && params.Get("show_merged") != "true"
 	group := parentFamilySQL
 	counter := "count(*)"
 	if collapse {
 		counter = "count(DISTINCT " + group + ")"
 	}
-	p, n := page(r)
+	p, n := queryPage(params)
 	var total int64
-	if e := s.db.QueryRow(r.Context(), "SELECT "+counter+" FROM ps_products p "+filterJoins(q, false)+" WHERE "+q.where, q.args...).Scan(&total); e != nil {
+	if e := s.db.QueryRow(ctx, "SELECT "+counter+" FROM ps_products p "+filterJoins(q, false)+" WHERE "+q.where, q.args...).Scan(&total); e != nil {
 		return nil, e
 	}
-	field := r.URL.Query().Get("sort")
+	field := params.Get("sort")
 	direction := "ASC"
 	if field == "" {
 		field = "updated_at"
@@ -146,7 +153,7 @@ func (s *service) products(r *http.Request) (any, error) {
 	}
 	q.args = append(q.args, n, (p-1)*n)
 	sql += fmt.Sprintf(" ORDER BY sort_value %s NULLS LAST,id LIMIT $%d OFFSET $%d) SELECT ", direction, len(q.args)-1, len(q.args)) + productProjection + "||jsonb_build_object('family_count',CASE WHEN NULLIF(p.parent_asin,'') IS NULL THEN 1 ELSE (SELECT count(*) FROM ps_products sibling WHERE sibling.tenant_id=p.tenant_id AND sibling.archived_at IS NULL AND sibling.marketplace=p.marketplace AND sibling.parent_asin=p.parent_asin) END,'family_member_ids',CASE WHEN NULLIF(p.parent_asin,'') IS NULL THEN ARRAY[p.id::text] ELSE (SELECT COALESCE(array_agg(sibling.id::text ORDER BY sibling.id),ARRAY[]::text[]) FROM ps_products sibling WHERE sibling.tenant_id=p.tenant_id AND sibling.archived_at IS NULL AND sibling.marketplace=p.marketplace AND sibling.parent_asin=p.parent_asin) END,'family_sales_pending',EXISTS(SELECT 1 FROM ps_products sibling LEFT JOIN ps_product_monthly sm ON sm.tenant_id=sibling.tenant_id AND sm.id=sibling.current_monthly_id WHERE sibling.tenant_id=p.tenant_id AND sibling.marketplace=p.marketplace AND sibling.parent_asin=p.parent_asin AND (sm.sales_scope IS DISTINCT FROM 'child' OR sm.monthly_sales IS NULL)))" + " FROM selected JOIN ps_products p ON p.tenant_id=$1 AND p.id=selected.id " + q.joins + " ORDER BY selected.sort_value " + direction + " NULLS LAST,p.id"
-	items, e := s.query(r.Context(), sql, q.args...)
+	items, e := s.query(ctx, sql, q.args...)
 	// List clients use the public aliases. Keep full machine evidence on detail responses.
 	for _, item := range items {
 		for _, field := range importedColumns {
@@ -161,14 +168,20 @@ func (s *service) products(r *http.Request) (any, error) {
 	return Object{"items": items, "page": p, "page_size": n, "total": total}, e
 }
 func (s *service) summary(r *http.Request) (any, error) {
-	if e := validateFilters(r.URL.Query()); e != nil {
+	return s.summaryUsecase(r.Context(), actor(r), r.URL.Query())
+}
+func (s *service) summaryUsecase(ctx context.Context, a identity, params url.Values) (any, error) {
+	if e := validateFilters(params); e != nil {
 		return nil, e
 	}
-	q := newProductQuery(actor(r), r.URL.Query())
-	return s.one(r.Context(), "SELECT jsonb_build_object('products',count(*),'displayed',count(DISTINCT COALESCE('parent:'||p.marketplace||':'||NULLIF(p.parent_asin,''),'product:'||p.id::text)),'pending_displayed',count(DISTINCT "+parentFamilySQL+") FILTER(WHERE p.review_status='pending'),'pending',count(*) FILTER(WHERE p.review_status='pending'),'kept',count(*) FILTER(WHERE p.review_status='kept'),'excluded',count(*) FILTER(WHERE p.review_status='excluded'),'source_rows',COALESCE(sum((SELECT count(*) FROM ps_import_rows ir JOIN ps_imports ii ON ii.tenant_id=ir.tenant_id AND ii.id=ir.import_id WHERE ir.tenant_id=p.tenant_id AND ir.product_id=p.id AND NOT(ii.counts ? 'data_deleted_at'))),0)) FROM ps_products p "+filterJoins(q, false)+" WHERE "+q.where, q.args...)
+	q := newProductQuery(a, params)
+	return s.one(ctx, "SELECT jsonb_build_object('products',count(*),'displayed',count(DISTINCT COALESCE('parent:'||p.marketplace||':'||NULLIF(p.parent_asin,''),'product:'||p.id::text)),'pending_displayed',count(DISTINCT "+parentFamilySQL+") FILTER(WHERE p.review_status='pending'),'pending',count(*) FILTER(WHERE p.review_status='pending'),'kept',count(*) FILTER(WHERE p.review_status='kept'),'excluded',count(*) FILTER(WHERE p.review_status='excluded'),'source_rows',COALESCE(sum((SELECT count(*) FROM ps_import_rows ir JOIN ps_imports ii ON ii.tenant_id=ir.tenant_id AND ii.id=ir.import_id WHERE ir.tenant_id=p.tenant_id AND ir.product_id=p.id AND NOT(ii.counts ? 'data_deleted_at'))),0)) FROM ps_products p "+filterJoins(q, false)+" WHERE "+q.where, q.args...)
 }
 func (s *service) monthlyList(r *http.Request, id string) (any, error) {
-	window := r.URL.Query().Get("recent_months")
+	return s.monthlyListUsecase(r.Context(), actor(r), r.URL.Query(), id)
+}
+func (s *service) monthlyListUsecase(ctx context.Context, a identity, params url.Values, id string) (any, error) {
+	window := params.Get("recent_months")
 	if window != "" && window != "12" {
 		return nil, fail(422, "recent_months 只支持 12")
 	}
@@ -176,28 +189,32 @@ func (s *service) monthlyList(r *http.Request, id string) (any, error) {
 	if window == "12" {
 		extra = " AND stat_month >= (SELECT max(stat_month) - interval '11 months' FROM ps_product_monthly WHERE tenant_id=$1 AND product_id=$2::uuid)"
 	}
-	a := actor(r)
-	p, n := page(r)
+
+	p, n := queryPage(params)
 	var count int
-	if e := s.db.QueryRow(r.Context(), "SELECT count(*) FROM ps_product_monthly WHERE tenant_id=$1 AND product_id=$2::uuid"+extra, a.Tenant, id).Scan(&count); e != nil {
+	if e := s.db.QueryRow(ctx, "SELECT count(*) FROM ps_product_monthly WHERE tenant_id=$1 AND product_id=$2::uuid"+extra, a.Tenant, id).Scan(&count); e != nil {
 		return nil, e
 	}
-	items, e := s.query(r.Context(), "SELECT to_jsonb(m)||jsonb_build_object('display_child_sales',"+displayChildSalesSQL+",'file_name',i.file_name,'member_path',r.member_path,'sheet_name',r.sheet_name,'row_no',r.row_no,'price_usd',m.price_usd::text) FROM ps_product_monthly m JOIN ps_products p ON p.tenant_id=m.tenant_id AND p.id=m.product_id JOIN ps_import_rows r ON r.tenant_id=m.tenant_id AND r.id=m.source_row_id JOIN ps_imports i ON i.tenant_id=r.tenant_id AND i.id=r.import_id WHERE m.tenant_id=$1 AND m.product_id=$2::uuid"+extra+" ORDER BY m.stat_month DESC,m.period_end DESC,m.observed_on DESC,m.id LIMIT $3 OFFSET $4", a.Tenant, id, n, (p-1)*n)
+	items, e := s.query(ctx, "SELECT to_jsonb(m)||jsonb_build_object('display_child_sales',"+displayChildSalesSQL+",'file_name',i.file_name,'member_path',r.member_path,'sheet_name',r.sheet_name,'row_no',r.row_no,'price_usd',m.price_usd::text) FROM ps_product_monthly m JOIN ps_products p ON p.tenant_id=m.tenant_id AND p.id=m.product_id JOIN ps_import_rows r ON r.tenant_id=m.tenant_id AND r.id=m.source_row_id JOIN ps_imports i ON i.tenant_id=r.tenant_id AND i.id=r.import_id WHERE m.tenant_id=$1 AND m.product_id=$2::uuid"+extra+" ORDER BY m.stat_month DESC,m.period_end DESC,m.observed_on DESC,m.id LIMIT $3 OFFSET $4", a.Tenant, id, n, (p-1)*n)
 	return Object{"items": items, "total": count, "page": p, "page_size": n}, e
 }
 func (s *service) profitScenarios(r *http.Request, id string) (any, error) {
-	a := actor(r)
-	p, n := page(r)
+	return s.profitScenariosUsecase(r.Context(), actor(r), r.URL.Query(), id)
+}
+func (s *service) profitScenariosUsecase(ctx context.Context, a identity, params url.Values, id string) (any, error) {
+	p, n := queryPage(params)
 	var count int
-	if e := s.db.QueryRow(r.Context(), "SELECT count(*) FROM ps_profit_scenarios WHERE tenant_id=$1 AND product_id=$2::uuid", a.Tenant, id).Scan(&count); e != nil {
+	if e := s.db.QueryRow(ctx, "SELECT count(*) FROM ps_profit_scenarios WHERE tenant_id=$1 AND product_id=$2::uuid", a.Tenant, id).Scan(&count); e != nil {
 		return nil, e
 	}
-	items, e := s.query(r.Context(), "SELECT to_jsonb(q)||jsonb_build_object('stale',q.record_kind='calculated' AND (q.product_data_revision<>p.data_revision OR q.monthly_revision IS DISTINCT FROM m.revision OR EXISTS(SELECT 1 FROM ps_configs newer JOIN ps_configs old ON old.tenant_id=newer.tenant_id AND old.id=q.template_id WHERE newer.tenant_id=q.tenant_id AND newer.kind='profit_template' AND newer.name=old.name AND newer.version>old.version))) FROM ps_profit_scenarios q JOIN ps_products p ON p.tenant_id=q.tenant_id AND p.id=q.product_id LEFT JOIN ps_product_monthly m ON m.tenant_id=q.tenant_id AND m.id=q.monthly_id WHERE q.tenant_id=$1 AND q.product_id=$2::uuid ORDER BY q.created_at DESC,q.id LIMIT $3 OFFSET $4", a.Tenant, id, n, (p-1)*n)
+	items, e := s.query(ctx, "SELECT to_jsonb(q)||jsonb_build_object('stale',q.record_kind='calculated' AND (q.product_data_revision<>p.data_revision OR q.monthly_revision IS DISTINCT FROM m.revision OR EXISTS(SELECT 1 FROM ps_configs newer JOIN ps_configs old ON old.tenant_id=newer.tenant_id AND old.id=q.template_id WHERE newer.tenant_id=q.tenant_id AND newer.kind='profit_template' AND newer.name=old.name AND newer.version>old.version))) FROM ps_profit_scenarios q JOIN ps_products p ON p.tenant_id=q.tenant_id AND p.id=q.product_id LEFT JOIN ps_product_monthly m ON m.tenant_id=q.tenant_id AND m.id=q.monthly_id WHERE q.tenant_id=$1 AND q.product_id=$2::uuid ORDER BY q.created_at DESC,q.id LIMIT $3 OFFSET $4", a.Tenant, id, n, (p-1)*n)
 	return Object{"items": items, "total": count, "page": p, "page_size": n}, e
 }
 func (s *service) family(r *http.Request, id string) (any, error) {
-	a := actor(r)
-	p, e := s.product(r.Context(), a, id)
+	return s.familyUsecase(r.Context(), actor(r), r.URL.Query(), id)
+}
+func (s *service) familyUsecase(ctx context.Context, a identity, params url.Values, id string) (any, error) {
+	p, e := s.product(ctx, a, id)
 	if e != nil {
 		return nil, e
 	}
@@ -206,22 +223,22 @@ func (s *service) family(r *http.Request, id string) (any, error) {
 	if parent == "" {
 		return out, nil
 	}
-	q := newProductQuery(a, r.URL.Query())
+	q := newProductQuery(a, params)
 	q.args = append(q.args, parent)
 	q.where += fmt.Sprintf(" AND p.parent_asin=$%d", len(q.args))
 	q.args = append(q.args, p["marketplace"])
 	q.where += fmt.Sprintf(" AND p.marketplace=$%d", len(q.args))
-	pageIndex, pageSize := page(r)
+	pageIndex, pageSize := queryPage(params)
 	var total int64
-	if e = s.db.QueryRow(r.Context(), "SELECT count(*) FROM ps_products p "+filterJoins(q, false)+" WHERE "+q.where, q.args...).Scan(&total); e != nil {
+	if e = s.db.QueryRow(ctx, "SELECT count(*) FROM ps_products p "+filterJoins(q, false)+" WHERE "+q.where, q.args...).Scan(&total); e != nil {
 		return nil, e
 	}
 	q.args = append(q.args, pageSize, (pageIndex-1)*pageSize)
-	items, e := s.query(r.Context(), "SELECT "+productProjection+" FROM ps_products p "+q.joins+" WHERE "+q.where+fmt.Sprintf(" ORDER BY "+familyRankSQL+" LIMIT $%d OFFSET $%d", len(q.args)-1, len(q.args)), q.args...)
+	items, e := s.query(ctx, "SELECT "+productProjection+" FROM ps_products p "+q.joins+" WHERE "+q.where+fmt.Sprintf(" ORDER BY "+familyRankSQL+" LIMIT $%d OFFSET $%d", len(q.args)-1, len(q.args)), q.args...)
 	if e != nil {
 		return nil, e
 	}
-	parents, e := s.query(r.Context(), "SELECT to_jsonb(m) FROM ps_parent_monthly m WHERE tenant_id=$1 AND parent_asin=$2 ORDER BY stat_month DESC,id LIMIT 100", a.Tenant, parent)
+	parents, e := s.query(ctx, "SELECT to_jsonb(m) FROM ps_parent_monthly m WHERE tenant_id=$1 AND parent_asin=$2 ORDER BY stat_month DESC,id LIMIT 100", a.Tenant, parent)
 	if e != nil {
 		return nil, e
 	}
@@ -230,12 +247,12 @@ func (s *service) family(r *http.Request, id string) (any, error) {
 	out["page"] = pageIndex
 	out["page_size"] = pageSize
 	out["parent_monthly"] = parents
-	anchor, e := s.productView(r.Context(), a, id)
+	anchor, e := s.productView(ctx, a, id)
 	if e != nil {
 		return nil, e
 	}
 	if str(anchor["monthly_id"]) != "" {
-		totals, e := s.one(r.Context(), "SELECT jsonb_build_object('known_child_sales_total',sum(m.monthly_sales) FILTER(WHERE m.sales_scope='child'),'unknown_child_count',count(*) FILTER(WHERE m.sales_scope<>'child')) FROM ps_products p JOIN ps_product_monthly m ON m.tenant_id=p.tenant_id AND m.product_id=p.id AND m.parent_asin_snapshot=p.parent_asin WHERE p.tenant_id=$1 AND p.parent_asin=$2 AND m.source_type=$3 AND m.period_type=$4 AND m.period_start=$5::date AND m.period_end=$6::date", a.Tenant, parent, anchor["source_type"], anchor["period_type"], anchor["period_start"], anchor["period_end"])
+		totals, e := s.one(ctx, "SELECT jsonb_build_object('known_child_sales_total',sum(m.monthly_sales) FILTER(WHERE m.sales_scope='child'),'unknown_child_count',count(*) FILTER(WHERE m.sales_scope<>'child')) FROM ps_products p JOIN ps_product_monthly m ON m.tenant_id=p.tenant_id AND m.product_id=p.id AND m.parent_asin_snapshot=p.parent_asin WHERE p.tenant_id=$1 AND p.parent_asin=$2 AND m.source_type=$3 AND m.period_type=$4 AND m.period_start=$5::date AND m.period_end=$6::date", a.Tenant, parent, anchor["source_type"], anchor["period_type"], anchor["period_start"], anchor["period_end"])
 		if e != nil {
 			return nil, e
 		}

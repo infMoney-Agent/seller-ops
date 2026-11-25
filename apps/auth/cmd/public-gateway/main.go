@@ -82,7 +82,7 @@ func frontendPath(path string) bool {
 	if path == "/" || path == "/favicon.ico" || path == "/robots.txt" {
 		return true
 	}
-	for _, prefix := range []string{"/dashboard", "/auth", "/invite", "/company-required", "/branding", "/_next", "/api/auth", "/api/ecom", "/api/products", "/api/users", "/api/invitations"} {
+	for _, prefix := range []string{"/images/flags", "/dashboard", "/auth", "/invite", "/company-required", "/branding", "/_next", "/api/auth", "/api/ecom", "/api/products", "/api/users", "/api/invitations"} {
 		if path == prefix || strings.HasPrefix(path, prefix+"/") {
 			return true
 		}
@@ -131,6 +131,10 @@ func gateway(origin string, web, identity *url.URL, authTargets ...*url.URL) htt
 			http.Error(w, "Invalid host", http.StatusMisdirectedRequest)
 			return
 		}
+		if strings.HasPrefix(r.URL.Path, "/sellerops.") {
+			http.NotFound(w, r)
+			return
+		}
 		if r.URL.Path == "/admin-login" {
 			http.Redirect(w, r, "/login/built-in", http.StatusFound)
 			return
@@ -161,7 +165,7 @@ func gateway(origin string, web, identity *url.URL, authTargets ...*url.URL) htt
 			authentication.ServeHTTP(w, clone)
 			return
 		}
-		if r.URL.Path == "/api/auth/register-page" || strings.HasPrefix(r.URL.Path, "/api/auth/registration/") {
+		if r.URL.Path == "/api/auth/register-page" || (strings.HasPrefix(r.URL.Path, "/api/auth/registration/") && r.URL.Path != "/api/auth/registration/status") {
 			authentication.ServeHTTP(w, r)
 			return
 		}

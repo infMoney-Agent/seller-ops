@@ -1,9 +1,11 @@
 package screening
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"sort"
 	"strings"
 )
@@ -21,7 +23,10 @@ type reviewCategoryNode struct {
 }
 
 func reviewCandidateQuery(r *http.Request, ignoreCategory bool) (productQuery, error) {
-	v := r.URL.Query()
+	return reviewCandidateValues(actor(r), r.URL.Query(), ignoreCategory)
+}
+func reviewCandidateValues(a identity, params url.Values, ignoreCategory bool) (productQuery, error) {
+	v := cloneQuery(params)
 	selected, category := v.Get("selected_ids"), v.Get("category_path")
 	for _, k := range []string{"group_page", "member_page", "sample_page", "group_id", "selected_ids", "category_path", "family_product_id"} {
 		v.Del(k)
@@ -29,7 +34,7 @@ func reviewCandidateQuery(r *http.Request, ignoreCategory bool) (productQuery, e
 	if e := validateFilters(v); e != nil {
 		return productQuery{}, e
 	}
-	q := newProductQuery(actor(r), v)
+	q := newProductQuery(a, v)
 	if selected != "" {
 		ids := strings.Split(selected, ",")
 		if len(ids) > 100 {
@@ -59,13 +64,16 @@ func reviewCandidateQuery(r *http.Request, ignoreCategory bool) (productQuery, e
 	return q, nil
 }
 func (s *service) reviewCategories(r *http.Request) (any, error) {
-	q, e := reviewCandidateQuery(r, true)
+	return s.reviewCategoriesUsecase(r.Context(), actor(r), r.URL.Query())
+}
+func (s *service) reviewCategoriesUsecase(ctx context.Context, a identity, params url.Values) (any, error) {
+	q, e := reviewCandidateValues(a, params, true)
 	if e != nil {
 		return nil, e
 	}
 	// Excluded products remain available as samples, not review candidates.
 	q.where += " AND p.review_status<>'excluded'"
-	rows, e := s.query(r.Context(), "WITH candidates AS (SELECT "+reviewCategoryPathSQL+" AS path,"+parentFamilySQL+" AS family,p.review_status FROM ps_products p "+filterJoins(q, false)+" WHERE "+q.where+") SELECT jsonb_build_object('path',path[1:depth],'products',count(*),'pending',count(DISTINCT family) FILTER(WHERE review_status='pending')) FROM candidates CROSS JOIN LATERAL generate_subscripts(path,1) AS depth GROUP BY path[1:depth] ORDER BY cardinality(path[1:depth])", q.args...)
+	rows, e := s.query(ctx, "WITH candidates AS (SELECT "+reviewCategoryPathSQL+" AS path,"+parentFamilySQL+" AS family,p.review_status FROM ps_products p "+filterJoins(q, false)+" WHERE "+q.where+") SELECT jsonb_build_object('path',path[1:depth],'products',count(*),'pending',count(DISTINCT family) FILTER(WHERE review_status='pending')) FROM candidates CROSS JOIN LATERAL generate_subscripts(path,1) AS depth GROUP BY path[1:depth] ORDER BY cardinality(path[1:depth])", q.args...)
 	if e != nil {
 		return nil, e
 	}

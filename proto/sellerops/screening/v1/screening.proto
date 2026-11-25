@@ -1,0 +1,1101 @@
+syntax = "proto3";
+package sellerops.screening.v1;
+
+import "google/protobuf/struct.proto";
+import "sellerops/screening/v1/import.proto";
+
+option go_package = "seller-ops/contracts/sellerops/screening/v1;screeningv1";
+message Product {
+  optional int64 family_count = 1;
+  repeated string family_member_ids = 2;
+  repeated Product family_items = 3;
+  optional bool family_sales_pending = 4;
+  optional string id = 5;
+  optional string asin = 6;
+  optional string parent_asin = 7;
+  optional string manual_category = 8;
+  optional string listing_date = 9;
+  optional string material = 10;
+  google.protobuf.Value product_length_cm = 11;
+  google.protobuf.Value product_width_cm = 12;
+  google.protobuf.Value product_height_cm = 13;
+  optional string product_dimensions = 14;
+  optional string product_dimensions_original = 15;
+  optional string package_dimensions = 16;
+  optional string package_dimensions_original = 17;
+  google.protobuf.Value weight_g = 18;
+  google.protobuf.Value package_weight_g = 19;
+  google.protobuf.Value package_length_cm = 20;
+  google.protobuf.Value package_width_cm = 21;
+  google.protobuf.Value package_height_cm = 22;
+  optional int64 units_per_pack = 23;
+  optional int64 carton_units = 24;
+  google.protobuf.Value carton_weight_g = 25;
+  google.protobuf.Value carton_length_cm = 26;
+  google.protobuf.Value carton_width_cm = 27;
+  google.protobuf.Value carton_height_cm = 28;
+  optional string sales_scope = 29;
+  optional string sales_quantity_kind = 30;
+  optional string child_sales_raw = 31;
+  optional int64 reported_monthly_sales = 32;
+  optional string title = 33;
+  optional string title_zh = 34;
+  optional string image_url = 35;
+  optional string category = 36;
+  optional string seller_name = 37;
+  optional string seller_id = 38;
+  optional string seller_region = 39;
+  optional string monthly_id = 40;
+  optional int64 monthly_revision = 41;
+  optional string stat_month = 42;
+  optional string period_type = 43;
+  optional string period_start = 44;
+  optional string period_end = 45;
+  optional string source_type = 46;
+  optional string monthly_revenue = 47;
+  optional int64 review_count = 48;
+  optional string rating = 49;
+  optional int64 bsr_rank = 50;
+  optional string price_usd = 51;
+  optional int64 monthly_sales = 52;
+  optional int64 display_child_sales = 53;
+  google.protobuf.Struct specs = 54;
+  optional string decision = 55;
+  optional string recommendation = 56;
+  optional string direction = 57;
+  optional string group_key = 58;
+  optional ReviewStatus review_status = 59;
+  optional string review_reason = 60;
+  optional string review_note = 61;
+  optional int64 review_revision = 62;
+  optional int64 data_revision = 63;
+  optional bool has_reference = 64;
+  repeated string reasons = 65;
+  ProfitOutput profit_output = 66;
+  optional int64 profit_data_revision = 67;
+  optional int64 profit_monthly_revision = 68;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+  ProfitScenario scenario = 100;
+  google.protobuf.Struct imported_fees = 101;
+  optional bool scenario_stale = 102;
+}
+message ImportRow {
+  optional string id = 1;
+  optional string member_path = 2;
+  optional string sheet_name = 3;
+  optional int64 row_no = 4;
+  repeated string errors = 5;
+  google.protobuf.Struct raw_data = 6;
+  google.protobuf.Struct normalized_data = 7;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message Target {
+  optional string id = 1;
+  optional string asin = 2;
+  optional string title = 3;
+  optional bool eligible = 4;
+  optional string skip_reason = 5;
+  optional ReviewStatus review_status = 6;
+  optional bool success = 7;
+  optional string reason = 8;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message BatchPreview {
+  optional string id = 1;
+  optional string expires_at = 2;
+  optional string action = 3;
+  optional string category = 4;
+  optional string scope = 5;
+  optional bool overwrite = 6;
+  repeated Target targets = 7;
+  optional string status = 8;
+  optional string reason = 9;
+  optional string note = 10;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message BatchResult {
+  optional string id = 1;
+  optional int64 success = 2;
+  optional int64 skipped = 3;
+  repeated Target items = 4;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message BatchRecord {
+  optional string id = 1;
+  optional string state = 2;
+  optional string created_at = 3;
+  BatchPreview payload = 4;
+  BatchResult result = 5;
+  BatchResult undo_result = 6;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message Policy {
+  optional string id = 1;
+  optional string name = 2;
+  optional int64 version = 3;
+  optional bool active = 4;
+  google.protobuf.Struct config = 5;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message ProfitOutput {
+  optional string commission_source = 1;
+  optional string commission_category = 2;
+  optional string commission_category_label = 3;
+  optional string commission_rate = 4;
+  optional string commission_minimum_usd = 5;
+  optional string commission_rule_version = 6;
+  optional string storage_source = 7;
+  optional string storage_rate_usd_ft3 = 8;
+  optional string storage_month = 9;
+  optional string storage_usd = 10;
+  optional string storage_rate_version = 11;
+  optional string profit_cny = 12;
+  optional string commission_usd = 13;
+  optional string freight_cny = 14;
+  optional string volumetric_weight_kg = 15;
+  optional string billable_weight_kg = 16;
+  optional string freight_missing = 17;
+  optional string state = 18;
+  repeated string missing = 19;
+  optional string formula_version = 20;
+  optional string profit_usd = 21;
+  optional string margin = 22;
+  optional string roi = 23;
+  optional string monthly_profit_usd = 24;
+  optional string break_even_price_usd = 25;
+  optional string break_even_ad_rate = 26;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message ProfitInputs {
+  optional string commission_mode = 1;
+  optional string commission_category = 2;
+  optional string storage_mode = 3;
+  optional string storage_days = 4;
+  optional string storage_month = 5;
+  optional string supplier_url = 6;
+  optional string freight_rate_cny_per_kg = 7;
+  optional string volumetric_divisor_cm3_per_kg = 8;
+  optional string name = 9;
+  optional string sale_price_usd = 10;
+  optional string discount_usd = 11;
+  optional string purchase_cny = 12;
+  optional string packaging_cny = 13;
+  optional string freight_cny = 14;
+  optional string other_landed_cny = 15;
+  optional string fx_cny_per_usd = 16;
+  optional string commission_rate = 17;
+  optional string fba_fee_usd = 18;
+  optional string storage_usd = 19;
+  optional string ad_rate = 20;
+  optional string return_rate = 21;
+  optional string loss_per_return_usd = 22;
+  optional string other_usd = 23;
+  optional int64 monthly_units = 24;
+  optional string fee_source = 25;
+  optional string note = 26;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message ProfitScenario {
+  optional string record_kind = 1;
+  optional string imported_fba_fee_usd = 2;
+  optional string imported_gross_margin_rate = 3;
+  optional string id = 4;
+  optional string name = 5;
+  ProfitInputs inputs = 6;
+  ProfitOutput output = 7;
+  optional bool stale = 8;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message ProfitTemplate {
+  optional string id = 1;
+  optional string name = 2;
+  optional int64 version = 3;
+  ProfitInputs params = 4;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message MonthlyRecord {
+  optional string id = 1;
+  optional int64 revision = 2;
+  optional string sales_scope = 3;
+  optional string parent_asin_snapshot = 4;
+  optional string stat_month = 5;
+  optional string period_type = 6;
+  optional string period_start = 7;
+  optional string period_end = 8;
+  optional string observed_on = 9;
+  optional string source_type = 10;
+  optional string source_row_id = 11;
+  optional string price_usd = 12;
+  optional int64 monthly_sales = 13;
+  optional int64 display_child_sales = 14;
+  optional string monthly_revenue = 15;
+  optional int64 review_count = 16;
+  optional string rating = 17;
+  optional int64 bsr_rank = 18;
+  optional string file_name = 19;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message MonthOption {
+  optional string stat_month = 1;
+  optional string period_type = 2;
+  optional string source_type = 3;
+  optional int64 products = 4;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message ParentMonthly {
+  optional string id = 1;
+  optional string parent_asin = 2;
+  optional string stat_month = 3;
+  optional string period_type = 4;
+  optional string period_start = 5;
+  optional string period_end = 6;
+  optional string observed_on = 7;
+  optional string source_type = 8;
+  optional int64 monthly_sales = 9;
+  optional int64 display_child_sales = 10;
+  optional string monthly_revenue = 11;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message FamilyResult {
+  repeated Product items = 1;
+  optional int64 total = 2;
+  optional int64 page = 3;
+  optional int64 page_size = 4;
+  optional string parent_asin = 5;
+  optional int64 known_child_sales_total = 6;
+  optional int64 unknown_child_count = 7;
+  optional string aggregate_label = 8;
+  repeated ParentMonthly parent_monthly = 9;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message ReviewTypeGroup {
+  optional int64 display_products = 1;
+  optional string id = 2;
+  optional string title = 3;
+  optional string marketplace = 4;
+  optional int64 products = 5;
+  optional int64 pending = 6;
+  optional int64 reviewed = 7;
+  optional int64 samples = 8;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message PageReviewTypeGroup {
+  repeated ReviewTypeGroup items = 1;
+  optional int64 total = 2;
+  optional int64 page = 3;
+  optional int64 page_size = 4;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message ReviewWorkspaceCounts {
+  optional int64 products = 1;
+  optional int64 groups = 2;
+  optional int64 pending = 3;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message PageProduct {
+  repeated Product items = 1;
+  optional int64 total = 2;
+  optional int64 page = 3;
+  optional int64 page_size = 4;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message ReviewWorkspace {
+  PageReviewTypeGroup groups = 1;
+  ReviewWorkspaceCounts counts = 2;
+  ReviewTypeGroup group = 3;
+  repeated Product items = 4;
+  optional int64 page = 5;
+  optional int64 page_size = 6;
+  PageProduct samples = 7;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message ReviewCategory {
+  optional string label = 1;
+  optional string id = 2;
+  optional string name = 3;
+  repeated string path = 4;
+  optional int64 products = 5;
+  optional int64 pending = 6;
+  repeated ReviewCategory children = 7;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message SummaryRecord {
+  optional int64 products = 1;
+  optional int64 displayed = 2;
+  optional int64 pending_displayed = 3;
+  optional int64 pending = 4;
+  optional int64 kept = 5;
+  optional int64 excluded = 6;
+  optional int64 source_rows = 7;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message TrademarkOption {
+  optional string value = 1;
+  optional string label = 2;
+  optional int64 count = 3;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message ReferralOption {
+  optional string id = 1;
+  optional string label = 2;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message ProductEvent {
+  optional string id = 1;
+  optional string product_id = 2;
+  optional string batch_id = 3;
+  optional string undo_of = 4;
+  optional int64 actor_id = 5;
+  optional int64 before_revision = 6;
+  optional int64 after_revision = 7;
+  google.protobuf.Struct before_value = 8;
+  google.protobuf.Struct after_value = 9;
+  optional string created_at = 10;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message ObservationSource {
+  optional string id = 1;
+  optional string import_id = 2;
+  optional string file_name = 3;
+  optional string member_path = 4;
+  optional string sheet_name = 5;
+  optional int64 row_no = 6;
+  google.protobuf.Struct raw_data = 7;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message ProductParameters {
+  optional string material = 1;
+  google.protobuf.Value product_length_cm = 2;
+  google.protobuf.Value product_width_cm = 3;
+  google.protobuf.Value product_height_cm = 4;
+  google.protobuf.Value weight_g = 5;
+  google.protobuf.Value package_length_cm = 6;
+  google.protobuf.Value package_width_cm = 7;
+  google.protobuf.Value package_height_cm = 8;
+  google.protobuf.Value package_weight_g = 9;
+  optional int64 units_per_pack = 10;
+  optional int64 carton_units = 11;
+  google.protobuf.Value carton_weight_g = 12;
+  google.protobuf.Value carton_length_cm = 13;
+  google.protobuf.Value carton_width_cm = 14;
+  google.protobuf.Value carton_height_cm = 15;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message ReviewInput {
+  optional int64 expected_data_revision = 1;
+  optional int64 expected_review_revision = 2;
+  optional ReviewStatus status = 3;
+  optional string reason = 4;
+  optional string note = 5;
+  optional string scope = 6;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message CategoryInput {
+  optional int64 expected_data_revision = 1;
+  optional int64 expected_review_revision = 2;
+  optional string category = 3;
+  optional string note = 4;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message ParametersInput {
+  optional int64 expected_data_revision = 1;
+  optional int64 expected_review_revision = 2;
+  ProductParameters parameters = 3;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+
+  optional string material = 21;
+  google.protobuf.Value product_length_cm = 22;
+  google.protobuf.Value product_width_cm = 23;
+  google.protobuf.Value product_height_cm = 24;
+  google.protobuf.Value weight_g = 25;
+  google.protobuf.Value package_length_cm = 26;
+  google.protobuf.Value package_width_cm = 27;
+  google.protobuf.Value package_height_cm = 28;
+  google.protobuf.Value package_weight_g = 29;
+  optional int64 units_per_pack = 30;
+  optional int64 carton_units = 31;
+  google.protobuf.Value carton_weight_g = 32;
+  google.protobuf.Value carton_length_cm = 33;
+  google.protobuf.Value carton_width_cm = 34;
+  google.protobuf.Value carton_height_cm = 35;
+}
+message SaveProfitInput {
+  optional int64 expected_data_revision = 1;
+  optional int64 expected_monthly_revision = 2;
+  optional string monthly_id = 3;
+  optional string template_id = 4;
+  optional string name = 5;
+  ProfitInputs inputs = 6;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message CalculateProfitInput {
+  optional string product_id = 1;
+  optional int64 expected_data_revision = 2;
+  optional int64 expected_monthly_revision = 3;
+  optional string monthly_id = 4;
+  repeated ProfitInputs scenarios = 5;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message CalculateProfitResult {
+  repeated ProfitScenario items = 1;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message SelectionInput {
+  repeated string product_ids = 1;
+  google.protobuf.Struct filters = 2;
+  optional string template_id = 3;
+  ProfitInputs inputs = 4;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message ReviewBatchInput {
+  repeated string product_ids = 1;
+  optional string action = 2;
+  optional string mode = 3;
+  optional string reference_product_id = 4;
+  optional ReviewStatus status = 5;
+  optional string reason = 6;
+  optional string note = 7;
+  optional string category = 8;
+  optional string scope = 9;
+  optional bool overwrite = 10;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message ConfigInput {
+  optional string name = 1;
+  google.protobuf.Struct config = 2;
+  ProfitInputs params = 3;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message PolicyTestInput {
+  repeated string product_ids = 1;
+  google.protobuf.Struct filters = 2;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+enum ReviewStatus {
+  REVIEW_STATUS_UNSPECIFIED = 0;
+  REVIEW_STATUS_PENDING = 1;
+  REVIEW_STATUS_KEPT = 2;
+  REVIEW_STATUS_EXCLUDED = 3;
+  REVIEW_STATUS_UNSURE = 4;
+}
+message PageMonthlyRecord {
+  repeated MonthlyRecord items = 1;
+  optional int64 total = 2;
+  optional int64 page = 3;
+  optional int64 page_size = 4;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message PageImportRow {
+  repeated ImportRow items = 1;
+  optional int64 total = 2;
+  optional int64 page = 3;
+  optional int64 page_size = 4;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message PageProductEvent {
+  repeated ProductEvent items = 1;
+  optional int64 total = 2;
+  optional int64 page = 3;
+  optional int64 page_size = 4;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message PageProfitScenario {
+  repeated ProfitScenario items = 1;
+  optional int64 total = 2;
+  optional int64 page = 3;
+  optional int64 page_size = 4;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message PageParentMonthly {
+  repeated ParentMonthly items = 1;
+  optional int64 total = 2;
+  optional int64 page = 3;
+  optional int64 page_size = 4;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message PageBatchRecord {
+  repeated BatchRecord items = 1;
+  optional int64 total = 2;
+  optional int64 page = 3;
+  optional int64 page_size = 4;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message ProductItems {
+  repeated Product items = 1;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message MonthItems {
+  repeated MonthOption items = 1;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message TrademarkItems {
+  repeated TrademarkOption items = 1;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message CategoryItems {
+  repeated ReviewCategory items = 1;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message PolicyItems {
+  repeated Policy items = 1;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message TemplateItems {
+  repeated ProfitTemplate items = 1;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message ProfitProducts {
+  repeated Product items = 1;
+  optional int64 total = 2;
+  optional int64 page = 3;
+  optional int64 page_size = 4;
+  optional int64 product_total = 5;
+  repeated ReferralOption referral_categories = 6;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message ScreenJob {
+  optional string job_id = 1;
+  optional string state = 2;
+  optional string run_id = 3;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message PolicyTestResult {
+  repeated Product items = 1;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message ScreeningQuery {
+  repeated string page = 1;
+  repeated string page_size = 2;
+  repeated string sort = 3;
+  repeated string q = 4;
+  repeated string stat_month = 5;
+  repeated string period_type = 6;
+  repeated string source_type = 7;
+  repeated string import_id = 8;
+  repeated string child_sales_min = 9;
+  repeated string profit_min = 10;
+  repeated string profit_max = 11;
+  repeated string review_status = 12;
+  repeated string machine = 13;
+  repeated string recommendation = 14;
+  repeated string has_reference = 15;
+  repeated string show_merged = 16;
+  repeated string category = 17;
+  repeated string seller_region = 18;
+  repeated string direction = 19;
+  repeated string trademark = 20;
+  repeated string member_page = 21;
+  repeated string sample_page = 22;
+  repeated string group_page = 23;
+  repeated string group_id = 24;
+  repeated string selected_ids = 25;
+  repeated string category_path = 26;
+  repeated string family_product_id = 27;
+  repeated string recent_months = 28;
+  repeated string group_by_parent = 29;
+  repeated string completion = 30;
+  repeated string product_id = 31;
+  repeated string parent_asin = 32;
+  map<string, QueryValues> extra = 100;
+}
+message QueryValues {
+  repeated string values = 1;
+}
+message ListProductsRequest {
+  ScreeningQuery query = 1;
+  optional string id = 2;
+  optional string row_id = 3;
+  optional string group_key = 4;
+  ImportMutationMetadata mutation = 5;
+  google.protobuf.Struct body = 6;
+}
+message ListProductsResponse {
+  PageProduct data = 1;
+}
+message GetSummaryRequest {
+  ScreeningQuery query = 1;
+  optional string id = 2;
+  optional string row_id = 3;
+  optional string group_key = 4;
+  ImportMutationMetadata mutation = 5;
+  google.protobuf.Struct body = 6;
+}
+message GetSummaryResponse {
+  SummaryRecord data = 1;
+}
+message GetProductRequest {
+  ScreeningQuery query = 1;
+  optional string id = 2;
+  optional string row_id = 3;
+  optional string group_key = 4;
+  ImportMutationMetadata mutation = 5;
+  google.protobuf.Struct body = 6;
+}
+message GetProductResponse {
+  Product data = 1;
+}
+message GetProductFamilyRequest {
+  ScreeningQuery query = 1;
+  optional string id = 2;
+  optional string row_id = 3;
+  optional string group_key = 4;
+  ImportMutationMetadata mutation = 5;
+  google.protobuf.Struct body = 6;
+}
+message GetProductFamilyResponse {
+  FamilyResult data = 1;
+}
+message ListProductMonthlyRequest {
+  ScreeningQuery query = 1;
+  optional string id = 2;
+  optional string row_id = 3;
+  optional string group_key = 4;
+  ImportMutationMetadata mutation = 5;
+  google.protobuf.Struct body = 6;
+}
+message ListProductMonthlyResponse {
+  PageMonthlyRecord data = 1;
+}
+message ListProductObservationsRequest {
+  ScreeningQuery query = 1;
+  optional string id = 2;
+  optional string row_id = 3;
+  optional string group_key = 4;
+  ImportMutationMetadata mutation = 5;
+  google.protobuf.Struct body = 6;
+}
+message ListProductObservationsResponse {
+  PageImportRow data = 1;
+}
+message GetObservationSourceRequest {
+  ScreeningQuery query = 1;
+  optional string id = 2;
+  optional string row_id = 3;
+  optional string group_key = 4;
+  ImportMutationMetadata mutation = 5;
+  google.protobuf.Struct body = 6;
+}
+message GetObservationSourceResponse {
+  ObservationSource data = 1;
+}
+message ListProductHistoryRequest {
+  ScreeningQuery query = 1;
+  optional string id = 2;
+  optional string row_id = 3;
+  optional string group_key = 4;
+  ImportMutationMetadata mutation = 5;
+  google.protobuf.Struct body = 6;
+}
+message ListProductHistoryResponse {
+  PageProductEvent data = 1;
+}
+message ListProductReferencesRequest {
+  ScreeningQuery query = 1;
+  optional string id = 2;
+  optional string row_id = 3;
+  optional string group_key = 4;
+  ImportMutationMetadata mutation = 5;
+  google.protobuf.Struct body = 6;
+}
+message ListProductReferencesResponse {
+  ProductItems data = 1;
+}
+message ListProfitScenariosRequest {
+  ScreeningQuery query = 1;
+  optional string id = 2;
+  optional string row_id = 3;
+  optional string group_key = 4;
+  ImportMutationMetadata mutation = 5;
+  google.protobuf.Struct body = 6;
+}
+message ListProfitScenariosResponse {
+  PageProfitScenario data = 1;
+}
+message ListGroupProductsRequest {
+  ScreeningQuery query = 1;
+  optional string id = 2;
+  optional string row_id = 3;
+  optional string group_key = 4;
+  ImportMutationMetadata mutation = 5;
+  google.protobuf.Struct body = 6;
+}
+message ListGroupProductsResponse {
+  PageProduct data = 1;
+}
+message ListParentMonthlyRequest {
+  ScreeningQuery query = 1;
+  optional string id = 2;
+  optional string row_id = 3;
+  optional string group_key = 4;
+  ImportMutationMetadata mutation = 5;
+  google.protobuf.Struct body = 6;
+}
+message ListParentMonthlyResponse {
+  PageParentMonthly data = 1;
+}
+message ListMonthsRequest {
+  ScreeningQuery query = 1;
+  optional string id = 2;
+  optional string row_id = 3;
+  optional string group_key = 4;
+  ImportMutationMetadata mutation = 5;
+  google.protobuf.Struct body = 6;
+}
+message ListMonthsResponse {
+  MonthItems data = 1;
+}
+message ListTrademarkOptionsRequest {
+  ScreeningQuery query = 1;
+  optional string id = 2;
+  optional string row_id = 3;
+  optional string group_key = 4;
+  ImportMutationMetadata mutation = 5;
+  google.protobuf.Struct body = 6;
+}
+message ListTrademarkOptionsResponse {
+  TrademarkItems data = 1;
+}
+message ListReviewCategoriesRequest {
+  ScreeningQuery query = 1;
+  optional string id = 2;
+  optional string row_id = 3;
+  optional string group_key = 4;
+  ImportMutationMetadata mutation = 5;
+  google.protobuf.Struct body = 6;
+}
+message ListReviewCategoriesResponse {
+  CategoryItems data = 1;
+}
+message GetReviewWorkspaceRequest {
+  ScreeningQuery query = 1;
+  optional string id = 2;
+  optional string row_id = 3;
+  optional string group_key = 4;
+  ImportMutationMetadata mutation = 5;
+  google.protobuf.Struct body = 6;
+}
+message GetReviewWorkspaceResponse {
+  ReviewWorkspace data = 1;
+}
+message ListReviewBatchesRequest {
+  ScreeningQuery query = 1;
+  optional string id = 2;
+  optional string row_id = 3;
+  optional string group_key = 4;
+  ImportMutationMetadata mutation = 5;
+  google.protobuf.Struct body = 6;
+}
+message ListReviewBatchesResponse {
+  PageBatchRecord data = 1;
+}
+message GetReviewBatchRequest {
+  ScreeningQuery query = 1;
+  optional string id = 2;
+  optional string row_id = 3;
+  optional string group_key = 4;
+  ImportMutationMetadata mutation = 5;
+  google.protobuf.Struct body = 6;
+}
+message GetReviewBatchResponse {
+  BatchRecord data = 1;
+}
+message ListPoliciesRequest {
+  ScreeningQuery query = 1;
+  optional string id = 2;
+  optional string row_id = 3;
+  optional string group_key = 4;
+  ImportMutationMetadata mutation = 5;
+  google.protobuf.Struct body = 6;
+}
+message ListPoliciesResponse {
+  PolicyItems data = 1;
+}
+message ListProfitTemplatesRequest {
+  ScreeningQuery query = 1;
+  optional string id = 2;
+  optional string row_id = 3;
+  optional string group_key = 4;
+  ImportMutationMetadata mutation = 5;
+  google.protobuf.Struct body = 6;
+}
+message ListProfitTemplatesResponse {
+  TemplateItems data = 1;
+}
+message ListProfitProductsRequest {
+  ScreeningQuery query = 1;
+  optional string id = 2;
+  optional string row_id = 3;
+  optional string group_key = 4;
+  ImportMutationMetadata mutation = 5;
+  google.protobuf.Struct body = 6;
+}
+message ListProfitProductsResponse {
+  ProfitProducts data = 1;
+}
+message GetScreenRunRequest {
+  ScreeningQuery query = 1;
+  optional string id = 2;
+  optional string row_id = 3;
+  optional string group_key = 4;
+  ImportMutationMetadata mutation = 5;
+  google.protobuf.Struct body = 6;
+}
+message GetScreenRunResponse {
+  JobRecord data = 1;
+}
+message ReviewProductRequest {
+  ScreeningQuery query = 1;
+  optional string id = 2;
+  optional string row_id = 3;
+  optional string group_key = 4;
+  ImportMutationMetadata mutation = 5;
+  ReviewInput body = 6;
+}
+message ReviewProductResponse {
+  Product data = 1;
+}
+message UpdateProductCategoryRequest {
+  ScreeningQuery query = 1;
+  optional string id = 2;
+  optional string row_id = 3;
+  optional string group_key = 4;
+  ImportMutationMetadata mutation = 5;
+  CategoryInput body = 6;
+}
+message UpdateProductCategoryResponse {
+  Product data = 1;
+}
+message UpdateProductParametersRequest {
+  ScreeningQuery query = 1;
+  optional string id = 2;
+  optional string row_id = 3;
+  optional string group_key = 4;
+  ImportMutationMetadata mutation = 5;
+  ParametersInput body = 6;
+}
+message UpdateProductParametersResponse {
+  Product data = 1;
+}
+message SaveProfitScenarioRequest {
+  ScreeningQuery query = 1;
+  optional string id = 2;
+  optional string row_id = 3;
+  optional string group_key = 4;
+  ImportMutationMetadata mutation = 5;
+  SaveProfitInput body = 6;
+}
+message SaveProfitScenarioResponse {
+  ProfitScenario data = 1;
+}
+message CalculateProfitRequest {
+  ScreeningQuery query = 1;
+  optional string id = 2;
+  optional string row_id = 3;
+  optional string group_key = 4;
+  ImportMutationMetadata mutation = 5;
+  CalculateProfitInput body = 6;
+}
+message CalculateProfitResponse {
+  CalculateProfitResult data = 1;
+}
+message CreateReviewPreviewRequest {
+  ScreeningQuery query = 1;
+  optional string id = 2;
+  optional string row_id = 3;
+  optional string group_key = 4;
+  ImportMutationMetadata mutation = 5;
+  ReviewBatchInput body = 6;
+}
+message CreateReviewPreviewResponse {
+  BatchPreview data = 1;
+}
+message ApplyReviewBatchRequest {
+  ScreeningQuery query = 1;
+  optional string id = 2;
+  optional string row_id = 3;
+  optional string group_key = 4;
+  ImportMutationMetadata mutation = 5;
+  google.protobuf.Struct body = 6;
+}
+message ApplyReviewBatchResponse {
+  BatchResult data = 1;
+}
+message UndoReviewBatchRequest {
+  ScreeningQuery query = 1;
+  optional string id = 2;
+  optional string row_id = 3;
+  optional string group_key = 4;
+  ImportMutationMetadata mutation = 5;
+  google.protobuf.Struct body = 6;
+}
+message UndoReviewBatchResponse {
+  BatchResult data = 1;
+}
+message CreatePolicyRequest {
+  ScreeningQuery query = 1;
+  optional string id = 2;
+  optional string row_id = 3;
+  optional string group_key = 4;
+  ImportMutationMetadata mutation = 5;
+  ConfigInput body = 6;
+}
+message CreatePolicyResponse {
+  Policy data = 1;
+}
+message CreateProfitTemplateRequest {
+  ScreeningQuery query = 1;
+  optional string id = 2;
+  optional string row_id = 3;
+  optional string group_key = 4;
+  ImportMutationMetadata mutation = 5;
+  ConfigInput body = 6;
+}
+message CreateProfitTemplateResponse {
+  ProfitTemplate data = 1;
+}
+message TestPolicyRequest {
+  ScreeningQuery query = 1;
+  optional string id = 2;
+  optional string row_id = 3;
+  optional string group_key = 4;
+  ImportMutationMetadata mutation = 5;
+  PolicyTestInput body = 6;
+}
+message TestPolicyResponse {
+  PolicyTestResult data = 1;
+}
+message ActivatePolicyRequest {
+  ScreeningQuery query = 1;
+  optional string id = 2;
+  optional string row_id = 3;
+  optional string group_key = 4;
+  ImportMutationMetadata mutation = 5;
+  PolicyTestInput body = 6;
+}
+message ActivatePolicyResponse {
+  ScreenJob data = 1;
+}
+message CreateScreenRunRequest {
+  ScreeningQuery query = 1;
+  optional string id = 2;
+  optional string row_id = 3;
+  optional string group_key = 4;
+  ImportMutationMetadata mutation = 5;
+  SelectionInput body = 6;
+}
+message CreateScreenRunResponse {
+  ScreenJob data = 1;
+}
+message CreateExportRequest {
+  ScreeningQuery query = 1;
+  optional string id = 2;
+  optional string row_id = 3;
+  optional string group_key = 4;
+  ImportMutationMetadata mutation = 5;
+  SelectionInput body = 6;
+}
+message CreateExportResponse {
+  ScreenJob data = 1;
+}
+message CreateProfitBatchRequest {
+  ScreeningQuery query = 1;
+  optional string id = 2;
+  optional string row_id = 3;
+  optional string group_key = 4;
+  ImportMutationMetadata mutation = 5;
+  SelectionInput body = 6;
+}
+message CreateProfitBatchResponse {
+  ScreenJob data = 1;
+}
+service ScreeningService {
+  rpc ListProducts(ListProductsRequest) returns (ListProductsResponse);
+  rpc GetSummary(GetSummaryRequest) returns (GetSummaryResponse);
+  rpc GetProduct(GetProductRequest) returns (GetProductResponse);
+  rpc GetProductFamily(GetProductFamilyRequest) returns (GetProductFamilyResponse);
+  rpc ListProductMonthly(ListProductMonthlyRequest) returns (ListProductMonthlyResponse);
+  rpc ListProductObservations(ListProductObservationsRequest) returns (ListProductObservationsResponse);
+  rpc GetObservationSource(GetObservationSourceRequest) returns (GetObservationSourceResponse);
+  rpc ListProductHistory(ListProductHistoryRequest) returns (ListProductHistoryResponse);
+  rpc ListProductReferences(ListProductReferencesRequest) returns (ListProductReferencesResponse);
+  rpc ListProfitScenarios(ListProfitScenariosRequest) returns (ListProfitScenariosResponse);
+  rpc ListGroupProducts(ListGroupProductsRequest) returns (ListGroupProductsResponse);
+  rpc ListParentMonthly(ListParentMonthlyRequest) returns (ListParentMonthlyResponse);
+  rpc ListMonths(ListMonthsRequest) returns (ListMonthsResponse);
+  rpc ListTrademarkOptions(ListTrademarkOptionsRequest) returns (ListTrademarkOptionsResponse);
+  rpc ListReviewCategories(ListReviewCategoriesRequest) returns (ListReviewCategoriesResponse);
+  rpc GetReviewWorkspace(GetReviewWorkspaceRequest) returns (GetReviewWorkspaceResponse);
+  rpc ListReviewBatches(ListReviewBatchesRequest) returns (ListReviewBatchesResponse);
+  rpc GetReviewBatch(GetReviewBatchRequest) returns (GetReviewBatchResponse);
+  rpc ListPolicies(ListPoliciesRequest) returns (ListPoliciesResponse);
+  rpc ListProfitTemplates(ListProfitTemplatesRequest) returns (ListProfitTemplatesResponse);
+  rpc ListProfitProducts(ListProfitProductsRequest) returns (ListProfitProductsResponse);
+  rpc GetScreenRun(GetScreenRunRequest) returns (GetScreenRunResponse);
+  rpc ReviewProduct(ReviewProductRequest) returns (ReviewProductResponse);
+  rpc UpdateProductCategory(UpdateProductCategoryRequest) returns (UpdateProductCategoryResponse);
+  rpc UpdateProductParameters(UpdateProductParametersRequest) returns (UpdateProductParametersResponse);
+  rpc SaveProfitScenario(SaveProfitScenarioRequest) returns (SaveProfitScenarioResponse);
+  rpc CalculateProfit(CalculateProfitRequest) returns (CalculateProfitResponse);
+  rpc CreateReviewPreview(CreateReviewPreviewRequest) returns (CreateReviewPreviewResponse);
+  rpc ApplyReviewBatch(ApplyReviewBatchRequest) returns (ApplyReviewBatchResponse);
+  rpc UndoReviewBatch(UndoReviewBatchRequest) returns (UndoReviewBatchResponse);
+  rpc CreatePolicy(CreatePolicyRequest) returns (CreatePolicyResponse);
+  rpc CreateProfitTemplate(CreateProfitTemplateRequest) returns (CreateProfitTemplateResponse);
+  rpc TestPolicy(TestPolicyRequest) returns (TestPolicyResponse);
+  rpc ActivatePolicy(ActivatePolicyRequest) returns (ActivatePolicyResponse);
+  rpc CreateScreenRun(CreateScreenRunRequest) returns (CreateScreenRunResponse);
+  rpc CreateExport(CreateExportRequest) returns (CreateExportResponse);
+  rpc CreateProfitBatch(CreateProfitBatchRequest) returns (CreateProfitBatchResponse);
+}

@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -123,5 +124,25 @@ func TestWorkerFailureStopsBusinessProcess(t *testing.T) {
 	case <-commerce.stopped:
 	default:
 		t.Fatal("other worker not stopped")
+	}
+}
+
+func TestImportsRPCSharesBusinessListener(t *testing.T) {
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest("POST", "http://internal/sellerops.screening.v1.ScreeningImportService/ListImports", nil)
+	handler(componentFixture("ecommerce"), componentFixture("screening")).ServeHTTP(w, r)
+	if w.Code != 200 || w.Body.String() != "screening" {
+		t.Fatal("RPC routed to wrong service", w.Code, w.Body.String())
+	}
+}
+
+func TestAllRPCServicesShareBusinessListener(t *testing.T) {
+	for path, want := range map[string]string{"/sellerops.screening.v1.ScreeningService/ListProducts": "screening", "/sellerops.ecom.v1.EcomService/ListMonitors": "ecommerce"} {
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest("POST", "http://internal"+path, nil)
+		handler(componentFixture("ecommerce"), componentFixture("screening")).ServeHTTP(w, r)
+		if w.Code != 200 || w.Body.String() != want {
+			t.Fatal("RPC prefix missing", path, w.Code, w.Body.String())
+		}
 	}
 }

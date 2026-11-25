@@ -1,6 +1,7 @@
 package screening
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -20,8 +21,10 @@ func workspacePage(raw string) (int, error) {
 	return n, nil
 }
 func (s *service) reviewWorkspace(r *http.Request) (any, error) {
-	ctx := r.Context()
-	v := r.URL.Query()
+	return s.reviewWorkspaceUsecase(r.Context(), actor(r), r.URL.Query())
+}
+func (s *service) reviewWorkspaceUsecase(ctx context.Context, a identity, params url.Values) (any, error) {
+	v := params
 	mp, e := workspacePage(v.Get("member_page"))
 	if e != nil {
 		return nil, e
@@ -30,7 +33,7 @@ func (s *service) reviewWorkspace(r *http.Request) (any, error) {
 	if e != nil {
 		return nil, e
 	}
-	q, e := reviewCandidateQuery(r, false)
+	q, e := reviewCandidateValues(a, params, false)
 	if e != nil {
 		return nil, e
 	}
@@ -42,7 +45,7 @@ func (s *service) reviewWorkspace(r *http.Request) (any, error) {
 		if !uuidPattern.MatchString(id) {
 			return nil, fail(422, "商品ID无效")
 		}
-		anchor, err := s.product(ctx, actor(r), id)
+		anchor, err := s.product(ctx, a, id)
 		if err != nil {
 			return nil, err
 		}
@@ -72,15 +75,11 @@ func (s *service) reviewWorkspace(r *http.Request) (any, error) {
 		title = strings.Join(categoryDisplayPath(path), " / ")
 	}
 	// References share the selected category, not a machine-generated type group.
-	sampleURL := *r.URL
 	sampleValues := url.Values{}
 	if len(path) > 0 {
 		sampleValues.Set("category_path", string(encoded(path)))
 	}
-	sampleURL.RawQuery = sampleValues.Encode()
-	sampleRequest := r.Clone(ctx)
-	sampleRequest.URL = &sampleURL
-	sq, e := reviewCandidateQuery(sampleRequest, false)
+	sq, e := reviewCandidateValues(a, sampleValues, false)
 	if e != nil {
 		return nil, e
 	}

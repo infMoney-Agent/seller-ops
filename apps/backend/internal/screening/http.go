@@ -143,6 +143,8 @@ func verifyIdentity(r *http.Request, secret string, now time.Time) (identity, er
 }
 func (s *service) handler() http.Handler {
 	mux := http.NewServeMux()
+	s.registerImportsRPC(mux)
+	s.registerScreeningRPC(mux)
 	mux.HandleFunc("GET /openapi.json", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		w.Write(openAPIData)

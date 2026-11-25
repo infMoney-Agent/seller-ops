@@ -1,7 +1,9 @@
 package screening
 
 import (
+	"context"
 	"net/http"
+	"net/url"
 	"regexp"
 	"sort"
 	"strings"
@@ -48,14 +50,17 @@ func trademarkFacets(rows []Object) []Object {
 }
 
 func (s *service) trademarkOptions(r *http.Request) (any, error) {
-	values := r.URL.Query()
+	return s.trademarkOptionsUsecase(r.Context(), actor(r), r.URL.Query())
+}
+func (s *service) trademarkOptionsUsecase(ctx context.Context, a identity, params url.Values) (any, error) {
+	values := params
 	values.Del("trademark")
 	values.Del("sort")
 	if e := validateFilters(values); e != nil {
 		return nil, e
 	}
-	q := newProductQuery(actor(r), values)
-	rows, e := s.query(r.Context(), "SELECT jsonb_build_object('label',"+trademarkClassSQL+",'count',count(*)) FROM ps_products p "+filterJoins(q, false)+" WHERE "+q.where+" GROUP BY "+trademarkClassSQL, q.args...)
+	q := newProductQuery(a, values)
+	rows, e := s.query(ctx, "SELECT jsonb_build_object('label',"+trademarkClassSQL+",'count',count(*)) FROM ps_products p "+filterJoins(q, false)+" WHERE "+q.where+" GROUP BY "+trademarkClassSQL, q.args...)
 	if e != nil {
 		return nil, e
 	}

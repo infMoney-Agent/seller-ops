@@ -1,4 +1,4 @@
-import { backendURL } from '@/lib/backend';
+import { authBackendResponse } from '@/lib/auth-backend';
 
 async function proxy(request: Request) {
   const url = new URL(request.url);
@@ -27,7 +27,7 @@ async function proxy(request: Request) {
     }
     body = body.subarray(0, length);
   }
-  const response = await fetch(backendURL(url.pathname + url.search), {
+  const response = await authBackendResponse(url.pathname + url.search, {
     method: request.method,
     headers,
     body,

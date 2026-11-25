@@ -10,6 +10,7 @@ import (
 	"log"
 	"math"
 	"net/http"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -20,8 +21,18 @@ func account(r *http.Request) string {
 	return "seller:" + strconv.FormatInt(r.Context().Value(userKey{}).(int64), 10)
 }
 func (s *Service) monitor(w http.ResponseWriter, r *http.Request, parts []string) (any, error) {
-	ctx := r.Context()
-	prefix := account(r)
+	body := Obj{}
+	if r.Method == "POST" && len(parts) > 0 && parts[0] == "add" {
+		var err error
+		body, err = decode(w, r)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return s.monitorUsecase(r.Context(), r.Context().Value(userKey{}).(int64), r.Method, parts, r.URL.Query(), body)
+}
+func (s *Service) monitorUsecase(ctx context.Context, user int64, method string, parts []string, query url.Values, body Obj) (any, error) {
+	prefix := "seller:" + strconv.FormatInt(user, 10)
 	action := parts[0]
 	asin := ""
 	if len(parts) > 1 {
@@ -32,7 +43,7 @@ func (s *Service) monitor(w http.ResponseWriter, r *http.Request, parts []string
 		}
 	}
 	switch {
-	case r.Method == "GET" && action == "list":
+	case method == "GET" && action == "list":
 		out := []Obj{}
 		iter := s.redis.Scan(ctx, 0, prefix+":monitor:*", 100).Iterator()
 		for iter.Next(ctx) {
@@ -54,11 +65,9 @@ func (s *Service) monitor(w http.ResponseWriter, r *http.Request, parts []string
 		}
 		sortMonitors(out)
 		return Obj{"monitors": out}, nil
-	case r.Method == "POST" && action == "add":
-		b, e := decode(w, r)
-		if e != nil {
-			return nil, e
-		}
+	case method == "POST" && action == "add":
+		b := body
+		var e error
 		asin, e = validateASIN(text(b["asin"]))
 		if e != nil {
 			return nil, e
@@ -97,16 +106,16 @@ func (s *Service) monitor(w http.ResponseWriter, r *http.Request, parts []string
 			return nil, e
 		}
 		return Obj{"status": "added", "asin": asin}, nil
-	case r.Method == "DELETE" && action == "remove" && asin != "":
+	case method == "DELETE" && action == "remove" && asin != "":
 		n, e := s.redis.Del(ctx, prefix+":monitor:"+asin).Result()
 		status := "not_found"
 		if n > 0 {
 			status = "removed"
 		}
 		return Obj{"status": status, "asin": asin}, e
-	case r.Method == "GET" && action == "snapshots" && asin != "":
+	case method == "GET" && action == "snapshots" && asin != "":
 		limit := 100
-		if raw := r.URL.Query().Get("limit"); raw != "" {
+		if raw := query.Get("limit"); raw != "" {
 			var e error
 			limit, e = strconv.Atoi(raw)
 			if e != nil || limit < 1 || limit > 1000 {
@@ -126,7 +135,7 @@ func (s *Service) monitor(w http.ResponseWriter, r *http.Request, parts []string
 			out = append(out, v)
 		}
 		return Obj{"asin": asin, "snapshots": out}, nil
-	case r.Method == "POST" && action == "snapshot" && asin != "":
+	case method == "POST" && action == "snapshot" && asin != "":
 		return s.snapshot(ctx, prefix, asin, false)
 	}
 	return nil, httpError{404, "接口不存在"}

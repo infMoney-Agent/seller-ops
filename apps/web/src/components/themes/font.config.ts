@@ -1,14 +1,13 @@
+import localFont from 'next/font/local';
 import {
   Architects_Daughter,
   DM_Sans,
   Fira_Code,
   Geist,
   Geist_Mono,
-  Google_Sans_Flex,
   Instrument_Sans,
   Inter,
   JetBrains_Mono,
-  Merriweather,
   Mulish,
   Playfair_Display,
   Noto_Sans_Mono,
@@ -29,8 +28,14 @@ const fontMono = Geist_Mono({
   variable: '--font-mono'
 });
 
-const fontGoogleSansFlex = Google_Sans_Flex({
-  subsets: ['latin'],
+// Lock these font assets to package versions instead of fetching Google CSS at build time.
+const fontGoogleSansFlex = localFont({
+  src: '../../../node_modules/@fontsource-variable/google-sans-flex/files/google-sans-flex-latin-wght-normal.woff2',
+  weight: '100 900',
+  display: 'swap',
+  preload: false,
+  adjustFontFallback: 'Arial',
+  fallback: ['Arial', 'sans-serif'],
   variable: '--font-google-sans-flex'
 });
 
@@ -91,9 +96,13 @@ const fontJetBrainsMono = JetBrains_Mono({
   variable: '--font-jetbrains-mono'
 });
 
-const fontMerriweather = Merriweather({
-  subsets: ['latin'],
-  weight: ['300', '400', '700'],
+const fontMerriweather = localFont({
+  src: '../../../node_modules/@fontsource-variable/merriweather/files/merriweather-latin-wght-normal.woff2',
+  weight: '300 900',
+  display: 'swap',
+  preload: false,
+  adjustFontFallback: 'Times New Roman',
+  fallback: ['Georgia', 'Times New Roman', 'serif'],
   variable: '--font-merriweather'
 });
 

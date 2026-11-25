@@ -17,3 +17,14 @@ require (
 	golang.org/x/sync v0.13.0 // indirect
 	golang.org/x/text v0.24.0 // indirect
 )
+
+require (
+	connectrpc.com/connect v1.18.1
+	google.golang.org/protobuf v1.36.6
+	seller-ops/contracts v0.0.0
+	seller-ops/rpccompat v0.0.0
+)
+
+replace seller-ops/contracts => ../../proto/gen/go
+
+replace seller-ops/rpccompat => ../../packages/rpccompat

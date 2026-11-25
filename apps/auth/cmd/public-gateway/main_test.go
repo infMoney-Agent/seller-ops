@@ -29,7 +29,7 @@ func TestGatewayRouting(t *testing.T) {
 	wu, _ := url.Parse(web.URL)
 	iu, _ := url.Parse(id.URL)
 	handler := gateway("http://43.139.227.179", wu, iu)
-	for _, tc := range []struct{ path, service string }{{"/invite", "web"}, {"/company-required", "web"}, {"/dashboard/ecom/screening", "web"}, {"/api/auth/callback", "web"}, {"/api/ecom/screening/products", "web"}, {"/branding/seller-ops-logo.svg", "web"}, {"/_next/static/file.js", "web"}, {"/login/oauth/authorize", "identity"}, {"/api/login", "identity"}, {"/static/js/main.js", "identity"}} {
+	for _, tc := range []struct{ path, service string }{{"/invite", "web"}, {"/company-required", "web"}, {"/dashboard/ecom/screening", "web"}, {"/api/auth/callback", "web"}, {"/api/ecom/screening/products", "web"}, {"/branding/seller-ops-logo.svg", "web"}, {"/_next/static/file.js", "web"}, {"/images/flags/US.svg", "web"}, {"/images/flags/CN.svg", "web"}, {"/images/casdoor-logo.svg", "identity"}, {"/login/oauth/authorize", "identity"}, {"/api/login", "identity"}, {"/static/js/main.js", "identity"}} {
 		r := httptest.NewRequest("POST", "http://43.139.227.179"+tc.path, strings.NewReader("payload"))
 		r.Header.Set("Origin", "http://foreign.test")
 		w := httptest.NewRecorder()
@@ -96,6 +96,35 @@ func TestStaticCompressionAndCache(t *testing.T) {
 		}
 		if err != nil || string(data) != payload {
 			t.Fatal("asset content changed", err)
+		}
+	}
+}
+
+func TestRPCAndRegistrationGatewayBoundary(t *testing.T) {
+	start := func(label string) (*httptest.Server, *url.URL) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write([]byte(label)) }))
+		target, _ := url.Parse(server.URL)
+		return server, target
+	}
+	web, webURL := start("web")
+	defer web.Close()
+	identity, identityURL := start("identity")
+	defer identity.Close()
+	auth, authURL := start("auth")
+	defer auth.Close()
+	handler := gateway("http://43.139.227.179", webURL, identityURL, authURL)
+	for path, want := range map[string]string{"/api/auth/registration/status": "web", "/api/auth/registration/prepare": "auth", "/api/auth/register-page": "auth"} {
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, httptest.NewRequest("GET", "http://43.139.227.179"+path, nil))
+		if w.Code != 200 || w.Body.String() != want {
+			t.Fatal(path, w.Code, w.Body.String())
+		}
+	}
+	for _, path := range []string{"/sellerops.auth.v1.AuthService/GetSession", "/sellerops.screening.v1.ScreeningService/ListProducts", "/sellerops.ecom.v1.EcomService/ListMonitors"} {
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, httptest.NewRequest("POST", "http://43.139.227.179"+path, nil))
+		if w.Code != 404 {
+			t.Fatal("internal RPC exposed", path, w.Code)
 		}
 	}
 }

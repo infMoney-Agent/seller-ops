@@ -149,6 +149,7 @@ func (s *Service) authenticate(r *http.Request) (int64, error) {
 }
 func (s *Service) Handler() http.Handler {
 	mux := http.NewServeMux()
+	s.registerRPC(mux)
 	mux.HandleFunc("GET /openapi.json", func(w http.ResponseWriter, r *http.Request) { write(w, apiContract(), nil) })
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)

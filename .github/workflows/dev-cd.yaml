@@ -26,10 +26,10 @@ jobs:
             context: .
             dockerfile: apps/web/Web.Dockerfile
           - image: auth
-            context: apps/auth
+            context: .
             dockerfile: apps/auth/Dockerfile
           - image: backend
-            context: apps/backend
+            context: .
             dockerfile: apps/backend/Dockerfile
     steps:
       - uses: actions/checkout@v4

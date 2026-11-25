@@ -5,6 +5,8 @@ import { withSentryConfig } from '@sentry/nextjs';
 
 // Define the base Next.js configuration
 const baseConfig: NextConfig = {
+  // Bound build workers on small deployment hosts; unset keeps Next defaults.
+  ...(process.env.NEXT_BUILD_CPUS ? { experimental: { cpus: Math.max(1, Math.min(4, Number(process.env.NEXT_BUILD_CPUS) || 1)) } } : {}),
   // Monorepo: explicitly declare the workspace root so turbopack/webpack do not
   // mis-infer it from the multiple lockfiles (root + apps/web).
   turbopack: {

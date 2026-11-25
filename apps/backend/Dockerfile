@@ -1,8 +1,10 @@
 FROM golang:1.25-bookworm AS build
-WORKDIR /src
-COPY go.mod go.sum ./
+WORKDIR /src/apps/backend
+COPY proto/gen/go/ /src/proto/gen/go/
+COPY packages/rpccompat/ /src/packages/rpccompat/
+COPY apps/backend/go.mod apps/backend/go.sum ./
 RUN go mod download
-COPY . .
+COPY apps/backend/ ./
 RUN CGO_ENABLED=0 go build -trimpath -o /seller-backend .
 
 FROM debian:bookworm-slim

@@ -67,6 +67,9 @@ func TestWorkspaceIsolation(t *testing.T) {
 	mux := http.NewServeMux()
 	s.registerBusiness(mux)
 	s.auth.Register(mux)
+	mux.HandleFunc("GET /api/auth/session", s.session)
+	s.registerAuthRPC(mux)
+	testAuthRPC(t, s, mux, a, b, m, first, alice)
 	call := func(method, path, token, body string, status int) *httptest.ResponseRecorder {
 		t.Helper()
 		req := httptest.NewRequest(method, path, strings.NewReader(body))

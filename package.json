@@ -16,7 +16,11 @@
     "prepare": "husky",
     "guidance": "npx --yes modern-web-guidance@1.0.1",
     "guidance:check": "node scripts/check-web-guidance.mjs",
-    "test:web-guidance": "node scripts/test-web-guidance.mjs"
+    "test:web-guidance": "node scripts/test-web-guidance.mjs",
+    "proto:gen": "node scripts/proto.mjs generate",
+    "proto:check": "node scripts/proto.mjs check",
+    "proto:lint": "node scripts/proto.mjs lint",
+    "proto:breaking": "node scripts/proto.mjs breaking"
   },
   "devDependencies": {
     "husky": "^9.1.7",

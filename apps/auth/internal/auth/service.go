@@ -12,7 +12,6 @@ import (
 	"strings"
 
 	"github.com/coreos/go-oidc/v3/oidc"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"golang.org/x/oauth2"
 
@@ -348,36 +347,18 @@ func (s *Service) logout(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Service) Authenticate(w http.ResponseWriter, r *http.Request) (Principal, bool) {
-	var a Principal
-	token := s.readCookie(r, SessionCookie)
-	if token == "" {
-		httpresponse.Fail(w, 401, "sign in required")
-		return a, false
+	a, err := s.AuthenticateToken(r.Context(), s.SessionToken(r))
+	if err == nil {
+		return a, true
 	}
-	err := s.db.QueryRow(r.Context(), `SELECT s.user_id,coalesce(m.tenant_id,0),coalesce(m.role,'')
- FROM sessions s LEFT JOIN memberships m ON m.user_id=s.user_id
- WHERE s.token_hash=$1 AND s.expires_at>now()`, HashToken(token)).Scan(&a.UserID, &a.TenantID, &a.Role)
-	if errors.Is(err, pgx.ErrNoRows) {
-		httpresponse.Fail(w, 401, "session expired")
-		return a, false
-	}
-	if err != nil {
-		httpresponse.Internal(w, err)
-		return a, false
-	}
-	if s.sharedVerifier != nil && a.TenantID != 0 {
-		var matches bool
-		err := s.db.QueryRow(r.Context(), `SELECT EXISTS(SELECT 1 FROM users u JOIN tenants t ON t.id=$2 WHERE u.id=$1 AND u.casdoor_org<>'' AND u.casdoor_org=t.casdoor_org)`, a.UserID, a.TenantID).Scan(&matches)
-		if err != nil {
-			httpresponse.Internal(w, err)
-			return a, false
-		}
-		if !matches {
-			_, _ = s.db.Exec(r.Context(), "DELETE FROM sessions WHERE token_hash=$1", HashToken(token))
+	var e APIError
+	if errors.As(err, &e) {
+		if e.ClearSession {
 			s.cookie(w, SessionCookie, "", -1)
-			httpresponse.Fail(w, 401, "company identity changed; please sign in again")
-			return a, false
 		}
+		httpresponse.Fail(w, e.Status, e.Message)
+	} else {
+		httpresponse.Internal(w, err)
 	}
-	return a, true
+	return a, false
 }

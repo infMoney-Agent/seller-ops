@@ -1,9 +1,11 @@
 FROM golang:1.25.3-alpine AS build
-WORKDIR /src
-COPY go.mod go.sum ./
+WORKDIR /src/apps/auth
+COPY proto/gen/go/ /src/proto/gen/go/
+COPY packages/rpccompat/ /src/packages/rpccompat/
+COPY apps/auth/go.mod apps/auth/go.sum ./
 RUN go mod download
-COPY *.go schema.sql ./
-COPY internal/ ./internal/
+COPY apps/auth/*.go apps/auth/schema.sql ./
+COPY apps/auth/internal/ ./internal/
 RUN CGO_ENABLED=0 go build -trimpath -o /seller-server .
 
 FROM alpine:3.22.2

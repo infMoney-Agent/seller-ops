@@ -382,12 +382,27 @@ func (s *service) exportDownload(w http.ResponseWriter, r *http.Request, id stri
 	return nil, s.serveStored(w, r, str(result["storage_key"]), "产品初筛.xlsx")
 }
 func (s *service) retryJob(ctx context.Context, a identity, id string) (any, error) {
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx)
+	if previous, err := receipt(ctx, tx, a); err != nil || previous != nil {
+		return previous, err
+	}
 	var kind string
-	if e := s.db.QueryRow(ctx, "SELECT kind FROM ps_jobs WHERE tenant_id=$1 AND id=$2::uuid AND payload->>'engine'=$3 AND state='failed'", a.Tenant, id, goEngine).Scan(&kind); e != nil {
-		return nil, e
+	if err = tx.QueryRow(ctx, "SELECT kind FROM ps_jobs WHERE tenant_id=$1 AND id=$2::uuid AND payload->>'engine'=$3 AND state='failed' FOR UPDATE", a.Tenant, id, goEngine).Scan(&kind); err != nil {
+		return nil, err
 	}
-	if _, e := s.db.Exec(ctx, "WITH retried AS (UPDATE ps_jobs SET state='queued',attempts=0,error=NULL,lease_until=NULL,lease_token=NULL,updated_at=now() WHERE tenant_id=$1 AND id=$2::uuid AND state='failed' RETURNING tenant_id,kind,payload) UPDATE ps_imports i SET state=CASE j.kind WHEN 'parse' THEN 'parsing' ELSE 'importing' END FROM retried j WHERE j.kind IN ('parse','import') AND i.tenant_id=j.tenant_id AND i.id::text=j.payload->>'import_id'", a.Tenant, id); e != nil {
-		return nil, e
+	if _, err = tx.Exec(ctx, "WITH retried AS (UPDATE ps_jobs SET state='queued',attempts=0,error=NULL,lease_until=NULL,lease_token=NULL,updated_at=now() WHERE tenant_id=$1 AND id=$2::uuid AND state='failed' RETURNING tenant_id,kind,payload) UPDATE ps_imports i SET state=CASE j.kind WHEN 'parse' THEN 'parsing' ELSE 'importing' END FROM retried j WHERE j.kind IN ('parse','import') AND i.tenant_id=j.tenant_id AND i.id::text=j.payload->>'import_id'", a.Tenant, id); err != nil {
+		return nil, err
 	}
-	return Object{"job_id": id, "state": "queued"}, nil
+	out := Object{"job_id": id, "state": "queued"}
+	if err = saveReceipt(ctx, tx, a, out); err != nil {
+		return nil, err
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return out, nil
 }
