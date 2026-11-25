@@ -1,0 +1,69 @@
+# Production single-host override for HTTP port-80 public web access only.
+# Casdoor management UI is NOT exposed publicly; bind loopback 127.0.0.1:18000
+# so administrators can reach it exclusively via SSH port forwarding.
+services:
+  proxy:
+    networks:
+      default:
+        aliases: !reset []
+    ports: !override
+      - "80:80"
+    volumes: !override
+      - ./apps/auth/casdoor/Caddyfile.prod-http:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    restart: unless-stopped
+  web:
+    restart: unless-stopped
+    environment:
+      SELLER_API_URL: http://api:8080
+      SELLER_APP_ORIGIN: http://${APP_HOST:?Set APP_HOST}
+  api:
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      casdoor:
+        condition: service_started
+    environment:
+      APP_ORIGIN: http://${APP_HOST:?Set APP_HOST}
+      SELLER_ALLOW_HTTP: "true"
+      OIDC_ISSUER: http://casdoor:8000
+      SHORT_LOGIN_ENABLED: "true"
+      CASDOOR_INTERNAL_URL: http://casdoor:8000
+      CASDOOR_APPLICATION_NAME: ${CASDOOR_APPLICATION_NAME:-application_seller_ops}
+      OIDC_SHARED_APPLICATION: ${OIDC_SHARED_APPLICATION:-true}
+      OIDC_DEFAULT_ORGANIZATION: ${OIDC_DEFAULT_ORGANIZATION:-built-in}
+      PUBLIC_REGISTRATION_ENABLED: ${PUBLIC_REGISTRATION_ENABLED:-false}
+  backend:
+    restart: unless-stopped
+  casdoor:
+    restart: unless-stopped
+    ports: !override
+      - "127.0.0.1:18000:8000"
+    environment:
+      origin: http://casdoor:8000
+  db:
+    restart: unless-stopped
+    command:
+      - postgres
+      - -c
+      - shared_buffers=256MB
+      - -c
+      - effective_cache_size=1GB
+      - -c
+      - work_mem=8MB
+      - -c
+      - maintenance_work_mem=64MB
+      - -c
+      - max_connections=80
+  ecom-redis:
+    restart: unless-stopped
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --maxmemory
+      - 256mb
+      - --maxmemory-policy
+      - noeviction
