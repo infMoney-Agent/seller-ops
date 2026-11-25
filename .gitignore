@@ -47,11 +47,13 @@ next-env.d.ts
 .cursorrules
 /memory-bank
 
-# codebuddy (IDE project data, not source)
+# Local IDE project data; shared .cursor/rules remains versioned
 .codebuddy/
+/.vscode/
 
 # Sentry Config File
 .env.sentry-build-plugin
 
-# Reproducible Proto generator binaries
-.cache/proto/
+# Reproducible local tool caches and generated Husky bootstrap
+/.cache/
+/.husky/_/
