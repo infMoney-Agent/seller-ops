@@ -22,8 +22,9 @@ if (mode === 'breaking') {
   if (!exists) { console.log('Proto bootstrap: base has no contracts; lint/generation checks still apply.'); process.exit(0); }
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'seller-proto-base-'));
   try {
-    const archive = execFileSync('git', ['archive', '--format=tar', base, 'proto'], { cwd: root });
-    execFileSync('tar', ['-xf', '-', '-C', temp], { input: archive });
+    const archive = path.join(temp, 'baseline.tar');
+    execFileSync('git', ['archive', '--format=tar', '--output', archive, base, 'proto'], { cwd: root, stdio: 'inherit' });
+    execFileSync('tar', ['-xf', archive, '-C', temp], { stdio: 'inherit' });
     run(buf, ['breaking', 'proto', '--against', path.join(temp, 'proto')]);
   } finally { fs.rmSync(temp, { recursive: true, force: true }); }
 } else {
