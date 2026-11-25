@@ -33,11 +33,11 @@ CI 将初筛页面暴露的 50 个方法/路径逐一分类：46 个 RPC 元数�
 
 ## 开关及发布顺序
 
-Web 服务端支持独立的 legacy/connect 开关，默认 legacy；配置错误或 RPC 失败不会静默降级：
+Web 服务端支持独立的 legacy/connect 开关，**六个开关现均默认 `connect`**（全量切流）；配置错误或 RPC 失败不会静默降级：
 
 SCREENING_IMPORTS_TRANSPORT、SCREENING_IMPORT_READS_TRANSPORT、SCREENING_IMPORT_WRITES_TRANSPORT、SCREENING_BUSINESS_TRANSPORT、ECOM_TRANSPORT、AUTH_TRANSPORT。
 
-先更新两个 Go 服务并保持旧传输，再部署 Web，最后逐组切为 connect 并重启 Web。公网网关要将 registration/status 交给 Next 代理，其余注册 Cookie 流程仍交给认证服务。回滚为 legacy 并重启 Web；也可恢复已备份二进制与前端构建，无数据库降级。
+先确保两个 Go 服务与公网网关已升级到支持全部 80 个 RPC 的基线，再部署 Web（启用 `AUTH_TRANSPORT=connect` 须配置 `SELLER_APP_ORIGIN`）。公网网关要将 registration/status 交给 Next 代理，其余注册 Cookie 流程仍交给认证服务。如需紧急回滚，可将对应开关显式设为 `legacy` 并重启 Web；也可恢复已备份二进制与前端构建，无数据库降级。
 
 旧 HTTP 入口暂保留用于灰度观察和回滚，内部已经调用共享业务用例；保留这些兼容地址不代表对应业务尚未迁移。
 

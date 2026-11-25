@@ -57,7 +57,7 @@ async function proxy(request: Request, { params }: { params: Promise<{ path: str
       return Response.json({ detail: '请先通过邀请加入公司。' }, { status: 403 });
     }
 
-    const mode = process.env.ECOM_TRANSPORT || 'legacy';
+    const mode = process.env.ECOM_TRANSPORT || 'connect';
     if (!['legacy', 'connect'].includes(mode))
       return Response.json({ detail: '电商传输配置无效。' }, { status: 503 });
     if (mode === 'connect') {
