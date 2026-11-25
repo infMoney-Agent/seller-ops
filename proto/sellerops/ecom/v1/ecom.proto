@@ -1,0 +1,302 @@
+syntax = "proto3";
+package sellerops.ecom.v1;
+
+import "google/protobuf/struct.proto";
+
+option go_package = "seller-ops/contracts/sellerops/ecom/v1;ecomv1";
+message ResearchInput {
+  optional string platform = 1;
+  optional string category = 2;
+  optional double limit = 3;
+  optional double min_score = 4;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message ListingInput {
+  optional string platform = 1;
+  optional string asin = 2;
+  optional string keyword = 3;
+  optional string language = 4;
+  optional string marketplace = 5;
+  google.protobuf.Struct product_details = 6;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message ReviewInput {
+  optional string platform = 1;
+  optional string asin = 2;
+  optional double max_pages = 3;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message MonitorInput {
+  optional string platform = 1;
+  optional string asin = 2;
+  optional string label = 3;
+  optional double check_interval_minutes = 4;
+  google.protobuf.Struct alert_rules = 5;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message Score {
+  optional string asin = 1;
+  optional string title = 2;
+  optional double price = 3;
+  optional int64 bsr_rank = 4;
+  optional string bsr_category = 5;
+  optional int64 review_count = 6;
+  optional double rating = 7;
+  optional string ai_analysis = 8;
+  optional bool recommended = 9;
+  repeated string tags = 10;
+  optional double competition_score = 11;
+  optional double profit_potential_score = 12;
+  optional double trend_score = 13;
+  optional double overall_score = 14;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message ResearchResult {
+  optional string category = 1;
+  repeated Score results = 2;
+  optional int64 failed = 3;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message CategoryResult {
+  repeated string categories = 1;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message LanguageResult {
+  map<string, string> languages = 1;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message ListingResult {
+  optional string asin_reference = 1;
+  optional string marketplace = 2;
+  optional string language = 3;
+  optional string title = 4;
+  optional string description = 5;
+  optional string a_plus_draft = 6;
+  repeated string bullet_points = 7;
+  repeated string search_terms = 8;
+  repeated string subject_matter = 9;
+  optional double seo_score = 10;
+  map<string, int64> character_counts = 11;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message ReviewResult {
+  optional string asin = 1;
+  optional int64 total_reviews = 2;
+  optional double avg_rating = 3;
+  map<string, int64> rating_distribution = 4;
+  optional double verified_purchase_ratio = 5;
+  google.protobuf.Struct sentiment_breakdown = 6;
+  repeated google.protobuf.Value top_pain_points = 7;
+  repeated google.protobuf.Value top_praise_points = 8;
+  repeated google.protobuf.Value improvement_suggestions = 9;
+  repeated google.protobuf.Value common_keywords = 10;
+  repeated google.protobuf.Value listing_recommendations = 11;
+  optional string summary = 12;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message AdsResult {
+  optional string profile_id = 1;
+  optional int64 campaign_count = 2;
+  optional double total_spend = 3;
+  optional double total_sales = 4;
+  optional double overall_acos = 5;
+  optional double overall_roas = 6;
+  optional double estimated_monthly_savings = 7;
+  optional double estimated_monthly_sales_increase = 8;
+  optional bool metrics_available = 9;
+  repeated google.protobuf.Value keyword_recommendations = 10;
+  repeated google.protobuf.Value budget_recommendations = 11;
+  repeated google.protobuf.Value negative_keyword_suggestions = 12;
+  optional string executive_summary = 13;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message Monitor {
+  optional string asin = 1;
+  optional string platform = 2;
+  optional string label = 3;
+  optional int64 check_interval_minutes = 4;
+  google.protobuf.Struct alert_rules = 5;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message MonitorsResult {
+  repeated Monitor monitors = 1;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message MonitorActionResult {
+  optional string status = 1;
+  optional string asin = 2;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message Snapshot {
+  optional string asin = 1;
+  optional string title = 2;
+  optional double price = 3;
+  optional int64 bsr_rank = 4;
+  optional string bsr_category = 5;
+  optional int64 review_count = 6;
+  optional double rating = 7;
+  optional string timestamp = 8;
+  optional bool is_in_stock = 9;
+  optional bool alert_triggered = 10;
+  optional string alert_reason = 11;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message SnapshotsResult {
+  optional string asin = 1;
+  repeated Snapshot snapshots = 2;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message EcomQuery {
+  repeated string platform = 1;
+  repeated string target_acos = 2;
+  repeated string max_pages = 3;
+  repeated string limit = 4;
+  map<string, EcomQueryValues> extra = 10;
+}
+message EcomQueryValues {
+  repeated string values = 1;
+}
+message ListResearchCategoriesRequest {
+  optional string asin = 1;
+  EcomQuery query = 2;
+  google.protobuf.Struct body = 3;
+}
+message ListResearchCategoriesResponse {
+  CategoryResult data = 1;
+}
+message ResearchProductsRequest {
+  optional string asin = 1;
+  EcomQuery query = 2;
+  ResearchInput body = 3;
+}
+message ResearchProductsResponse {
+  ResearchResult data = 1;
+}
+message ScoreProductRequest {
+  optional string asin = 1;
+  EcomQuery query = 2;
+  google.protobuf.Struct body = 3;
+}
+message ScoreProductResponse {
+  Score data = 1;
+}
+message ListListingLanguagesRequest {
+  optional string asin = 1;
+  EcomQuery query = 2;
+  google.protobuf.Struct body = 3;
+}
+message ListListingLanguagesResponse {
+  LanguageResult data = 1;
+}
+message GenerateListingRequest {
+  optional string asin = 1;
+  EcomQuery query = 2;
+  ListingInput body = 3;
+}
+message GenerateListingResponse {
+  ListingResult data = 1;
+}
+message OptimizeListingRequest {
+  optional string asin = 1;
+  EcomQuery query = 2;
+  ListingInput body = 3;
+}
+message OptimizeListingResponse {
+  ListingResult data = 1;
+}
+message AnalyzeReviewsRequest {
+  optional string asin = 1;
+  EcomQuery query = 2;
+  ReviewInput body = 3;
+}
+message AnalyzeReviewsResponse {
+  ReviewResult data = 1;
+}
+message AnalyzeReviewsLegacyRequest {
+  optional string asin = 1;
+  EcomQuery query = 2;
+  google.protobuf.Struct body = 3;
+}
+message AnalyzeReviewsLegacyResponse {
+  ReviewResult data = 1;
+}
+message OptimizeAdsRequest {
+  optional string asin = 1;
+  EcomQuery query = 2;
+  google.protobuf.Struct body = 3;
+}
+message OptimizeAdsResponse {
+  AdsResult data = 1;
+}
+message ListMonitorsRequest {
+  optional string asin = 1;
+  EcomQuery query = 2;
+  google.protobuf.Struct body = 3;
+}
+message ListMonitorsResponse {
+  MonitorsResult data = 1;
+}
+message AddMonitorRequest {
+  optional string asin = 1;
+  EcomQuery query = 2;
+  MonitorInput body = 3;
+}
+message AddMonitorResponse {
+  MonitorActionResult data = 1;
+}
+message RemoveMonitorRequest {
+  optional string asin = 1;
+  EcomQuery query = 2;
+  google.protobuf.Struct body = 3;
+}
+message RemoveMonitorResponse {
+  MonitorActionResult data = 1;
+}
+message ListSnapshotsRequest {
+  optional string asin = 1;
+  EcomQuery query = 2;
+  google.protobuf.Struct body = 3;
+}
+message ListSnapshotsResponse {
+  SnapshotsResult data = 1;
+}
+message CreateSnapshotRequest {
+  optional string asin = 1;
+  EcomQuery query = 2;
+  google.protobuf.Struct body = 3;
+}
+message CreateSnapshotResponse {
+  Snapshot data = 1;
+}
+service EcomService {
+  rpc ListResearchCategories(ListResearchCategoriesRequest) returns (ListResearchCategoriesResponse);
+  rpc ResearchProducts(ResearchProductsRequest) returns (ResearchProductsResponse);
+  rpc ScoreProduct(ScoreProductRequest) returns (ScoreProductResponse);
+  rpc ListListingLanguages(ListListingLanguagesRequest) returns (ListListingLanguagesResponse);
+  rpc GenerateListing(GenerateListingRequest) returns (GenerateListingResponse);
+  rpc OptimizeListing(OptimizeListingRequest) returns (OptimizeListingResponse);
+  rpc AnalyzeReviews(AnalyzeReviewsRequest) returns (AnalyzeReviewsResponse);
+  rpc AnalyzeReviewsLegacy(AnalyzeReviewsLegacyRequest) returns (AnalyzeReviewsLegacyResponse);
+  rpc OptimizeAds(OptimizeAdsRequest) returns (OptimizeAdsResponse);
+  rpc ListMonitors(ListMonitorsRequest) returns (ListMonitorsResponse);
+  rpc AddMonitor(AddMonitorRequest) returns (AddMonitorResponse);
+  rpc RemoveMonitor(RemoveMonitorRequest) returns (RemoveMonitorResponse);
+  rpc ListSnapshots(ListSnapshotsRequest) returns (ListSnapshotsResponse);
+  rpc CreateSnapshot(CreateSnapshotRequest) returns (CreateSnapshotResponse);
+}

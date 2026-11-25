@@ -4,7 +4,7 @@ import type { JsonObject } from '@bufbuild/protobuf';
 import type { SellerSession } from '@/features/auth/session';
 import { importRPCClient } from './import-connect';
 import { importSettings, legacySubmission, legacyDeleteImport } from './import-mutation-compat';
-async function commandBody(request: Request): Promise<JsonObject> {
+export async function commandBody(request: Request, limit = 256 * 1024): Promise<JsonObject> {
   if (!request.body) return {};
   const reader = request.body.getReader(),
     parts: Uint8Array[] = [];
@@ -13,9 +13,12 @@ async function commandBody(request: Request): Promise<JsonObject> {
     const { value, done } = await reader.read();
     if (done) break;
     length += value.byteLength;
-    if (length > 256 * 1024) {
+    if (length > limit) {
       await reader.cancel();
-      throw new ConnectError('JSON 请求超过256KB', Code.ResourceExhausted);
+      throw new ConnectError(
+        limit === 64 * 1024 ? '请求内容过大' : 'JSON 请求超过256KB',
+        Code.ResourceExhausted
+      );
     }
     parts.push(value);
   }

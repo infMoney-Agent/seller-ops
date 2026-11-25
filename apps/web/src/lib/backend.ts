@@ -1,3 +1,4 @@
+import { authBackendResponse } from '@/lib/auth-backend';
 import { cookies } from 'next/headers';
 import { notFound, redirect } from 'next/navigation';
 import type { SellerSession } from '@/features/auth/session';
@@ -7,7 +8,7 @@ export function backendURL(path: string) {
 }
 
 export async function backendFetch<T>(path: string): Promise<T> {
-  const response = await fetch(backendURL(path), {
+  const response = await authBackendResponse(path, {
     headers: {
       cookie: (await cookies()).toString()
     },

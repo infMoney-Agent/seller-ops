@@ -43,3 +43,7 @@ require (
 )
 
 replace seller-ops/contracts => ../../gen/go
+
+require seller-ops/rpccompat v0.0.0
+
+replace seller-ops/rpccompat => ../../packages/rpccompat

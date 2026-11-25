@@ -132,8 +132,11 @@ func (s *service) ListImports(ctx context.Context, req *connect.Request[screenin
 }
 func (s *service) registerImportsRPC(mux *http.ServeMux) {
 	path, handler := screeningv1connect.NewScreeningImportServiceHandler(s, connect.WithReadMaxBytes(512*1024))
+	mux.Handle(path, s.authenticatedRPC(handler))
+}
+func (s *service) authenticatedRPC(handler http.Handler) http.Handler {
 	writer := connect.NewErrorWriter()
-	mux.Handle(path, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
 		a, err := verifyIdentity(r, s.cfg.Secret, time.Now())
 		if err != nil {
@@ -142,7 +145,7 @@ func (s *service) registerImportsRPC(mux *http.ServeMux) {
 		}
 		r = r.WithContext(context.WithValue(r.Context(), identityKey{}, a))
 		handler.ServeHTTP(w, r)
-	}))
+	})
 }
 
 func rpcActor(ctx context.Context) (identity, error) {

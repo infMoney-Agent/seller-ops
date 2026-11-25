@@ -522,47 +522,104 @@ func (s *Service) companyInfo(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if a.TenantID == 0 {
-		regError(w, 403, "尚未加入公司")
+	input := map[string]any{}
+	if r.Method == "POST" && "companyInfo" == "applyToCompany" {
+		d := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096))
+		if d.Decode(&input) != nil {
+			regError(w, 400, "请求无效")
+			return
+		}
+	}
+	result, err := s.CompanyInfoUsecase(r.Context(), a, r.PathValue("id"), r.PathValue("action"), input)
+	if err != nil {
+		var e APIError
+		if errors.As(err, &e) {
+			regError(w, e.Status, e.Message)
+		} else {
+			regError(w, 503, "服务暂不可用")
+		}
 		return
+	}
+	regJSON(w, result.Status, result.Data)
+}
+func (s *Service) CompanyInfoUsecase(ctx context.Context, a Principal, resourceID, decisionAction string, input map[string]any) (*Result, error) {
+	if a.TenantID == 0 {
+		return nil, APIError{Status: 403, Message: "尚未加入公司", Plain: true}
 	}
 	var name string
-	if s.db.QueryRow(r.Context(), "SELECT name FROM tenants WHERE id=$1", a.TenantID).Scan(&name) != nil {
-		regError(w, 404, "公司不存在")
-		return
+	if s.db.QueryRow(ctx, "SELECT name FROM tenants WHERE id=$1", a.TenantID).Scan(&name) != nil {
+		return nil, APIError{Status: 404, Message: "公司不存在", Plain: true}
 	}
-	regJSON(w, 200, map[string]any{"name": name, "code": fmt.Sprintf("C%d", a.TenantID)})
+	return &Result{Status: 200, Data: map[string]any{"name": name, "code": fmt.Sprintf("C%d", a.TenantID)}}, nil
 }
 func (s *Service) registrationStatus(w http.ResponseWriter, r *http.Request) {
 	a, ok := s.Authenticate(w, r)
 	if !ok {
 		return
 	}
-	var raw []byte
-	e := s.db.QueryRow(r.Context(), "SELECT jsonb_build_object('id',j.id,'companyName',t.name,'companyCode','C'||t.id::text,'state',j.state,'note',j.note,'createdAt',j.created_at) FROM company_join_requests j JOIN tenants t ON t.id=j.tenant_id WHERE j.user_id=$1", a.UserID).Scan(&raw)
-	if errors.Is(e, pgx.ErrNoRows) {
-		regJSON(w, 200, map[string]any{"request": nil})
+	input := map[string]any{}
+	if r.Method == "POST" && "registrationStatus" == "applyToCompany" {
+		d := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096))
+		if d.Decode(&input) != nil {
+			regError(w, 400, "请求无效")
+			return
+		}
+	}
+	result, err := s.RegistrationStatusUsecase(r.Context(), a, r.PathValue("id"), r.PathValue("action"), input)
+	if err != nil {
+		var e APIError
+		if errors.As(err, &e) {
+			regError(w, e.Status, e.Message)
+		} else {
+			regError(w, 503, "服务暂不可用")
+		}
 		return
+	}
+	regJSON(w, result.Status, result.Data)
+}
+func (s *Service) RegistrationStatusUsecase(ctx context.Context, a Principal, resourceID, decisionAction string, input map[string]any) (*Result, error) {
+	var raw []byte
+	e := s.db.QueryRow(ctx, "SELECT jsonb_build_object('id',j.id,'companyName',t.name,'companyCode','C'||t.id::text,'state',j.state,'note',j.note,'createdAt',j.created_at) FROM company_join_requests j JOIN tenants t ON t.id=j.tenant_id WHERE j.user_id=$1", a.UserID).Scan(&raw)
+	if errors.Is(e, pgx.ErrNoRows) {
+		return &Result{Status: 200, Data: map[string]any{"request": nil}}, nil
 	}
 	if e != nil {
-		regError(w, 503, "暂时无法读取审批状态")
-		return
+		return nil, APIError{Status: 503, Message: "暂时无法读取审批状态", Plain: true}
 	}
-	regJSON(w, 200, map[string]any{"request": json.RawMessage(raw)})
+	return &Result{Status: 200, Data: map[string]any{"request": json.RawMessage(raw)}}, nil
 }
 func (s *Service) joinRequests(w http.ResponseWriter, r *http.Request) {
 	a, ok := s.Authenticate(w, r)
 	if !ok {
 		return
 	}
-	if a.Role != "owner" || a.TenantID == 0 {
-		regError(w, 403, "只有公司管理员可以审批")
+	input := map[string]any{}
+	if r.Method == "POST" && "joinRequests" == "applyToCompany" {
+		d := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096))
+		if d.Decode(&input) != nil {
+			regError(w, 400, "请求无效")
+			return
+		}
+	}
+	result, err := s.JoinRequestsUsecase(r.Context(), a, r.PathValue("id"), r.PathValue("action"), input)
+	if err != nil {
+		var e APIError
+		if errors.As(err, &e) {
+			regError(w, e.Status, e.Message)
+		} else {
+			regError(w, 503, "服务暂不可用")
+		}
 		return
 	}
-	rows, e := s.db.Query(r.Context(), "SELECT j.id,u.name,u.email,j.created_at FROM company_join_requests j JOIN users u ON u.id=j.user_id WHERE j.tenant_id=$1 AND j.state='pending' ORDER BY j.created_at,j.id LIMIT 100", a.TenantID)
+	regJSON(w, result.Status, result.Data)
+}
+func (s *Service) JoinRequestsUsecase(ctx context.Context, a Principal, resourceID, decisionAction string, input map[string]any) (*Result, error) {
+	if a.Role != "owner" || a.TenantID == 0 {
+		return nil, APIError{Status: 403, Message: "只有公司管理员可以审批", Plain: true}
+	}
+	rows, e := s.db.Query(ctx, "SELECT j.id,u.name,u.email,j.created_at FROM company_join_requests j JOIN users u ON u.id=j.user_id WHERE j.tenant_id=$1 AND j.state='pending' ORDER BY j.created_at,j.id LIMIT 100", a.TenantID)
 	if e != nil {
-		regError(w, 503, "暂时无法读取申请")
-		return
+		return nil, APIError{Status: 503, Message: "暂时无法读取申请", Plain: true}
 	}
 	defer rows.Close()
 	items := []map[string]any{}
@@ -571,87 +628,116 @@ func (s *Service) joinRequests(w http.ResponseWriter, r *http.Request) {
 		var name, email string
 		var at time.Time
 		if rows.Scan(&id, &name, &email, &at) != nil {
-			regError(w, 503, "读取申请失败")
-			return
+			return nil, APIError{Status: 503, Message: "读取申请失败", Plain: true}
 		}
 		items = append(items, map[string]any{"id": id, "name": name, "email": email, "createdAt": at})
 	}
 	if rows.Err() != nil {
-		regError(w, 503, "读取申请失败")
-		return
+		return nil, APIError{Status: 503, Message: "读取申请失败", Plain: true}
 	}
-	regJSON(w, 200, items)
+	return &Result{Status: 200, Data: items}, nil
 }
 func (s *Service) applyToCompany(w http.ResponseWriter, r *http.Request) {
 	a, ok := s.Authenticate(w, r)
 	if !ok {
 		return
 	}
-	if a.TenantID != 0 {
-		regError(w, 409, "当前账号已加入公司")
+	input := map[string]any{}
+	if r.Method == "POST" && "applyToCompany" == "applyToCompany" {
+		d := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096))
+		if d.Decode(&input) != nil {
+			regError(w, 400, "请求无效")
+			return
+		}
+	}
+	result, err := s.ApplyToCompanyUsecase(r.Context(), a, r.PathValue("id"), r.PathValue("action"), input)
+	if err != nil {
+		var e APIError
+		if errors.As(err, &e) {
+			regError(w, e.Status, e.Message)
+		} else {
+			regError(w, 503, "服务暂不可用")
+		}
 		return
+	}
+	regJSON(w, result.Status, result.Data)
+}
+func (s *Service) ApplyToCompanyUsecase(ctx context.Context, a Principal, resourceID, decisionAction string, input map[string]any) (*Result, error) {
+	if a.TenantID != 0 {
+		return nil, APIError{Status: 409, Message: "当前账号已加入公司", Plain: true}
 	}
 	var body struct{ Target string }
-	if json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&body) != nil {
-		regError(w, 400, "请求无效")
-		return
+	if decodeRegistrationBody(input, &body) != nil {
+		return nil, APIError{Status: 400, Message: "请求无效", Plain: true}
 	}
-	tenant, org, e := s.resolveCompany(r.Context(), strings.TrimSpace(body.Target))
+	tenant, org, e := s.resolveCompany(ctx, strings.TrimSpace(body.Target))
 	if e != nil {
-		regError(w, 422, e.Error())
-		return
+		return nil, APIError{Status: 422, Message: e.Error(), Plain: true}
 	}
 	var userOrg string
-	if s.db.QueryRow(r.Context(), "SELECT casdoor_org FROM users WHERE id=$1", a.UserID).Scan(&userOrg) != nil || userOrg != org {
-		regError(w, 409, "该账号属于其他组织，请联系管理员处理")
-		return
+	if s.db.QueryRow(ctx, "SELECT casdoor_org FROM users WHERE id=$1", a.UserID).Scan(&userOrg) != nil || userOrg != org {
+		return nil, APIError{Status: 409, Message: "该账号属于其他组织，请联系管理员处理", Plain: true}
 	}
-	_, e = s.db.Exec(r.Context(), "INSERT INTO company_join_requests(tenant_id,user_id) VALUES($1,$2) ON CONFLICT(user_id) DO UPDATE SET state='pending',note='',decided_by=NULL,decided_at=NULL,created_at=now() WHERE company_join_requests.tenant_id=EXCLUDED.tenant_id AND company_join_requests.state<>'pending'", tenant, a.UserID)
+	_, e = s.db.Exec(ctx, "INSERT INTO company_join_requests(tenant_id,user_id) VALUES($1,$2) ON CONFLICT(user_id) DO UPDATE SET state='pending',note='',decided_by=NULL,decided_at=NULL,created_at=now() WHERE company_join_requests.tenant_id=EXCLUDED.tenant_id AND company_join_requests.state<>'pending'", tenant, a.UserID)
 	if e != nil {
-		regError(w, 409, "申请未提交，请刷新后重试")
-		return
+		return nil, APIError{Status: 409, Message: "申请未提交，请刷新后重试", Plain: true}
 	}
-	regJSON(w, 200, map[string]bool{"submitted": true})
+	return &Result{Status: 200, Data: map[string]bool{"submitted": true}}, nil
 }
 func (s *Service) decideJoinRequest(w http.ResponseWriter, r *http.Request) {
 	a, ok := s.Authenticate(w, r)
 	if !ok {
 		return
 	}
+	input := map[string]any{}
+	if r.Method == "POST" && "decideJoinRequest" == "applyToCompany" {
+		d := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096))
+		if d.Decode(&input) != nil {
+			regError(w, 400, "请求无效")
+			return
+		}
+	}
+	result, err := s.DecideJoinRequestUsecase(r.Context(), a, r.PathValue("id"), r.PathValue("action"), input)
+	if err != nil {
+		var e APIError
+		if errors.As(err, &e) {
+			regError(w, e.Status, e.Message)
+		} else {
+			regError(w, 503, "服务暂不可用")
+		}
+		return
+	}
+	regJSON(w, result.Status, result.Data)
+}
+func (s *Service) DecideJoinRequestUsecase(ctx context.Context, a Principal, resourceID, decisionAction string, input map[string]any) (*Result, error) {
 	if a.TenantID == 0 || a.Role != "owner" {
-		regError(w, 403, "只有公司管理员可以审批")
-		return
+		return nil, APIError{Status: 403, Message: "只有公司管理员可以审批", Plain: true}
 	}
-	action := r.PathValue("action")
+	action := decisionAction
 	if action != "approve" && action != "reject" {
-		regError(w, 404, "操作不存在")
-		return
+		return nil, APIError{Status: 404, Message: "操作不存在", Plain: true}
 	}
-	ctx := r.Context()
+
 	tx, e := s.db.Begin(ctx)
 	if e != nil {
-		regError(w, 503, "审批暂不可用")
-		return
+		return nil, APIError{Status: 503, Message: "审批暂不可用", Plain: true}
 	}
 	defer tx.Rollback(ctx)
 	var user int64
 	var state string
-	e = tx.QueryRow(ctx, "SELECT user_id,state FROM company_join_requests WHERE id=$1 AND tenant_id=$2 FOR UPDATE", r.PathValue("id"), a.TenantID).Scan(&user, &state)
+	e = tx.QueryRow(ctx, "SELECT user_id,state FROM company_join_requests WHERE id=$1 AND tenant_id=$2 FOR UPDATE", resourceID, a.TenantID).Scan(&user, &state)
 	if e != nil {
-		regError(w, 404, "申请不存在")
-		return
+		return nil, APIError{Status: 404, Message: "申请不存在", Plain: true}
 	}
 	decision := "rejected"
 	if action == "approve" {
 		decision = "approved"
 	}
 	if state == decision {
-		regJSON(w, 200, map[string]string{"state": state})
-		return
+		return &Result{Status: 200, Data: map[string]string{"state": state}}, nil
 	}
 	if state != "pending" {
-		regError(w, 409, "申请已被处理")
-		return
+		return nil, APIError{Status: 409, Message: "申请已被处理", Plain: true}
 	}
 	var currentOrg, targetOrg string
 	e = tx.QueryRow(ctx, "SELECT casdoor_org FROM users WHERE id=$1 FOR UPDATE", user).Scan(&currentOrg)
@@ -659,38 +745,32 @@ func (s *Service) decideJoinRequest(w http.ResponseWriter, r *http.Request) {
 		e = tx.QueryRow(ctx, "SELECT casdoor_org FROM tenants WHERE id=$1", a.TenantID).Scan(&targetOrg)
 	}
 	if e != nil || currentOrg != targetOrg {
-		regError(w, 409, "申请人组织已变化")
-		return
+		return nil, APIError{Status: 409, Message: "申请人组织已变化", Plain: true}
 	}
 	if action == "approve" {
 		var bound int64
 		e = tx.QueryRow(ctx, "SELECT tenant_id FROM memberships WHERE user_id=$1", user).Scan(&bound)
 		if e != nil && !errors.Is(e, pgx.ErrNoRows) {
-			regError(w, 503, "审批暂不可用")
-			return
+			return nil, APIError{Status: 503, Message: "审批暂不可用", Plain: true}
 		}
 		if bound != 0 && bound != a.TenantID {
-			regError(w, 409, "申请人已加入其他公司")
-			return
+			return nil, APIError{Status: 409, Message: "申请人已加入其他公司", Plain: true}
 		}
 		if bound == 0 {
 			if _, e = tx.Exec(ctx, "INSERT INTO memberships(tenant_id,user_id,role) VALUES($1,$2,'member')", a.TenantID, user); e != nil {
-				regError(w, 409, "成员关系已变化，请刷新")
-				return
+				return nil, APIError{Status: 409, Message: "成员关系已变化，请刷新", Plain: true}
 			}
 		}
 		_, e = tx.Exec(ctx, "UPDATE sessions SET tenant_id=$1 WHERE user_id=$2", a.TenantID, user)
 		if e != nil {
-			regError(w, 503, "审批暂不可用")
-			return
+			return nil, APIError{Status: 503, Message: "审批暂不可用", Plain: true}
 		}
 	}
-	_, e = tx.Exec(ctx, "UPDATE company_join_requests SET state=$1,decided_by=$2,decided_at=now() WHERE id=$3 AND tenant_id=$4", decision, a.UserID, r.PathValue("id"), a.TenantID)
+	_, e = tx.Exec(ctx, "UPDATE company_join_requests SET state=$1,decided_by=$2,decided_at=now() WHERE id=$3 AND tenant_id=$4", decision, a.UserID, resourceID, a.TenantID)
 	if e != nil || tx.Commit(ctx) != nil {
-		regError(w, 503, "审批未完成，请刷新确认")
-		return
+		return nil, APIError{Status: 503, Message: "审批未完成，请刷新确认", Plain: true}
 	}
-	regJSON(w, 200, map[string]string{"state": decision})
+	return &Result{Status: 200, Data: map[string]string{"state": decision}}, nil
 }
 
 var registrationHTML = template.Must(template.New("registration").Parse(`<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>注册 · Seller Ops</title>
@@ -748,4 +828,12 @@ func (s *Service) RegistrationMaintenance(ctx context.Context) {
 		case <-tick.C:
 		}
 	}
+}
+
+func decodeRegistrationBody(input map[string]any, dst any) error {
+	raw, err := json.Marshal(input)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(raw, dst)
 }

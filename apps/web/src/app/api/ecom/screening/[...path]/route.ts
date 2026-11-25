@@ -1,7 +1,9 @@
+import { authBackendResponse } from '@/lib/auth-backend';
 import { createHmac } from 'node:crypto';
 import { acceptsGzip, serverTiming } from '@/lib/http-performance';
-import { backendURL, isAllowedAppOrigin } from '@/lib/backend';
+import { isAllowedAppOrigin } from '@/lib/backend';
 import { connectImportRead, importConnectFailure } from '@/features/screening/import-connect';
+import { connectScreening, screeningRPCRoute } from '@/features/screening/screening-connect';
 import { connectImportCommand } from '@/features/screening/import-command-connect';
 import type { SellerSession } from '@/features/auth/session';
 
@@ -52,7 +54,7 @@ async function proxy(request: Request, { params }: { params: Promise<{ path: str
   let oversized = false;
   try {
     const authStarted = performance.now();
-    const auth = await fetch(backendURL('/api/auth/session'), {
+    const auth = await authBackendResponse('/api/auth/session', {
       headers: { cookie: request.headers.get('cookie') || '' },
       cache: 'no-store',
       redirect: 'manual',
@@ -79,6 +81,41 @@ async function proxy(request: Request, { params }: { params: Promise<{ path: str
       request.headers.get('x-seller-workspace') !== String(session.workspaceId)
     ) {
       return Response.json({ message: '工作区已切换，请刷新页面。' }, { status: 409 });
+    }
+    if (screeningRPCRoute(request.method, path)) {
+      const mode = process.env.SCREENING_BUSINESS_TRANSPORT || 'legacy';
+      if (!['legacy', 'connect'].includes(mode))
+        return Response.json({ message: '业务传输配置无效。' }, { status: 503 });
+      if (mode === 'connect') {
+        const apiStarted = performance.now();
+        const responseHeaders = () => ({
+          'Cache-Control': 'no-store',
+          'Server-Timing': serverTiming(
+            authDuration,
+            performance.now() - apiStarted,
+            performance.now() - started
+          )
+        });
+        try {
+          const result = await connectScreening(
+            request,
+            url,
+            path,
+            session,
+            secret,
+            write
+              ? AbortSignal.timeout(120000)
+              : AbortSignal.any([request.signal, AbortSignal.timeout(120000)])
+          );
+          return screeningRPCResponse(request, path, result.body, result.status, responseHeaders());
+        } catch (error) {
+          const failure = importConnectFailure(error);
+          return Response.json(failure.body, {
+            status: failure.status,
+            headers: responseHeaders()
+          });
+        }
+      }
     }
     const importRead = new RegExp(`^(?:imports/${uuid}(?:/preview)?|jobs/${uuid})$`).test(path);
     if (request.method === 'GET' && (path === 'imports' || importRead)) {
@@ -253,3 +290,29 @@ async function proxy(request: Request, { params }: { params: Promise<{ path: str
   }
 }
 export { proxy as GET, proxy as POST, proxy as PUT, proxy as PATCH, proxy as DELETE };
+
+function screeningRPCResponse(
+  request: Request,
+  path: string,
+  body: unknown,
+  status: number,
+  headers: Record<string, string>
+) {
+  const response = Response.json(body, { status, headers });
+  const compressible =
+    ['products', 'profit/products', 'review-categories', 'review-workspace'].includes(path) ||
+    /^products\/[^/]+\/family$/.test(path);
+  if (request.method === 'GET' && compressible && response.body) {
+    const h = new Headers(response.headers);
+    h.set('Vary', 'Accept-Encoding');
+    if (acceptsGzip(request.headers.get('accept-encoding'))) {
+      h.set('Content-Encoding', 'gzip');
+      return new Response(response.body.pipeThrough(new CompressionStream('gzip')), {
+        status,
+        headers: h
+      });
+    }
+    return new Response(response.body, { status, headers: h });
+  }
+  return response;
+}

@@ -1,5 +1,7 @@
+import { authBackendResponse } from '@/lib/auth-backend';
+import { connectEcom, ecomConnectFailure } from '@/features/screening/ecom-connect';
 import { createHmac } from 'node:crypto';
-import { backendURL, isAllowedAppOrigin } from '@/lib/backend';
+import { isAllowedAppOrigin } from '@/lib/backend';
 import type { SellerSession } from '@/features/auth/session';
 
 const allowed = new Map([
@@ -35,7 +37,7 @@ async function proxy(request: Request, { params }: { params: Promise<{ path: str
   }
 
   try {
-    const auth = await fetch(backendURL('/api/auth/session'), {
+    const auth = await authBackendResponse('/api/auth/session', {
       headers: { cookie: request.headers.get('cookie') || '' },
       cache: 'no-store',
       redirect: 'manual',
@@ -55,6 +57,27 @@ async function proxy(request: Request, { params }: { params: Promise<{ path: str
       return Response.json({ detail: '请先通过邀请加入公司。' }, { status: 403 });
     }
 
+    const mode = process.env.ECOM_TRANSPORT || 'legacy';
+    if (!['legacy', 'connect'].includes(mode))
+      return Response.json({ detail: '电商传输配置无效。' }, { status: 503 });
+    if (mode === 'connect') {
+      try {
+        return Response.json(
+          await connectEcom(
+            request,
+            module + '/' + action + (asin ? '/' + asin.toUpperCase() : ''),
+            session.id
+          ),
+          { headers: { 'Cache-Control': 'no-store' } }
+        );
+      } catch (error) {
+        const failure = ecomConnectFailure(error);
+        return Response.json(failure.body, {
+          status: failure.status,
+          headers: { 'Cache-Control': 'no-store' }
+        });
+      }
+    }
     let body: Uint8Array<ArrayBuffer> | undefined;
     if (request.body) {
       const reader = request.body.getReader();

@@ -1,4 +1,6 @@
-# Proto 导入历史只读试点
+# Proto 迁移实施记录
+
+本文保留导入试点的历史过程；当前完整范围和发布约束以 [Proto 接口迁移状态](proto-migration-status.md) 为准。
 
 ## 边界与结构
 
@@ -67,3 +69,7 @@ CommitImport、UpdateImportSettings、GetImportRemovalPreview、DeleteImport、R
 总体剩余范围与保留 HTTP 的边界见 [迁移进度](proto-migration-status.md)。第三阶段增加 RPC 信封空间至 512KB，但恢复后的业务 JSON 仍限制 256KB，避免信封开销使原本合法的请求被拒绝。
 
 第三阶段验收通过：完整 Go race 回归、go vet、写接口边界测试、8 项 TS 单测（43 断言）、类型检查、lint、生产构建、Proto 生成漂移与相对上一阶段的 breaking 检查；三个 Connect 开关下完整浏览器流程通过（31.03 秒）。
+
+## 全量元数据迁移
+
+新增 ScreeningService（37）、EcomService（14）、AuthService（20），加上导入服务（9），共 80 个方法。已完成共享用例、生成契约、服务端客户端、错误/状态码兼容、CI 覆盖检查和根上下文 Docker 构建支持。具体范围、保留 HTTP 的协议例外与独立切换开关见迁移状态文档。

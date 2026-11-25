@@ -99,3 +99,32 @@ func TestStaticCompressionAndCache(t *testing.T) {
 		}
 	}
 }
+
+func TestRPCAndRegistrationGatewayBoundary(t *testing.T) {
+	start := func(label string) (*httptest.Server, *url.URL) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write([]byte(label)) }))
+		target, _ := url.Parse(server.URL)
+		return server, target
+	}
+	web, webURL := start("web")
+	defer web.Close()
+	identity, identityURL := start("identity")
+	defer identity.Close()
+	auth, authURL := start("auth")
+	defer auth.Close()
+	handler := gateway("http://43.139.227.179", webURL, identityURL, authURL)
+	for path, want := range map[string]string{"/api/auth/registration/status": "web", "/api/auth/registration/prepare": "auth", "/api/auth/register-page": "auth"} {
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, httptest.NewRequest("GET", "http://43.139.227.179"+path, nil))
+		if w.Code != 200 || w.Body.String() != want {
+			t.Fatal(path, w.Code, w.Body.String())
+		}
+	}
+	for _, path := range []string{"/sellerops.auth.v1.AuthService/GetSession", "/sellerops.screening.v1.ScreeningService/ListProducts", "/sellerops.ecom.v1.EcomService/ListMonitors"} {
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, httptest.NewRequest("POST", "http://43.139.227.179"+path, nil))
+		if w.Code != 404 {
+			t.Fatal("internal RPC exposed", path, w.Code)
+		}
+	}
+}

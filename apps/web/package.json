@@ -18,7 +18,7 @@
     "format": "oxfmt --write . '!**/*.md' '!**/*.mdc' '!**/*.mdx' '!**/*.yml' '!**/*.yaml'",
     "format:check": "oxfmt --check . '!**/*.md' '!**/*.mdc' '!**/*.mdx' '!**/*.yml' '!**/*.yaml'",
     "test:profit-autosave": "node tests/profit-save-queue.test.mjs",
-    "test:imports-connect": "bun test tests/import-connect.test.mjs"
+    "test:imports-connect": "bun test tests/import-connect.test.mjs tests/rpc-compat.test.mjs tests/rpc-coverage.test.mjs"
   },
   "dependencies": {
     "@ai-sdk/react": "^4.0.47",

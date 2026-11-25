@@ -157,6 +157,7 @@ func TestImportsConnectParity(t *testing.T) {
 	client := screeningv1connect.NewScreeningImportServiceClient(server.Client(), server.URL, connect.WithProtoJSON())
 	testImportReadRPC(t, svc, server, client)
 	testImportMutationRPC(t, svc, server, client)
+ testScreeningRPCReadParity(t,svc,server)
 	for _, tc := range []struct {
 		p, n   int32
 		tenant int64

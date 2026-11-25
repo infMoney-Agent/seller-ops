@@ -1,6 +1,7 @@
 FROM golang:1.25-bookworm AS build
 WORKDIR /src/apps/backend
 COPY gen/go/ /src/gen/go/
+COPY packages/rpccompat/ /src/packages/rpccompat/
 COPY apps/backend/go.mod apps/backend/go.sum ./
 RUN go mod download
 COPY apps/backend/ ./

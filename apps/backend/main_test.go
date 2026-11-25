@@ -135,3 +135,14 @@ func TestImportsRPCSharesBusinessListener(t *testing.T) {
 		t.Fatal("RPC routed to wrong service", w.Code, w.Body.String())
 	}
 }
+
+func TestAllRPCServicesShareBusinessListener(t *testing.T) {
+	for path, want := range map[string]string{"/sellerops.screening.v1.ScreeningService/ListProducts": "screening", "/sellerops.ecom.v1.EcomService/ListMonitors": "ecommerce"} {
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest("POST", "http://internal"+path, nil)
+		handler(componentFixture("ecommerce"), componentFixture("screening")).ServeHTTP(w, r)
+		if w.Code != 200 || w.Body.String() != want {
+			t.Fatal("RPC prefix missing", path, w.Code, w.Body.String())
+		}
+	}
+}

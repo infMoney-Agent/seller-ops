@@ -1,16 +1,21 @@
 package screening
 
 import (
+	"context"
 	"fmt"
 	"math/big"
 	"net/http"
+	"net/url"
 	"sort"
 	"strings"
 )
 
 // Parent folding only changes browsing. Each child retains its own cost snapshot.
 func (s *service) profitProducts(r *http.Request) (any, error) {
-	values := r.URL.Query()
+	return s.profitProductsUsecase(r.Context(), actor(r), r.URL.Query())
+}
+func (s *service) profitProductsUsecase(ctx context.Context, a identity, params url.Values) (any, error) {
+	values := params
 	sortBy := values.Get("sort")
 	grouped := values.Get("group_by_parent") == "true"
 	if v := values.Get("group_by_parent"); v != "" && v != "true" && v != "false" {
@@ -37,7 +42,7 @@ func (s *service) profitProducts(r *http.Request) (any, error) {
 	if focus == "" && selected == "" {
 		values.Set("review_status", "kept")
 	}
-	q := newProductQuery(actor(r), values)
+	q := newProductQuery(a, values)
 	if focus != "" {
 		if !uuidPattern.MatchString(focus) {
 			return nil, fail(422, "商品ID无效")
@@ -74,7 +79,7 @@ func (s *service) profitProducts(r *http.Request) (any, error) {
 	}
 	var total int64
 	if completion == "" && !grouped {
-		if err := s.db.QueryRow(r.Context(), "SELECT count(*) FROM ps_products p "+countJoins+" WHERE "+q.where, q.args...).Scan(&total); err != nil {
+		if err := s.db.QueryRow(ctx, "SELECT count(*) FROM ps_products p "+countJoins+" WHERE "+q.where, q.args...).Scan(&total); err != nil {
 			return nil, err
 		}
 	}
@@ -93,7 +98,7 @@ func (s *service) profitProducts(r *http.Request) (any, error) {
 	if column == "" {
 		return nil, fail(422, "不支持的利润排序字段")
 	}
-	pageNo, size := page(r)
+	pageNo, size := queryPage(params)
 	computedSort := sortBy != "updated_at" && sortBy != "asin" && sortBy != "price_usd" && sortBy != "monthly_sales"
 	tail := fmt.Sprintf(" ORDER BY %s %s NULLS LAST,p.id", column, direction)
 	familyCounts := map[string]int{}
@@ -104,7 +109,7 @@ func (s *service) profitProducts(r *http.Request) (any, error) {
 		if grouped {
 			lightProjection += "||jsonb_build_object('family_key'," + parentFamilySQL + ",'family_rank',row_number() OVER(PARTITION BY " + parentFamilySQL + " ORDER BY " + familyRankSQL + "))"
 		}
-		candidates, err := s.query(r.Context(), "SELECT "+lightProjection+" FROM ps_products p "+joins+" WHERE "+q.where, q.args...)
+		candidates, err := s.query(ctx, "SELECT "+lightProjection+" FROM ps_products p "+joins+" WHERE "+q.where, q.args...)
 		if err != nil {
 			return nil, err
 		}
@@ -166,7 +171,7 @@ func (s *service) profitProducts(r *http.Request) (any, error) {
 	// Keep imported raw library snapshots in detail/history endpoints, not each table row.
 	catalogProjection := strings.Replace(productProjection, "to_jsonb(p)", "(to_jsonb(p)-'specs')||jsonb_build_object('specs',p.specs-'legacy_site_snapshot')", 1)
 	projection := catalogProjection + "||" + profitSourceProjection + `||jsonb_build_object('scenario',CASE WHEN q.id IS NULL THEN NULL ELSE to_jsonb(q) END,'imported_fees',jsonb_build_object('fba_fee_usd',fees.imported_fba_fee_usd::text,'gross_margin_rate',fees.imported_gross_margin_rate::text),'scenario_stale',q.id IS NOT NULL AND (q.product_data_revision<>p.data_revision OR q.monthly_id IS DISTINCT FROM m.id OR q.monthly_revision IS DISTINCT FROM m.revision))`
-	items, err := s.query(r.Context(), "SELECT "+projection+" FROM ps_products p "+joins+" WHERE "+q.where+tail, q.args...)
+	items, err := s.query(ctx, "SELECT "+projection+" FROM ps_products p "+joins+" WHERE "+q.where+tail, q.args...)
 	if err != nil {
 		return nil, err
 	}
