@@ -173,24 +173,8 @@ func (s *service) route(w http.ResponseWriter, r *http.Request) (any, error) {
 		if e != nil {
 			return nil, e
 		}
-		for _, key := range []string{"expected_data_revision", "expected_review_revision", "expected_monthly_revision"} {
-			if raw, present := body[key]; present {
-				if raw == nil && key == "expected_monthly_revision" {
-					continue
-				}
-				number, ok := raw.(json.Number)
-				if !ok {
-					return nil, fail(422, "版本必须是非负整数")
-				}
-				if n, e := strconv.ParseInt(string(number), 10, 64); e != nil || n < 0 {
-					return nil, fail(422, "版本必须是非负整数")
-				}
-			}
-		}
-		for _, key := range []string{"product_id", "monthly_id", "template_id", "reference_product_id"} {
-			if raw := body[key]; raw != nil && !uuidPattern.MatchString(str(raw)) {
-				return nil, fail(422, "商品或引用ID无效")
-			}
+		if e := validateMutationBody(body); e != nil {
+			return nil, e
 		}
 		if path == "profit/calculate" {
 			return s.calculateRequest(ctx, a, body)
@@ -251,4 +235,27 @@ func (s *service) productView(ctx context.Context, a identity, id string) (Objec
 	q.where += " AND p.id=$2::uuid"
 	q.args = append(q.args, id)
 	return s.one(ctx, "SELECT "+productProjection+"||"+profitSourceProjection+" FROM ps_products p "+q.joins+" WHERE "+q.where, q.args...)
+}
+
+func validateMutationBody(body Object) error {
+	for _, key := range []string{"expected_data_revision", "expected_review_revision", "expected_monthly_revision"} {
+		if raw, present := body[key]; present {
+			if raw == nil && key == "expected_monthly_revision" {
+				continue
+			}
+			number, ok := raw.(json.Number)
+			if !ok {
+				return fail(422, "版本必须是非负整数")
+			}
+			if n, e := strconv.ParseInt(string(number), 10, 64); e != nil || n < 0 {
+				return fail(422, "版本必须是非负整数")
+			}
+		}
+	}
+	for _, key := range []string{"product_id", "monthly_id", "template_id", "reference_product_id"} {
+		if raw := body[key]; raw != nil && !uuidPattern.MatchString(str(raw)) {
+			return fail(422, "商品或引用ID无效")
+		}
+	}
+	return nil
 }

@@ -2,6 +2,7 @@ import { createHmac } from 'node:crypto';
 import { acceptsGzip, serverTiming } from '@/lib/http-performance';
 import { backendURL, isAllowedAppOrigin } from '@/lib/backend';
 import { connectImportRead, importConnectFailure } from '@/features/screening/import-connect';
+import { connectImportCommand } from '@/features/screening/import-command-connect';
 import type { SellerSession } from '@/features/auth/session';
 
 export const runtime = 'nodejs';
@@ -106,6 +107,46 @@ async function proxy(request: Request, { params }: { params: Promise<{ path: str
             AbortSignal.any([request.signal, AbortSignal.timeout(120000)])
           );
           return Response.json(result, { headers: responseHeaders() });
+        } catch (error) {
+          const failure = importConnectFailure(error);
+          return Response.json(failure.body, {
+            status: failure.status,
+            headers: responseHeaders()
+          });
+        }
+      }
+    }
+    const importCommand =
+      (request.method === 'DELETE' && new RegExp(`^imports/${uuid}$`).test(path)) ||
+      new RegExp(
+        `^(?:imports/${uuid}/(?:commit|mapping|removal-preview)|jobs/${uuid}/retry)$`
+      ).test(path);
+    if (importCommand) {
+      const mode = process.env.SCREENING_IMPORT_WRITES_TRANSPORT || 'legacy';
+      if (!['legacy', 'connect'].includes(mode))
+        return Response.json({ message: '导入操作传输配置无效。' }, { status: 503 });
+      if (mode === 'connect') {
+        const apiStarted = performance.now();
+        const responseHeaders = () => ({
+          'Cache-Control': 'no-store',
+          'Server-Timing': serverTiming(
+            authDuration,
+            performance.now() - apiStarted,
+            performance.now() - started
+          )
+        });
+        try {
+          const result = await connectImportCommand(
+            request,
+            url,
+            path,
+            session,
+            secret,
+            write
+              ? AbortSignal.timeout(120000)
+              : AbortSignal.any([request.signal, AbortSignal.timeout(120000)])
+          );
+          return Response.json(result.body, { status: result.status, headers: responseHeaders() });
         } catch (error) {
           const failure = importConnectFailure(error);
           return Response.json(failure.body, {

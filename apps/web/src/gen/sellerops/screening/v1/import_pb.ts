@@ -14,7 +14,7 @@ import type { JsonObject, Message } from "@bufbuild/protobuf";
  * Describes the file sellerops/screening/v1/import.proto.
  */
 export const file_sellerops_screening_v1_import: GenFile = /*@__PURE__*/
-  fileDesc("CiNzZWxsZXJvcHMvc2NyZWVuaW5nL3YxL2ltcG9ydC5wcm90bxIWc2VsbGVyb3BzLnNjcmVlbmluZy52MSK3BAoMSW1wb3J0UmVjb3JkEgoKAmlkGAEgASgJEhEKCWZpbGVfbmFtZRgCIAEoCRIyCgVzdGF0ZRgDIAEoDjIjLnNlbGxlcm9wcy5zY3JlZW5pbmcudjEuSW1wb3J0U3RhdGUSEwoLbWFya2V0cGxhY2UYBCABKAkSFQoNc291cmNlX3BlcmlvZBgFIAEoCRIYCgtvYnNlcnZlZF9vbhgGIAEoCUgAiAEBEhMKC3NvdXJjZV90eXBlGAcgASgJEhMKC3BlcmlvZF90eXBlGAggASgJEhkKDHBlcmlvZF9zdGFydBgJIAEoCUgBiAEBEhcKCnBlcmlvZF9lbmQYCiABKAlIAogBARIbChNkZWZhdWx0X3NhbGVzX3Njb3BlGAsgASgJEicKBmNvdW50cxgMIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QSKAoHbWFwcGluZxgNIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QSLgoKY3JlYXRlZF9hdBgOIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASMAoMY29tbWl0dGVkX2F0GA8gASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIuCg1sZWdhY3lfZmllbGRzGBAgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdEIOCgxfb2JzZXJ2ZWRfb25CDwoNX3BlcmlvZF9zdGFydEINCgtfcGVyaW9kX2VuZCJQChJMaXN0SW1wb3J0c1JlcXVlc3QSOgoKcGFnaW5hdGlvbhgBIAEoCzImLnNlbGxlcm9wcy5jb21tb24udjEuUGFnaW5hdGlvblJlcXVlc3QihwEKE0xpc3RJbXBvcnRzUmVzcG9uc2USMwoFaXRlbXMYASADKAsyJC5zZWxsZXJvcHMuc2NyZWVuaW5nLnYxLkltcG9ydFJlY29yZBI7CgpwYWdpbmF0aW9uGAIgASgLMicuc2VsbGVyb3BzLmNvbW1vbi52MS5QYWdpbmF0aW9uUmVzcG9uc2UiHgoQR2V0SW1wb3J0UmVxdWVzdBIKCgJpZBgBIAEoCSJ1ChFHZXRJbXBvcnRSZXNwb25zZRIyCgRpdGVtGAEgASgLMiQuc2VsbGVyb3BzLnNjcmVlbmluZy52MS5JbXBvcnRSZWNvcmQSGgoNbGF0ZXN0X2pvYl9pZBgCIAEoCUgAiAEBQhAKDl9sYXRlc3Rfam9iX2lkIqQCChBJbXBvcnRQcmV2aWV3Um93EgoKAmlkGAEgASgJEhEKCWltcG9ydF9pZBgCIAEoCRITCgttZW1iZXJfcGF0aBgDIAEoCRISCgpzaGVldF9uYW1lGAQgASgJEg4KBnJvd19ubxgFIAEoBRIXCgpwcm9kdWN0X2lkGAYgASgJSACIAQESNQoFc3RhdGUYByABKA4yJi5zZWxsZXJvcHMuc2NyZWVuaW5nLnYxLkltcG9ydFJvd1N0YXRlEikKCHJhd19kYXRhGAggASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdBIuCg1sZWdhY3lfZmllbGRzGAkgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdEINCgtfcHJvZHVjdF9pZCJmChVMaXN0SW1wb3J0Um93c1JlcXVlc3QSEQoJaW1wb3J0X2lkGAEgASgJEjoKCnBhZ2luYXRpb24YAiABKAsyJi5zZWxsZXJvcHMuY29tbW9uLnYxLlBhZ2luYXRpb25SZXF1ZXN0Io4BChZMaXN0SW1wb3J0Um93c1Jlc3BvbnNlEjcKBWl0ZW1zGAEgAygLMiguc2VsbGVyb3BzLnNjcmVlbmluZy52MS5JbXBvcnRQcmV2aWV3Um93EjsKCnBhZ2luYXRpb24YAiABKAsyJy5zZWxsZXJvcHMuY29tbW9uLnYxLlBhZ2luYXRpb25SZXNwb25zZSKKAgoJSm9iUmVjb3JkEgoKAmlkGAEgASgJEgwKBGtpbmQYAiABKAkSLwoFc3RhdGUYAyABKA4yIC5zZWxsZXJvcHMuc2NyZWVuaW5nLnYxLkpvYlN0YXRlEhAKCHByb2dyZXNzGAQgASgFEhAKCGF0dGVtcHRzGAUgASgFEi4KCmNyZWF0ZWRfYXQYBiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCnVwZGF0ZWRfYXQYByABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KDWxlZ2FjeV9maWVsZHMYCCABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0IhsKDUdldEpvYlJlcXVlc3QSCgoCaWQYASABKAkiQQoOR2V0Sm9iUmVzcG9uc2USLwoEaXRlbRgBIAEoCzIhLnNlbGxlcm9wcy5zY3JlZW5pbmcudjEuSm9iUmVjb3JkKuUBCgtJbXBvcnRTdGF0ZRIcChhJTVBPUlRfU1RBVEVfVU5TUEVDSUZJRUQQABIZChVJTVBPUlRfU1RBVEVfVVBMT0FERUQQARIYChRJTVBPUlRfU1RBVEVfUEFSU0lORxACEhgKFElNUE9SVF9TVEFURV9QUkVWSUVXEAMSGgoWSU1QT1JUX1NUQVRFX0lNUE9SVElORxAEEhoKFklNUE9SVF9TVEFURV9DT01QTEVURUQQBRIYChRJTVBPUlRfU1RBVEVfUEFSVElBTBAGEhcKE0lNUE9SVF9TVEFURV9GQUlMRUQQByqMAQoOSW1wb3J0Um93U3RhdGUSIAocSU1QT1JUX1JPV19TVEFURV9VTlNQRUNJRklFRBAAEhoKFklNUE9SVF9ST1dfU1RBVEVfVkFMSUQQARIcChhJTVBPUlRfUk9XX1NUQVRFX0lOVkFMSUQQAhIeChpJTVBPUlRfUk9XX1NUQVRFX0NPTU1JVFRFRBADKtwBCghKb2JTdGF0ZRIZChVKT0JfU1RBVEVfVU5TUEVDSUZJRUQQABIUChBKT0JfU1RBVEVfUVVFVUVEEAESFQoRSk9CX1NUQVRFX1JVTk5JTkcQAhIXChNKT0JfU1RBVEVfU1VDQ0VFREVEEAMSFQoRSk9CX1NUQVRFX1BBUlRJQUwQBBIUChBKT0JfU1RBVEVfRkFJTEVEEAUSFQoRSk9CX1NUQVRFX1BSRVZJRVcQBhIVChFKT0JfU1RBVEVfQVBQTElFRBAHEhQKEEpPQl9TVEFURV9VTkRPTkUQCDKsAwoWU2NyZWVuaW5nSW1wb3J0U2VydmljZRJmCgtMaXN0SW1wb3J0cxIqLnNlbGxlcm9wcy5zY3JlZW5pbmcudjEuTGlzdEltcG9ydHNSZXF1ZXN0Gisuc2VsbGVyb3BzLnNjcmVlbmluZy52MS5MaXN0SW1wb3J0c1Jlc3BvbnNlEmAKCUdldEltcG9ydBIoLnNlbGxlcm9wcy5zY3JlZW5pbmcudjEuR2V0SW1wb3J0UmVxdWVzdBopLnNlbGxlcm9wcy5zY3JlZW5pbmcudjEuR2V0SW1wb3J0UmVzcG9uc2USbwoOTGlzdEltcG9ydFJvd3MSLS5zZWxsZXJvcHMuc2NyZWVuaW5nLnYxLkxpc3RJbXBvcnRSb3dzUmVxdWVzdBouLnNlbGxlcm9wcy5zY3JlZW5pbmcudjEuTGlzdEltcG9ydFJvd3NSZXNwb25zZRJXCgZHZXRKb2ISJS5zZWxsZXJvcHMuc2NyZWVuaW5nLnYxLkdldEpvYlJlcXVlc3QaJi5zZWxsZXJvcHMuc2NyZWVuaW5nLnYxLkdldEpvYlJlc3BvbnNlQjlaN3NlbGxlci1vcHMvY29udHJhY3RzL3NlbGxlcm9wcy9zY3JlZW5pbmcvdjE7c2NyZWVuaW5ndjFiBnByb3RvMw", [file_google_protobuf_struct, file_google_protobuf_timestamp, file_sellerops_common_v1_pagination]);
+  fileDesc("CiNzZWxsZXJvcHMvc2NyZWVuaW5nL3YxL2ltcG9ydC5wcm90bxIWc2VsbGVyb3BzLnNjcmVlbmluZy52MSK3BAoMSW1wb3J0UmVjb3JkEgoKAmlkGAEgASgJEhEKCWZpbGVfbmFtZRgCIAEoCRIyCgVzdGF0ZRgDIAEoDjIjLnNlbGxlcm9wcy5zY3JlZW5pbmcudjEuSW1wb3J0U3RhdGUSEwoLbWFya2V0cGxhY2UYBCABKAkSFQoNc291cmNlX3BlcmlvZBgFIAEoCRIYCgtvYnNlcnZlZF9vbhgGIAEoCUgAiAEBEhMKC3NvdXJjZV90eXBlGAcgASgJEhMKC3BlcmlvZF90eXBlGAggASgJEhkKDHBlcmlvZF9zdGFydBgJIAEoCUgBiAEBEhcKCnBlcmlvZF9lbmQYCiABKAlIAogBARIbChNkZWZhdWx0X3NhbGVzX3Njb3BlGAsgASgJEicKBmNvdW50cxgMIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QSKAoHbWFwcGluZxgNIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QSLgoKY3JlYXRlZF9hdBgOIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASMAoMY29tbWl0dGVkX2F0GA8gASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIuCg1sZWdhY3lfZmllbGRzGBAgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdEIOCgxfb2JzZXJ2ZWRfb25CDwoNX3BlcmlvZF9zdGFydEINCgtfcGVyaW9kX2VuZCJQChJMaXN0SW1wb3J0c1JlcXVlc3QSOgoKcGFnaW5hdGlvbhgBIAEoCzImLnNlbGxlcm9wcy5jb21tb24udjEuUGFnaW5hdGlvblJlcXVlc3QihwEKE0xpc3RJbXBvcnRzUmVzcG9uc2USMwoFaXRlbXMYASADKAsyJC5zZWxsZXJvcHMuc2NyZWVuaW5nLnYxLkltcG9ydFJlY29yZBI7CgpwYWdpbmF0aW9uGAIgASgLMicuc2VsbGVyb3BzLmNvbW1vbi52MS5QYWdpbmF0aW9uUmVzcG9uc2UiHgoQR2V0SW1wb3J0UmVxdWVzdBIKCgJpZBgBIAEoCSJ1ChFHZXRJbXBvcnRSZXNwb25zZRIyCgRpdGVtGAEgASgLMiQuc2VsbGVyb3BzLnNjcmVlbmluZy52MS5JbXBvcnRSZWNvcmQSGgoNbGF0ZXN0X2pvYl9pZBgCIAEoCUgAiAEBQhAKDl9sYXRlc3Rfam9iX2lkIqQCChBJbXBvcnRQcmV2aWV3Um93EgoKAmlkGAEgASgJEhEKCWltcG9ydF9pZBgCIAEoCRITCgttZW1iZXJfcGF0aBgDIAEoCRISCgpzaGVldF9uYW1lGAQgASgJEg4KBnJvd19ubxgFIAEoBRIXCgpwcm9kdWN0X2lkGAYgASgJSACIAQESNQoFc3RhdGUYByABKA4yJi5zZWxsZXJvcHMuc2NyZWVuaW5nLnYxLkltcG9ydFJvd1N0YXRlEikKCHJhd19kYXRhGAggASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdBIuCg1sZWdhY3lfZmllbGRzGAkgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdEINCgtfcHJvZHVjdF9pZCJmChVMaXN0SW1wb3J0Um93c1JlcXVlc3QSEQoJaW1wb3J0X2lkGAEgASgJEjoKCnBhZ2luYXRpb24YAiABKAsyJi5zZWxsZXJvcHMuY29tbW9uLnYxLlBhZ2luYXRpb25SZXF1ZXN0Io4BChZMaXN0SW1wb3J0Um93c1Jlc3BvbnNlEjcKBWl0ZW1zGAEgAygLMiguc2VsbGVyb3BzLnNjcmVlbmluZy52MS5JbXBvcnRQcmV2aWV3Um93EjsKCnBhZ2luYXRpb24YAiABKAsyJy5zZWxsZXJvcHMuY29tbW9uLnYxLlBhZ2luYXRpb25SZXNwb25zZSKKAgoJSm9iUmVjb3JkEgoKAmlkGAEgASgJEgwKBGtpbmQYAiABKAkSLwoFc3RhdGUYAyABKA4yIC5zZWxsZXJvcHMuc2NyZWVuaW5nLnYxLkpvYlN0YXRlEhAKCHByb2dyZXNzGAQgASgFEhAKCGF0dGVtcHRzGAUgASgFEi4KCmNyZWF0ZWRfYXQYBiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCnVwZGF0ZWRfYXQYByABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KDWxlZ2FjeV9maWVsZHMYCCABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0IhsKDUdldEpvYlJlcXVlc3QSCgoCaWQYASABKAkiQQoOR2V0Sm9iUmVzcG9uc2USLwoEaXRlbRgBIAEoCzIhLnNlbGxlcm9wcy5zY3JlZW5pbmcudjEuSm9iUmVjb3JkIkkKFkltcG9ydE11dGF0aW9uTWV0YWRhdGESFwoPaWRlbXBvdGVuY3lfa2V5GAEgASgJEhYKDm9yaWdpbmFsX3F1ZXJ5GAIgASgJIroDCg5JbXBvcnRTZXR0aW5ncxIaCg1zb3VyY2VfcGVyaW9kGAEgASgJSACIAQESGAoLb2JzZXJ2ZWRfb24YAiABKAlIAYgBARIYCgtzb3VyY2VfdHlwZRgDIAEoCUgCiAEBEhgKC3BlcmlvZF90eXBlGAQgASgJSAOIAQESGQoMcGVyaW9kX3N0YXJ0GAUgASgJSASIAQESFwoKcGVyaW9kX2VuZBgGIAEoCUgFiAEBEiAKE2RlZmF1bHRfc2FsZXNfc2NvcGUYByABKAlIBogBARIoCgdtYXBwaW5nGAggASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdBIUCgxjbGVhcl9maWVsZHMYCSADKAkSLgoNbGVnYWN5X2ZpZWxkcxgKIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3RCEAoOX3NvdXJjZV9wZXJpb2RCDgoMX29ic2VydmVkX29uQg4KDF9zb3VyY2VfdHlwZUIOCgxfcGVyaW9kX3R5cGVCDwoNX3BlcmlvZF9zdGFydEINCgtfcGVyaW9kX2VuZEIWChRfZGVmYXVsdF9zYWxlc19zY29wZSIsCh5HZXRJbXBvcnRSZW1vdmFsUHJldmlld1JlcXVlc3QSCgoCaWQYASABKAkiZAofR2V0SW1wb3J0UmVtb3ZhbFByZXZpZXdSZXNwb25zZRIQCghwcm9kdWN0cxgBIAEoAxIaChJleGNsdXNpdmVfcHJvZHVjdHMYAiABKAMSEwoLc291cmNlX3Jvd3MYAyABKAMikwEKE0NvbW1pdEltcG9ydFJlcXVlc3QSCgoCaWQYASABKAkSQAoIbXV0YXRpb24YAiABKAsyLi5zZWxsZXJvcHMuc2NyZWVuaW5nLnYxLkltcG9ydE11dGF0aW9uTWV0YWRhdGESLgoNbGVnYWN5X2ZpZWxkcxgDIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QipQEKG1VwZGF0ZUltcG9ydFNldHRpbmdzUmVxdWVzdBIKCgJpZBgBIAEoCRJACghtdXRhdGlvbhgCIAEoCzIuLnNlbGxlcm9wcy5zY3JlZW5pbmcudjEuSW1wb3J0TXV0YXRpb25NZXRhZGF0YRI4CghzZXR0aW5ncxgDIAEoCzImLnNlbGxlcm9wcy5zY3JlZW5pbmcudjEuSW1wb3J0U2V0dGluZ3MilQEKFVJldHJ5SW1wb3J0Sm9iUmVxdWVzdBIKCgJpZBgBIAEoCRJACghtdXRhdGlvbhgCIAEoCzIuLnNlbGxlcm9wcy5zY3JlZW5pbmcudjEuSW1wb3J0TXV0YXRpb25NZXRhZGF0YRIuCg1sZWdhY3lfZmllbGRzGAMgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdCKKAQoTSW1wb3J0Sm9iU3VibWlzc2lvbhIOCgZqb2JfaWQYASABKAkSDQoFc3RhdGUYAiABKAkSFgoJaW1wb3J0X2lkGAMgASgJSACIAQESLgoNbGVnYWN5X2ZpZWxkcxgEIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3RCDAoKX2ltcG9ydF9pZCJXChRDb21taXRJbXBvcnRSZXNwb25zZRI/CgpzdWJtaXNzaW9uGAEgASgLMisuc2VsbGVyb3BzLnNjcmVlbmluZy52MS5JbXBvcnRKb2JTdWJtaXNzaW9uIl8KHFVwZGF0ZUltcG9ydFNldHRpbmdzUmVzcG9uc2USPwoKc3VibWlzc2lvbhgBIAEoCzIrLnNlbGxlcm9wcy5zY3JlZW5pbmcudjEuSW1wb3J0Sm9iU3VibWlzc2lvbiJZChZSZXRyeUltcG9ydEpvYlJlc3BvbnNlEj8KCnN1Ym1pc3Npb24YASABKAsyKy5zZWxsZXJvcHMuc2NyZWVuaW5nLnYxLkltcG9ydEpvYlN1Ym1pc3Npb24iYwoTRGVsZXRlSW1wb3J0UmVxdWVzdBIKCgJpZBgBIAEoCRJACghtdXRhdGlvbhgCIAEoCzIuLnNlbGxlcm9wcy5zY3JlZW5pbmcudjEuSW1wb3J0TXV0YXRpb25NZXRhZGF0YSLPAQoURGVsZXRlSW1wb3J0UmVzcG9uc2USCgoCaWQYASABKAkSDwoHZGVsZXRlZBgCIAEoCBIdChByZW1vdmVkX3Byb2R1Y3RzGAMgASgDSACIAQESHgoRcmV0YWluZWRfcHJvZHVjdHMYBCABKANIAYgBARIcCg9yZW1vdmVkX21vbnRobHkYBSABKANIAogBAUITChFfcmVtb3ZlZF9wcm9kdWN0c0IUChJfcmV0YWluZWRfcHJvZHVjdHNCEgoQX3JlbW92ZWRfbW9udGhseSrlAQoLSW1wb3J0U3RhdGUSHAoYSU1QT1JUX1NUQVRFX1VOU1BFQ0lGSUVEEAASGQoVSU1QT1JUX1NUQVRFX1VQTE9BREVEEAESGAoUSU1QT1JUX1NUQVRFX1BBUlNJTkcQAhIYChRJTVBPUlRfU1RBVEVfUFJFVklFVxADEhoKFklNUE9SVF9TVEFURV9JTVBPUlRJTkcQBBIaChZJTVBPUlRfU1RBVEVfQ09NUExFVEVEEAUSGAoUSU1QT1JUX1NUQVRFX1BBUlRJQUwQBhIXChNJTVBPUlRfU1RBVEVfRkFJTEVEEAcqjAEKDkltcG9ydFJvd1N0YXRlEiAKHElNUE9SVF9ST1dfU1RBVEVfVU5TUEVDSUZJRUQQABIaChZJTVBPUlRfUk9XX1NUQVRFX1ZBTElEEAESHAoYSU1QT1JUX1JPV19TVEFURV9JTlZBTElEEAISHgoaSU1QT1JUX1JPV19TVEFURV9DT01NSVRURUQQAyrcAQoISm9iU3RhdGUSGQoVSk9CX1NUQVRFX1VOU1BFQ0lGSUVEEAASFAoQSk9CX1NUQVRFX1FVRVVFRBABEhUKEUpPQl9TVEFURV9SVU5OSU5HEAISFwoTSk9CX1NUQVRFX1NVQ0NFRURFRBADEhUKEUpPQl9TVEFURV9QQVJUSUFMEAQSFAoQSk9CX1NUQVRFX0ZBSUxFRBAFEhUKEUpPQl9TVEFURV9QUkVWSUVXEAYSFQoRSk9CX1NUQVRFX0FQUExJRUQQBxIUChBKT0JfU1RBVEVfVU5ET05FEAgyhAgKFlNjcmVlbmluZ0ltcG9ydFNlcnZpY2USZgoLTGlzdEltcG9ydHMSKi5zZWxsZXJvcHMuc2NyZWVuaW5nLnYxLkxpc3RJbXBvcnRzUmVxdWVzdBorLnNlbGxlcm9wcy5zY3JlZW5pbmcudjEuTGlzdEltcG9ydHNSZXNwb25zZRJgCglHZXRJbXBvcnQSKC5zZWxsZXJvcHMuc2NyZWVuaW5nLnYxLkdldEltcG9ydFJlcXVlc3QaKS5zZWxsZXJvcHMuc2NyZWVuaW5nLnYxLkdldEltcG9ydFJlc3BvbnNlEm8KDkxpc3RJbXBvcnRSb3dzEi0uc2VsbGVyb3BzLnNjcmVlbmluZy52MS5MaXN0SW1wb3J0Um93c1JlcXVlc3QaLi5zZWxsZXJvcHMuc2NyZWVuaW5nLnYxLkxpc3RJbXBvcnRSb3dzUmVzcG9uc2USVwoGR2V0Sm9iEiUuc2VsbGVyb3BzLnNjcmVlbmluZy52MS5HZXRKb2JSZXF1ZXN0GiYuc2VsbGVyb3BzLnNjcmVlbmluZy52MS5HZXRKb2JSZXNwb25zZRKKAQoXR2V0SW1wb3J0UmVtb3ZhbFByZXZpZXcSNi5zZWxsZXJvcHMuc2NyZWVuaW5nLnYxLkdldEltcG9ydFJlbW92YWxQcmV2aWV3UmVxdWVzdBo3LnNlbGxlcm9wcy5zY3JlZW5pbmcudjEuR2V0SW1wb3J0UmVtb3ZhbFByZXZpZXdSZXNwb25zZRJpCgxDb21taXRJbXBvcnQSKy5zZWxsZXJvcHMuc2NyZWVuaW5nLnYxLkNvbW1pdEltcG9ydFJlcXVlc3QaLC5zZWxsZXJvcHMuc2NyZWVuaW5nLnYxLkNvbW1pdEltcG9ydFJlc3BvbnNlEoEBChRVcGRhdGVJbXBvcnRTZXR0aW5ncxIzLnNlbGxlcm9wcy5zY3JlZW5pbmcudjEuVXBkYXRlSW1wb3J0U2V0dGluZ3NSZXF1ZXN0GjQuc2VsbGVyb3BzLnNjcmVlbmluZy52MS5VcGRhdGVJbXBvcnRTZXR0aW5nc1Jlc3BvbnNlEmkKDERlbGV0ZUltcG9ydBIrLnNlbGxlcm9wcy5zY3JlZW5pbmcudjEuRGVsZXRlSW1wb3J0UmVxdWVzdBosLnNlbGxlcm9wcy5zY3JlZW5pbmcudjEuRGVsZXRlSW1wb3J0UmVzcG9uc2USbwoOUmV0cnlJbXBvcnRKb2ISLS5zZWxsZXJvcHMuc2NyZWVuaW5nLnYxLlJldHJ5SW1wb3J0Sm9iUmVxdWVzdBouLnNlbGxlcm9wcy5zY3JlZW5pbmcudjEuUmV0cnlJbXBvcnRKb2JSZXNwb25zZUI5WjdzZWxsZXItb3BzL2NvbnRyYWN0cy9zZWxsZXJvcHMvc2NyZWVuaW5nL3YxO3NjcmVlbmluZ3YxYgZwcm90bzM", [file_google_protobuf_struct, file_google_protobuf_timestamp, file_sellerops_common_v1_pagination]);
 
 /**
  * Dates and source months are calendar values, not UTC instants.
@@ -383,6 +383,359 @@ export const GetJobResponseSchema: GenMessage<GetJobResponse> = /*@__PURE__*/
   messageDesc(file_sellerops_screening_v1_import, 10);
 
 /**
+ * @generated from message sellerops.screening.v1.ImportMutationMetadata
+ */
+export type ImportMutationMetadata = Message<"sellerops.screening.v1.ImportMutationMetadata"> & {
+  /**
+   * @generated from field: string idempotency_key = 1;
+   */
+  idempotencyKey: string;
+
+  /**
+   * @generated from field: string original_query = 2;
+   */
+  originalQuery: string;
+};
+
+/**
+ * Describes the message sellerops.screening.v1.ImportMutationMetadata.
+ * Use `create(ImportMutationMetadataSchema)` to create a new message.
+ */
+export const ImportMutationMetadataSchema: GenMessage<ImportMutationMetadata> = /*@__PURE__*/
+  messageDesc(file_sellerops_screening_v1_import, 11);
+
+/**
+ * @generated from message sellerops.screening.v1.ImportSettings
+ */
+export type ImportSettings = Message<"sellerops.screening.v1.ImportSettings"> & {
+  /**
+   * @generated from field: optional string source_period = 1;
+   */
+  sourcePeriod?: string | undefined;
+
+  /**
+   * @generated from field: optional string observed_on = 2;
+   */
+  observedOn?: string | undefined;
+
+  /**
+   * @generated from field: optional string source_type = 3;
+   */
+  sourceType?: string | undefined;
+
+  /**
+   * @generated from field: optional string period_type = 4;
+   */
+  periodType?: string | undefined;
+
+  /**
+   * @generated from field: optional string period_start = 5;
+   */
+  periodStart?: string | undefined;
+
+  /**
+   * @generated from field: optional string period_end = 6;
+   */
+  periodEnd?: string | undefined;
+
+  /**
+   * @generated from field: optional string default_sales_scope = 7;
+   */
+  defaultSalesScope?: string | undefined;
+
+  /**
+   * Legacy optional fields are preserved without restoring mapping UI.
+   *
+   * @generated from field: google.protobuf.Struct mapping = 8;
+   */
+  mapping?: JsonObject | undefined;
+
+  /**
+   * @generated from field: repeated string clear_fields = 9;
+   */
+  clearFields: string[];
+
+  /**
+   * @generated from field: google.protobuf.Struct legacy_fields = 10;
+   */
+  legacyFields?: JsonObject | undefined;
+};
+
+/**
+ * Describes the message sellerops.screening.v1.ImportSettings.
+ * Use `create(ImportSettingsSchema)` to create a new message.
+ */
+export const ImportSettingsSchema: GenMessage<ImportSettings> = /*@__PURE__*/
+  messageDesc(file_sellerops_screening_v1_import, 12);
+
+/**
+ * @generated from message sellerops.screening.v1.GetImportRemovalPreviewRequest
+ */
+export type GetImportRemovalPreviewRequest = Message<"sellerops.screening.v1.GetImportRemovalPreviewRequest"> & {
+  /**
+   * @generated from field: string id = 1;
+   */
+  id: string;
+};
+
+/**
+ * Describes the message sellerops.screening.v1.GetImportRemovalPreviewRequest.
+ * Use `create(GetImportRemovalPreviewRequestSchema)` to create a new message.
+ */
+export const GetImportRemovalPreviewRequestSchema: GenMessage<GetImportRemovalPreviewRequest> = /*@__PURE__*/
+  messageDesc(file_sellerops_screening_v1_import, 13);
+
+/**
+ * @generated from message sellerops.screening.v1.GetImportRemovalPreviewResponse
+ */
+export type GetImportRemovalPreviewResponse = Message<"sellerops.screening.v1.GetImportRemovalPreviewResponse"> & {
+  /**
+   * @generated from field: int64 products = 1;
+   */
+  products: bigint;
+
+  /**
+   * @generated from field: int64 exclusive_products = 2;
+   */
+  exclusiveProducts: bigint;
+
+  /**
+   * @generated from field: int64 source_rows = 3;
+   */
+  sourceRows: bigint;
+};
+
+/**
+ * Describes the message sellerops.screening.v1.GetImportRemovalPreviewResponse.
+ * Use `create(GetImportRemovalPreviewResponseSchema)` to create a new message.
+ */
+export const GetImportRemovalPreviewResponseSchema: GenMessage<GetImportRemovalPreviewResponse> = /*@__PURE__*/
+  messageDesc(file_sellerops_screening_v1_import, 14);
+
+/**
+ * @generated from message sellerops.screening.v1.CommitImportRequest
+ */
+export type CommitImportRequest = Message<"sellerops.screening.v1.CommitImportRequest"> & {
+  /**
+   * @generated from field: string id = 1;
+   */
+  id: string;
+
+  /**
+   * @generated from field: sellerops.screening.v1.ImportMutationMetadata mutation = 2;
+   */
+  mutation?: ImportMutationMetadata | undefined;
+
+  /**
+   * @generated from field: google.protobuf.Struct legacy_fields = 3;
+   */
+  legacyFields?: JsonObject | undefined;
+};
+
+/**
+ * Describes the message sellerops.screening.v1.CommitImportRequest.
+ * Use `create(CommitImportRequestSchema)` to create a new message.
+ */
+export const CommitImportRequestSchema: GenMessage<CommitImportRequest> = /*@__PURE__*/
+  messageDesc(file_sellerops_screening_v1_import, 15);
+
+/**
+ * @generated from message sellerops.screening.v1.UpdateImportSettingsRequest
+ */
+export type UpdateImportSettingsRequest = Message<"sellerops.screening.v1.UpdateImportSettingsRequest"> & {
+  /**
+   * @generated from field: string id = 1;
+   */
+  id: string;
+
+  /**
+   * @generated from field: sellerops.screening.v1.ImportMutationMetadata mutation = 2;
+   */
+  mutation?: ImportMutationMetadata | undefined;
+
+  /**
+   * @generated from field: sellerops.screening.v1.ImportSettings settings = 3;
+   */
+  settings?: ImportSettings | undefined;
+};
+
+/**
+ * Describes the message sellerops.screening.v1.UpdateImportSettingsRequest.
+ * Use `create(UpdateImportSettingsRequestSchema)` to create a new message.
+ */
+export const UpdateImportSettingsRequestSchema: GenMessage<UpdateImportSettingsRequest> = /*@__PURE__*/
+  messageDesc(file_sellerops_screening_v1_import, 16);
+
+/**
+ * @generated from message sellerops.screening.v1.RetryImportJobRequest
+ */
+export type RetryImportJobRequest = Message<"sellerops.screening.v1.RetryImportJobRequest"> & {
+  /**
+   * @generated from field: string id = 1;
+   */
+  id: string;
+
+  /**
+   * @generated from field: sellerops.screening.v1.ImportMutationMetadata mutation = 2;
+   */
+  mutation?: ImportMutationMetadata | undefined;
+
+  /**
+   * @generated from field: google.protobuf.Struct legacy_fields = 3;
+   */
+  legacyFields?: JsonObject | undefined;
+};
+
+/**
+ * Describes the message sellerops.screening.v1.RetryImportJobRequest.
+ * Use `create(RetryImportJobRequestSchema)` to create a new message.
+ */
+export const RetryImportJobRequestSchema: GenMessage<RetryImportJobRequest> = /*@__PURE__*/
+  messageDesc(file_sellerops_screening_v1_import, 17);
+
+/**
+ * @generated from message sellerops.screening.v1.ImportJobSubmission
+ */
+export type ImportJobSubmission = Message<"sellerops.screening.v1.ImportJobSubmission"> & {
+  /**
+   * @generated from field: string job_id = 1;
+   */
+  jobId: string;
+
+  /**
+   * @generated from field: string state = 2;
+   */
+  state: string;
+
+  /**
+   * @generated from field: optional string import_id = 3;
+   */
+  importId?: string | undefined;
+
+  /**
+   * @generated from field: google.protobuf.Struct legacy_fields = 4;
+   */
+  legacyFields?: JsonObject | undefined;
+};
+
+/**
+ * Describes the message sellerops.screening.v1.ImportJobSubmission.
+ * Use `create(ImportJobSubmissionSchema)` to create a new message.
+ */
+export const ImportJobSubmissionSchema: GenMessage<ImportJobSubmission> = /*@__PURE__*/
+  messageDesc(file_sellerops_screening_v1_import, 18);
+
+/**
+ * @generated from message sellerops.screening.v1.CommitImportResponse
+ */
+export type CommitImportResponse = Message<"sellerops.screening.v1.CommitImportResponse"> & {
+  /**
+   * @generated from field: sellerops.screening.v1.ImportJobSubmission submission = 1;
+   */
+  submission?: ImportJobSubmission | undefined;
+};
+
+/**
+ * Describes the message sellerops.screening.v1.CommitImportResponse.
+ * Use `create(CommitImportResponseSchema)` to create a new message.
+ */
+export const CommitImportResponseSchema: GenMessage<CommitImportResponse> = /*@__PURE__*/
+  messageDesc(file_sellerops_screening_v1_import, 19);
+
+/**
+ * @generated from message sellerops.screening.v1.UpdateImportSettingsResponse
+ */
+export type UpdateImportSettingsResponse = Message<"sellerops.screening.v1.UpdateImportSettingsResponse"> & {
+  /**
+   * @generated from field: sellerops.screening.v1.ImportJobSubmission submission = 1;
+   */
+  submission?: ImportJobSubmission | undefined;
+};
+
+/**
+ * Describes the message sellerops.screening.v1.UpdateImportSettingsResponse.
+ * Use `create(UpdateImportSettingsResponseSchema)` to create a new message.
+ */
+export const UpdateImportSettingsResponseSchema: GenMessage<UpdateImportSettingsResponse> = /*@__PURE__*/
+  messageDesc(file_sellerops_screening_v1_import, 20);
+
+/**
+ * @generated from message sellerops.screening.v1.RetryImportJobResponse
+ */
+export type RetryImportJobResponse = Message<"sellerops.screening.v1.RetryImportJobResponse"> & {
+  /**
+   * @generated from field: sellerops.screening.v1.ImportJobSubmission submission = 1;
+   */
+  submission?: ImportJobSubmission | undefined;
+};
+
+/**
+ * Describes the message sellerops.screening.v1.RetryImportJobResponse.
+ * Use `create(RetryImportJobResponseSchema)` to create a new message.
+ */
+export const RetryImportJobResponseSchema: GenMessage<RetryImportJobResponse> = /*@__PURE__*/
+  messageDesc(file_sellerops_screening_v1_import, 21);
+
+/**
+ * @generated from message sellerops.screening.v1.DeleteImportRequest
+ */
+export type DeleteImportRequest = Message<"sellerops.screening.v1.DeleteImportRequest"> & {
+  /**
+   * @generated from field: string id = 1;
+   */
+  id: string;
+
+  /**
+   * @generated from field: sellerops.screening.v1.ImportMutationMetadata mutation = 2;
+   */
+  mutation?: ImportMutationMetadata | undefined;
+};
+
+/**
+ * Describes the message sellerops.screening.v1.DeleteImportRequest.
+ * Use `create(DeleteImportRequestSchema)` to create a new message.
+ */
+export const DeleteImportRequestSchema: GenMessage<DeleteImportRequest> = /*@__PURE__*/
+  messageDesc(file_sellerops_screening_v1_import, 22);
+
+/**
+ * @generated from message sellerops.screening.v1.DeleteImportResponse
+ */
+export type DeleteImportResponse = Message<"sellerops.screening.v1.DeleteImportResponse"> & {
+  /**
+   * @generated from field: string id = 1;
+   */
+  id: string;
+
+  /**
+   * @generated from field: bool deleted = 2;
+   */
+  deleted: boolean;
+
+  /**
+   * @generated from field: optional int64 removed_products = 3;
+   */
+  removedProducts?: bigint | undefined;
+
+  /**
+   * @generated from field: optional int64 retained_products = 4;
+   */
+  retainedProducts?: bigint | undefined;
+
+  /**
+   * @generated from field: optional int64 removed_monthly = 5;
+   */
+  removedMonthly?: bigint | undefined;
+};
+
+/**
+ * Describes the message sellerops.screening.v1.DeleteImportResponse.
+ * Use `create(DeleteImportResponseSchema)` to create a new message.
+ */
+export const DeleteImportResponseSchema: GenMessage<DeleteImportResponse> = /*@__PURE__*/
+  messageDesc(file_sellerops_screening_v1_import, 23);
+
+/**
  * @generated from enum sellerops.screening.v1.ImportState
  */
 export enum ImportState {
@@ -559,6 +912,46 @@ export const ScreeningImportService: GenService<{
     methodKind: "unary";
     input: typeof GetJobRequestSchema;
     output: typeof GetJobResponseSchema;
+  },
+  /**
+   * @generated from rpc sellerops.screening.v1.ScreeningImportService.GetImportRemovalPreview
+   */
+  getImportRemovalPreview: {
+    methodKind: "unary";
+    input: typeof GetImportRemovalPreviewRequestSchema;
+    output: typeof GetImportRemovalPreviewResponseSchema;
+  },
+  /**
+   * @generated from rpc sellerops.screening.v1.ScreeningImportService.CommitImport
+   */
+  commitImport: {
+    methodKind: "unary";
+    input: typeof CommitImportRequestSchema;
+    output: typeof CommitImportResponseSchema;
+  },
+  /**
+   * @generated from rpc sellerops.screening.v1.ScreeningImportService.UpdateImportSettings
+   */
+  updateImportSettings: {
+    methodKind: "unary";
+    input: typeof UpdateImportSettingsRequestSchema;
+    output: typeof UpdateImportSettingsResponseSchema;
+  },
+  /**
+   * @generated from rpc sellerops.screening.v1.ScreeningImportService.DeleteImport
+   */
+  deleteImport: {
+    methodKind: "unary";
+    input: typeof DeleteImportRequestSchema;
+    output: typeof DeleteImportResponseSchema;
+  },
+  /**
+   * @generated from rpc sellerops.screening.v1.ScreeningImportService.RetryImportJob
+   */
+  retryImportJob: {
+    methodKind: "unary";
+    input: typeof RetryImportJobRequestSchema;
+    output: typeof RetryImportJobResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_sellerops_screening_v1_import, 0);

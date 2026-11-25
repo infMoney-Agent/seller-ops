@@ -27,37 +27,7 @@ export async function connectImportRead(
         : parts[2] === 'preview'
           ? 'ListImportRows'
           : 'GetImport';
-  const procedure = '/' + ScreeningImportService.typeName + '/' + name;
-  const stamp = String(Math.floor(Date.now() / 1000));
-  const signature = createHmac('sha256', secret)
-    .update(
-      [
-        stamp,
-        'POST',
-        procedure,
-        String(session.id),
-        String(session.workspaceId),
-        session.role
-      ].join('\n')
-    )
-    .digest('hex');
-  const transport = createConnectTransport({
-    baseUrl: process.env.SCREENING_API_URL || 'http://127.0.0.1:18090',
-    httpVersion: '1.1',
-    useBinaryFormat: false,
-    defaultTimeoutMs: 120000
-  });
-  const client = createClient(ScreeningImportService, transport);
-  const options = {
-    signal,
-    headers: {
-      'x-seller-user': String(session.id),
-      'x-seller-workspace': String(session.workspaceId),
-      'x-seller-role': session.role,
-      'x-screening-time': stamp,
-      'x-screening-signature': signature
-    }
-  };
+  const { client, options } = importRPCClient(name, session, secret, signal);
   if (name === 'ListImports')
     return legacyImportList(
       await client.listImports({ pagination: importPagination(url.searchParams) }, options)
@@ -90,6 +60,7 @@ export function importConnectFailure(error: unknown): {
       [Code.PermissionDenied]: 403,
       [Code.NotFound]: 404,
       [Code.Aborted]: 409,
+      [Code.ResourceExhausted]: 413,
       [Code.InvalidArgument]: 422,
       [Code.Internal]: 500
     } as Partial<Record<Code, number>>
@@ -100,6 +71,7 @@ export function importConnectFailure(error: unknown): {
     403: 'Forbidden',
     404: 'Not Found',
     409: 'Conflict',
+    413: 'Payload Too Large',
     422: 'Unprocessable Entity',
     500: 'Internal Server Error'
   };
@@ -112,4 +84,44 @@ export function importConnectFailure(error: unknown): {
       request_id: detail?.requestId || randomUUID()
     }
   };
+}
+
+export function importRPCClient(
+  name: string,
+  session: SellerSession,
+  secret: string,
+  signal: AbortSignal
+) {
+  const procedure = '/' + ScreeningImportService.typeName + '/' + name;
+  const stamp = String(Math.floor(Date.now() / 1000));
+  const signature = createHmac('sha256', secret)
+    .update(
+      [
+        stamp,
+        'POST',
+        procedure,
+        String(session.id),
+        String(session.workspaceId),
+        session.role
+      ].join('\n')
+    )
+    .digest('hex');
+  const transport = createConnectTransport({
+    baseUrl: process.env.SCREENING_API_URL || 'http://127.0.0.1:18090',
+    httpVersion: '1.1',
+    useBinaryFormat: false,
+    defaultTimeoutMs: 120000
+  });
+  const client = createClient(ScreeningImportService, transport);
+  const options = {
+    signal,
+    headers: {
+      'x-seller-user': String(session.id),
+      'x-seller-workspace': String(session.workspaceId),
+      'x-seller-role': session.role,
+      'x-screening-time': stamp,
+      'x-screening-signature': signature
+    }
+  };
+  return { client, options };
 }

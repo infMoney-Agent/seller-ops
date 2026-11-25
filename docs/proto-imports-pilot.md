@@ -59,3 +59,7 @@ SCREENING_IMPORT_READS_TRANSPORT=legacy|connect 单独控制这三个只读接�
 第二阶段验收：Web 类型检查、6 项 TS 单测（35 断言）、Go race 相关回归及安全/新旧投影测试、go vet、生产构建通过；相对于上一阶段 origin/codex/proto-imports-pilot 的 Buf breaking 检查通过。双 Connect 开关下浏览器完整验收通过（31.57 秒）。测试使用独立 PostgreSQL 与 Redis 数据库15。
 
 第二阶段已部署：新增只读开关已持久化为 connect，列表继续保持 connect。运行环境 11 条导入历史及详情、预览、任务查询核对通过；公网入口正常跳转登录。回滚备份：backups/proto-reads-1795581981999。上传与写操作仍沿用原 HTTP，业务数据无迁移。
+
+## 第三阶段：导入写操作
+
+CommitImport、UpdateImportSettings、GetImportRemovalPreview、DeleteImport、RetryImportJob 直接调用共享 Go 事务用例；新增 SCREENING_IMPORT_WRITES_TRANSPORT，默认 legacy。浏览器仍保留原路径、幂等键及 200/202 状态码，文件上传下载不经过 RPC。写 RPC 统一还原原方法、资源路径、查询串和业务体以保持跨协议幂等指纹；版本与引用ID使用原校验。重试接口补齐原有缺失的事务回执，并锁定失败任务以避免重复处理。跨 HTTP/RPC 重放、变更请求内容冲突、任务不重复创建测试已通过。

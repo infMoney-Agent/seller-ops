@@ -42,3 +42,18 @@ test('task status preserves zero progress and all terminal and review states',()
  expect(()=>legacyJob(create(GetJobResponseSchema))).toThrow();
  expect(()=>legacyJob(create(GetJobResponseSchema,{item:create(JobRecordSchema)}))).toThrow();
 });
+
+import { ImportJobSubmissionSchema, DeleteImportResponseSchema } from '../src/gen/sellerops/screening/v1/import_pb';
+import { importSettings, legacySubmission, legacyDeleteImport } from '../src/features/screening/import-mutation-compat';
+test('settings preserve omitted versus explicit null and legacy invalid values',()=>{
+ expect(importSettings({source_period:'2026-09',observed_on:null,mapping:{asin:'ASIN'},period_start:null})).toEqual({sourcePeriod:'2026-09',clearFields:['observed_on','period_start'],mapping:{asin:'ASIN'},legacyFields:{}});
+ expect(importSettings({source_period:123,mapping:'bad',extra:0})).toEqual({legacyFields:{source_period:123,mapping:'bad',extra:0},clearFields:[]});
+ expect(importSettings({})).toEqual({legacyFields:{},clearFields:[]});
+});
+test('submission and deletion keep optional response fields absent and zero counts explicit',()=>{
+ expect(legacySubmission(create(ImportJobSubmissionSchema,{jobId:'job',state:'queued'}))).toEqual({job_id:'job',state:'queued'});
+ expect(legacySubmission(create(ImportJobSubmissionSchema,{jobId:'job',state:'queued',importId:'batch'}))).toEqual({job_id:'job',state:'queued',import_id:'batch'});
+ expect(legacyDeleteImport(create(DeleteImportResponseSchema,{id:'batch',deleted:true}))).toEqual({id:'batch',deleted:true});
+ expect(legacyDeleteImport(create(DeleteImportResponseSchema,{id:'batch',deleted:true,removedMonthly:0n,removedProducts:2n,retainedProducts:1n}))).toEqual({id:'batch',deleted:true,removed_monthly:0,removed_products:2,retained_products:1});
+ expect(()=>legacyDeleteImport(create(DeleteImportResponseSchema,{removedProducts:9007199254740992n}))).toThrow();
+});

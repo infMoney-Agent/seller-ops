@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"net/http"
@@ -32,9 +33,15 @@ func rpcError(err error) *connect.Error {
 			code, reason = connect.CodeNotFound, "NOT_FOUND"
 		case 409:
 			code, reason = connect.CodeAborted, "CONFLICT"
+		case 413:
+			code, reason = connect.CodeResourceExhausted, "PAYLOAD_TOO_LARGE"
 		case 422:
 			code, reason = connect.CodeInvalidArgument, "INVALID_ARGUMENT"
 		}
+	}
+	var pg *pgconn.PgError
+	if errors.As(err, &pg) && (pg.Code == "23505" || pg.Code == "23514" || pg.Code == "23503") {
+		code, message, reason = connect.CodeAborted, str(workError(err)["message"]), "CONFLICT"
 	}
 	if errors.Is(err, pgx.ErrNoRows) {
 		code, message, reason = connect.CodeNotFound, "资源不存在", "NOT_FOUND"

@@ -45,6 +45,21 @@ const (
 	// ScreeningImportServiceGetJobProcedure is the fully-qualified name of the ScreeningImportService's
 	// GetJob RPC.
 	ScreeningImportServiceGetJobProcedure = "/sellerops.screening.v1.ScreeningImportService/GetJob"
+	// ScreeningImportServiceGetImportRemovalPreviewProcedure is the fully-qualified name of the
+	// ScreeningImportService's GetImportRemovalPreview RPC.
+	ScreeningImportServiceGetImportRemovalPreviewProcedure = "/sellerops.screening.v1.ScreeningImportService/GetImportRemovalPreview"
+	// ScreeningImportServiceCommitImportProcedure is the fully-qualified name of the
+	// ScreeningImportService's CommitImport RPC.
+	ScreeningImportServiceCommitImportProcedure = "/sellerops.screening.v1.ScreeningImportService/CommitImport"
+	// ScreeningImportServiceUpdateImportSettingsProcedure is the fully-qualified name of the
+	// ScreeningImportService's UpdateImportSettings RPC.
+	ScreeningImportServiceUpdateImportSettingsProcedure = "/sellerops.screening.v1.ScreeningImportService/UpdateImportSettings"
+	// ScreeningImportServiceDeleteImportProcedure is the fully-qualified name of the
+	// ScreeningImportService's DeleteImport RPC.
+	ScreeningImportServiceDeleteImportProcedure = "/sellerops.screening.v1.ScreeningImportService/DeleteImport"
+	// ScreeningImportServiceRetryImportJobProcedure is the fully-qualified name of the
+	// ScreeningImportService's RetryImportJob RPC.
+	ScreeningImportServiceRetryImportJobProcedure = "/sellerops.screening.v1.ScreeningImportService/RetryImportJob"
 )
 
 // ScreeningImportServiceClient is a client for the sellerops.screening.v1.ScreeningImportService
@@ -56,6 +71,11 @@ type ScreeningImportServiceClient interface {
 	ListImportRows(context.Context, *connect.Request[v1.ListImportRowsRequest]) (*connect.Response[v1.ListImportRowsResponse], error)
 	// Shared public task status used by the import workflow; no request-log jobs.
 	GetJob(context.Context, *connect.Request[v1.GetJobRequest]) (*connect.Response[v1.GetJobResponse], error)
+	GetImportRemovalPreview(context.Context, *connect.Request[v1.GetImportRemovalPreviewRequest]) (*connect.Response[v1.GetImportRemovalPreviewResponse], error)
+	CommitImport(context.Context, *connect.Request[v1.CommitImportRequest]) (*connect.Response[v1.CommitImportResponse], error)
+	UpdateImportSettings(context.Context, *connect.Request[v1.UpdateImportSettingsRequest]) (*connect.Response[v1.UpdateImportSettingsResponse], error)
+	DeleteImport(context.Context, *connect.Request[v1.DeleteImportRequest]) (*connect.Response[v1.DeleteImportResponse], error)
+	RetryImportJob(context.Context, *connect.Request[v1.RetryImportJobRequest]) (*connect.Response[v1.RetryImportJobResponse], error)
 }
 
 // NewScreeningImportServiceClient constructs a client for the
@@ -94,15 +114,50 @@ func NewScreeningImportServiceClient(httpClient connect.HTTPClient, baseURL stri
 			connect.WithSchema(screeningImportServiceMethods.ByName("GetJob")),
 			connect.WithClientOptions(opts...),
 		),
+		getImportRemovalPreview: connect.NewClient[v1.GetImportRemovalPreviewRequest, v1.GetImportRemovalPreviewResponse](
+			httpClient,
+			baseURL+ScreeningImportServiceGetImportRemovalPreviewProcedure,
+			connect.WithSchema(screeningImportServiceMethods.ByName("GetImportRemovalPreview")),
+			connect.WithClientOptions(opts...),
+		),
+		commitImport: connect.NewClient[v1.CommitImportRequest, v1.CommitImportResponse](
+			httpClient,
+			baseURL+ScreeningImportServiceCommitImportProcedure,
+			connect.WithSchema(screeningImportServiceMethods.ByName("CommitImport")),
+			connect.WithClientOptions(opts...),
+		),
+		updateImportSettings: connect.NewClient[v1.UpdateImportSettingsRequest, v1.UpdateImportSettingsResponse](
+			httpClient,
+			baseURL+ScreeningImportServiceUpdateImportSettingsProcedure,
+			connect.WithSchema(screeningImportServiceMethods.ByName("UpdateImportSettings")),
+			connect.WithClientOptions(opts...),
+		),
+		deleteImport: connect.NewClient[v1.DeleteImportRequest, v1.DeleteImportResponse](
+			httpClient,
+			baseURL+ScreeningImportServiceDeleteImportProcedure,
+			connect.WithSchema(screeningImportServiceMethods.ByName("DeleteImport")),
+			connect.WithClientOptions(opts...),
+		),
+		retryImportJob: connect.NewClient[v1.RetryImportJobRequest, v1.RetryImportJobResponse](
+			httpClient,
+			baseURL+ScreeningImportServiceRetryImportJobProcedure,
+			connect.WithSchema(screeningImportServiceMethods.ByName("RetryImportJob")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // screeningImportServiceClient implements ScreeningImportServiceClient.
 type screeningImportServiceClient struct {
-	listImports    *connect.Client[v1.ListImportsRequest, v1.ListImportsResponse]
-	getImport      *connect.Client[v1.GetImportRequest, v1.GetImportResponse]
-	listImportRows *connect.Client[v1.ListImportRowsRequest, v1.ListImportRowsResponse]
-	getJob         *connect.Client[v1.GetJobRequest, v1.GetJobResponse]
+	listImports             *connect.Client[v1.ListImportsRequest, v1.ListImportsResponse]
+	getImport               *connect.Client[v1.GetImportRequest, v1.GetImportResponse]
+	listImportRows          *connect.Client[v1.ListImportRowsRequest, v1.ListImportRowsResponse]
+	getJob                  *connect.Client[v1.GetJobRequest, v1.GetJobResponse]
+	getImportRemovalPreview *connect.Client[v1.GetImportRemovalPreviewRequest, v1.GetImportRemovalPreviewResponse]
+	commitImport            *connect.Client[v1.CommitImportRequest, v1.CommitImportResponse]
+	updateImportSettings    *connect.Client[v1.UpdateImportSettingsRequest, v1.UpdateImportSettingsResponse]
+	deleteImport            *connect.Client[v1.DeleteImportRequest, v1.DeleteImportResponse]
+	retryImportJob          *connect.Client[v1.RetryImportJobRequest, v1.RetryImportJobResponse]
 }
 
 // ListImports calls sellerops.screening.v1.ScreeningImportService.ListImports.
@@ -125,6 +180,32 @@ func (c *screeningImportServiceClient) GetJob(ctx context.Context, req *connect.
 	return c.getJob.CallUnary(ctx, req)
 }
 
+// GetImportRemovalPreview calls
+// sellerops.screening.v1.ScreeningImportService.GetImportRemovalPreview.
+func (c *screeningImportServiceClient) GetImportRemovalPreview(ctx context.Context, req *connect.Request[v1.GetImportRemovalPreviewRequest]) (*connect.Response[v1.GetImportRemovalPreviewResponse], error) {
+	return c.getImportRemovalPreview.CallUnary(ctx, req)
+}
+
+// CommitImport calls sellerops.screening.v1.ScreeningImportService.CommitImport.
+func (c *screeningImportServiceClient) CommitImport(ctx context.Context, req *connect.Request[v1.CommitImportRequest]) (*connect.Response[v1.CommitImportResponse], error) {
+	return c.commitImport.CallUnary(ctx, req)
+}
+
+// UpdateImportSettings calls sellerops.screening.v1.ScreeningImportService.UpdateImportSettings.
+func (c *screeningImportServiceClient) UpdateImportSettings(ctx context.Context, req *connect.Request[v1.UpdateImportSettingsRequest]) (*connect.Response[v1.UpdateImportSettingsResponse], error) {
+	return c.updateImportSettings.CallUnary(ctx, req)
+}
+
+// DeleteImport calls sellerops.screening.v1.ScreeningImportService.DeleteImport.
+func (c *screeningImportServiceClient) DeleteImport(ctx context.Context, req *connect.Request[v1.DeleteImportRequest]) (*connect.Response[v1.DeleteImportResponse], error) {
+	return c.deleteImport.CallUnary(ctx, req)
+}
+
+// RetryImportJob calls sellerops.screening.v1.ScreeningImportService.RetryImportJob.
+func (c *screeningImportServiceClient) RetryImportJob(ctx context.Context, req *connect.Request[v1.RetryImportJobRequest]) (*connect.Response[v1.RetryImportJobResponse], error) {
+	return c.retryImportJob.CallUnary(ctx, req)
+}
+
 // ScreeningImportServiceHandler is an implementation of the
 // sellerops.screening.v1.ScreeningImportService service.
 type ScreeningImportServiceHandler interface {
@@ -134,6 +215,11 @@ type ScreeningImportServiceHandler interface {
 	ListImportRows(context.Context, *connect.Request[v1.ListImportRowsRequest]) (*connect.Response[v1.ListImportRowsResponse], error)
 	// Shared public task status used by the import workflow; no request-log jobs.
 	GetJob(context.Context, *connect.Request[v1.GetJobRequest]) (*connect.Response[v1.GetJobResponse], error)
+	GetImportRemovalPreview(context.Context, *connect.Request[v1.GetImportRemovalPreviewRequest]) (*connect.Response[v1.GetImportRemovalPreviewResponse], error)
+	CommitImport(context.Context, *connect.Request[v1.CommitImportRequest]) (*connect.Response[v1.CommitImportResponse], error)
+	UpdateImportSettings(context.Context, *connect.Request[v1.UpdateImportSettingsRequest]) (*connect.Response[v1.UpdateImportSettingsResponse], error)
+	DeleteImport(context.Context, *connect.Request[v1.DeleteImportRequest]) (*connect.Response[v1.DeleteImportResponse], error)
+	RetryImportJob(context.Context, *connect.Request[v1.RetryImportJobRequest]) (*connect.Response[v1.RetryImportJobResponse], error)
 }
 
 // NewScreeningImportServiceHandler builds an HTTP handler from the service implementation. It
@@ -167,6 +253,36 @@ func NewScreeningImportServiceHandler(svc ScreeningImportServiceHandler, opts ..
 		connect.WithSchema(screeningImportServiceMethods.ByName("GetJob")),
 		connect.WithHandlerOptions(opts...),
 	)
+	screeningImportServiceGetImportRemovalPreviewHandler := connect.NewUnaryHandler(
+		ScreeningImportServiceGetImportRemovalPreviewProcedure,
+		svc.GetImportRemovalPreview,
+		connect.WithSchema(screeningImportServiceMethods.ByName("GetImportRemovalPreview")),
+		connect.WithHandlerOptions(opts...),
+	)
+	screeningImportServiceCommitImportHandler := connect.NewUnaryHandler(
+		ScreeningImportServiceCommitImportProcedure,
+		svc.CommitImport,
+		connect.WithSchema(screeningImportServiceMethods.ByName("CommitImport")),
+		connect.WithHandlerOptions(opts...),
+	)
+	screeningImportServiceUpdateImportSettingsHandler := connect.NewUnaryHandler(
+		ScreeningImportServiceUpdateImportSettingsProcedure,
+		svc.UpdateImportSettings,
+		connect.WithSchema(screeningImportServiceMethods.ByName("UpdateImportSettings")),
+		connect.WithHandlerOptions(opts...),
+	)
+	screeningImportServiceDeleteImportHandler := connect.NewUnaryHandler(
+		ScreeningImportServiceDeleteImportProcedure,
+		svc.DeleteImport,
+		connect.WithSchema(screeningImportServiceMethods.ByName("DeleteImport")),
+		connect.WithHandlerOptions(opts...),
+	)
+	screeningImportServiceRetryImportJobHandler := connect.NewUnaryHandler(
+		ScreeningImportServiceRetryImportJobProcedure,
+		svc.RetryImportJob,
+		connect.WithSchema(screeningImportServiceMethods.ByName("RetryImportJob")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/sellerops.screening.v1.ScreeningImportService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case ScreeningImportServiceListImportsProcedure:
@@ -177,6 +293,16 @@ func NewScreeningImportServiceHandler(svc ScreeningImportServiceHandler, opts ..
 			screeningImportServiceListImportRowsHandler.ServeHTTP(w, r)
 		case ScreeningImportServiceGetJobProcedure:
 			screeningImportServiceGetJobHandler.ServeHTTP(w, r)
+		case ScreeningImportServiceGetImportRemovalPreviewProcedure:
+			screeningImportServiceGetImportRemovalPreviewHandler.ServeHTTP(w, r)
+		case ScreeningImportServiceCommitImportProcedure:
+			screeningImportServiceCommitImportHandler.ServeHTTP(w, r)
+		case ScreeningImportServiceUpdateImportSettingsProcedure:
+			screeningImportServiceUpdateImportSettingsHandler.ServeHTTP(w, r)
+		case ScreeningImportServiceDeleteImportProcedure:
+			screeningImportServiceDeleteImportHandler.ServeHTTP(w, r)
+		case ScreeningImportServiceRetryImportJobProcedure:
+			screeningImportServiceRetryImportJobHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -200,4 +326,24 @@ func (UnimplementedScreeningImportServiceHandler) ListImportRows(context.Context
 
 func (UnimplementedScreeningImportServiceHandler) GetJob(context.Context, *connect.Request[v1.GetJobRequest]) (*connect.Response[v1.GetJobResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sellerops.screening.v1.ScreeningImportService.GetJob is not implemented"))
+}
+
+func (UnimplementedScreeningImportServiceHandler) GetImportRemovalPreview(context.Context, *connect.Request[v1.GetImportRemovalPreviewRequest]) (*connect.Response[v1.GetImportRemovalPreviewResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sellerops.screening.v1.ScreeningImportService.GetImportRemovalPreview is not implemented"))
+}
+
+func (UnimplementedScreeningImportServiceHandler) CommitImport(context.Context, *connect.Request[v1.CommitImportRequest]) (*connect.Response[v1.CommitImportResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sellerops.screening.v1.ScreeningImportService.CommitImport is not implemented"))
+}
+
+func (UnimplementedScreeningImportServiceHandler) UpdateImportSettings(context.Context, *connect.Request[v1.UpdateImportSettingsRequest]) (*connect.Response[v1.UpdateImportSettingsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sellerops.screening.v1.ScreeningImportService.UpdateImportSettings is not implemented"))
+}
+
+func (UnimplementedScreeningImportServiceHandler) DeleteImport(context.Context, *connect.Request[v1.DeleteImportRequest]) (*connect.Response[v1.DeleteImportResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sellerops.screening.v1.ScreeningImportService.DeleteImport is not implemented"))
+}
+
+func (UnimplementedScreeningImportServiceHandler) RetryImportJob(context.Context, *connect.Request[v1.RetryImportJobRequest]) (*connect.Response[v1.RetryImportJobResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sellerops.screening.v1.ScreeningImportService.RetryImportJob is not implemented"))
 }
