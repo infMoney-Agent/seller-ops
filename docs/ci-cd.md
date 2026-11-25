@@ -13,3 +13,12 @@ CI 验证 Web 类型、生产构建和浏览器流程，登录服务 PostgreSQL 
 发布前校验目标 SHA 确实是当前 `dev`。数据库初始化成功后执行 `seller-backend migrate`，随后启动三个应用，清除旧独立 Worker 的孤立容器。健康检查包括登录会话、OIDC 和业务聚合健康接口。成功后切换 current 指针；失败则恢复上一版本应用镜像和配置，保留数据库和持久化文件，不降级删表。
 
 GitHub `dev-server` Environment 的变量为 `DEPLOY_HOST`、`DEPLOY_USER`，机密为 `DEPLOY_SSH_KEY`、`DEPLOY_KNOWN_HOSTS`。GHCR 临时访问令牌由 Actions 提供，发布助手不将其记入日志。历史发布和当前数据卷继续保留以支持回滚。
+
+## main 分支生产自动发布（单机 80 端口 HTTP）
+
+将 `dev` 合并到 `main` 后，`.github/workflows/prod-cd.yaml` 自动复跑 `dev-ci.yaml`、构建并推送 `web`、`auth`、`backend` 三个 `linux/amd64` 镜像，并通过 SSH 强制命令触发生产机上的 `.github/scripts/deploy-prod.sh`。
+
+- 线上 80 端口仅暴露系统 Web 页面及 Go 认证短登录/注册入口（`apps/auth/casdoor/compose.prod-http.yaml` + `apps/auth/casdoor/Caddyfile.prod-http`），屏蔽 `/sellerops.*` 内部 RPC；Casdoor 管理界面仅绑定 `127.0.0.1:18000`，仅允许通过 SSH 隧道维护。
+- 生产服务器位于国内机房（如腾讯云广州）时，在 GitHub `prod-server` Environment 配置 `IMAGE_REGISTRY`（如 `ccr.ccs.tencentyun.com`）、`IMAGE_NAMESPACE` 及机密 `REGISTRY_USERNAME`、`REGISTRY_PASSWORD`，避免直连 GHCR 拉取超时；未配置时默认回退到 GHCR。
+- `prod-server` Environment 还需配置变量 `DEPLOY_HOST`、`DEPLOY_USER`（可选 `DEPLOY_PORT`）与机密 `DEPLOY_SSH_KEY`、`DEPLOY_KNOWN_HOSTS`。
+- 生产机使用仓库外 `~/.config/seller-ops-cd/prod.env` 与 `seller.prod.env`（模板见 `apps/auth/casdoor/env.prod.example`）。发布成功后保留当前与上一版本用于回滚，并自动清理更早的历史发布目录与旧应用镜像，防止小容量系统盘被占满。

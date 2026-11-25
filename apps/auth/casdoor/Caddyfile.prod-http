@@ -1,0 +1,43 @@
+# Public HTTP port-80 entry: expose only the Seller Ops web application and
+# Go auth short-login/registration endpoints. Never expose Casdoor admin UI or
+# internal Connect RPC routes (/sellerops.*) to the public internet.
+{
+	auto_https off
+}
+
+:80 {
+	@internal_rpc path /sellerops.*
+	handle @internal_rpc {
+		respond 404
+	}
+
+	@login {
+		method GET HEAD
+		path /login /login/
+	}
+	handle @login {
+		rewrite * /api/auth/login-page
+		reverse_proxy api:8080
+	}
+
+	@register {
+		method GET
+		path /register /register/
+	}
+	handle @register {
+		rewrite * /api/auth/register-page
+		reverse_proxy api:8080
+	}
+
+	@auth_direct {
+		path /api/auth/login-page /api/auth/register-page /api/auth/registration/*
+		not path /api/auth/registration/status
+	}
+	handle @auth_direct {
+		reverse_proxy api:8080
+	}
+
+	handle {
+		reverse_proxy web:3000
+	}
+}
