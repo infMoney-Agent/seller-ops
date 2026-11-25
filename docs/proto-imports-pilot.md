@@ -7,7 +7,7 @@
 本轮仅将导入记录列表抽取为共享查询用例，加入内部 Connect RPC。认证、商品查询、复核写入、利润计算和文件上传下载继续使用原有接口；不引入 GORM、不新增数据库表、不改变进程和端口。
 
 - 契约：proto/sellerops/common/v1 与 proto/sellerops/screening/v1。
-- Go 生成物：gen/go，独立模块 seller-ops/contracts；业务后端通过本地 replace 引用。
+- Go 生成物：proto/gen/go，独立模块 seller-ops/contracts；业务后端通过本地 replace 引用。
 - TS 生成物：apps/web/src/gen，浏览器不直接调用 RPC，由 Next.js 服务端使用生成客户端。
 - 内部入口：POST /sellerops.screening.v1.ScreeningImportService/ListImports，与业务服务同一监听端口，不经过公网网关。
 

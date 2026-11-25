@@ -27,7 +27,7 @@ jobs:
           go-version-file: apps/backend/go.mod
           cache-dependency-path: |
             apps/backend/go.sum
-            gen/go/go.sum
+            proto/gen/go/go.sum
       - run: bun install --frozen-lockfile
         working-directory: apps/web
       - run: npm run proto:check

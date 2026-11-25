@@ -1,6 +1,6 @@
 FROM golang:1.25.3-alpine AS build
 WORKDIR /src/apps/auth
-COPY gen/go/ /src/gen/go/
+COPY proto/gen/go/ /src/proto/gen/go/
 COPY packages/rpccompat/ /src/packages/rpccompat/
 COPY apps/auth/go.mod apps/auth/go.sum ./
 RUN go mod download

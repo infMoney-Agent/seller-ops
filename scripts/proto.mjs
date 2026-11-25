@@ -34,7 +34,7 @@ if (mode === 'breaking') {
   run(go, ['install', 'connectrpc.com/connect/cmd/protoc-gen-connect-go@v1.18.1']);
   run(buf, ['generate', '--template', 'proto/buf.gen.yaml']);
   if (mode === 'check') {
-    const outputs = ['gen/go', 'apps/web/src/gen'];
+    const outputs = ['proto/gen/go', 'apps/web/src/gen'];
     run('git', ['diff', '--exit-code', '--', ...outputs]);
     const extra = execFileSync('git', ['ls-files', '--others', '--exclude-standard', '--', ...outputs], { cwd: root, encoding: 'utf8' }).trim();
     if (extra) throw new Error('Untracked generated files: ' + extra);

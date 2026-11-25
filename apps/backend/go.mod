@@ -42,7 +42,7 @@ require (
 	seller-ops/contracts v0.0.0
 )
 
-replace seller-ops/contracts => ../../gen/go
+replace seller-ops/contracts => ../../proto/gen/go
 
 require seller-ops/rpccompat v0.0.0
 

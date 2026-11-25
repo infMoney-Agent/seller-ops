@@ -38,7 +38,7 @@
 
 ## Proto 接口开发规范
 
-- proto/ 定义业务和用户管理元数据契约；gen/go 是独立共享模块，apps/web/src/gen 为 TS 生成物，均禁止手改。
+- proto/ 定义业务和用户管理元数据契约；proto/gen/go 是独立共享模块，apps/web/src/gen 为 TS 生成物，均禁止手改。
 - 修改契约后运行 npm run proto:gen、npm run proto:check、npm run proto:breaking，工具版本由脚本和 Web 锁文件固定。
 - 浏览器仍使用既有 HTTP/JSON；Next.js 验证会话后调用内部 RPC，禁止信任客户端传入的公司或角色。
 - 沿用 pgx 与原数据库结构，不因协议迁移引入 ORM、修改费用公式或恢复工作区切换/字段映射 UI。
