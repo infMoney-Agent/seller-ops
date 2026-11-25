@@ -28,6 +28,7 @@ type component interface {
 func handler(ecommerce, screen component) http.Handler {
 	mux := http.NewServeMux()
 	mux.Handle("/api/v1/screening/", screen.Handler())
+	mux.Handle(screening.ImportsRPCPrefix, screen.Handler())
 	mux.Handle("/api/v1/", ecommerce.Handler())
 	mux.Handle("GET /openapi.json", ecommerce.Handler())
 	mux.Handle("GET /screening/openapi.json", http.StripPrefix("/screening", screen.Handler()))

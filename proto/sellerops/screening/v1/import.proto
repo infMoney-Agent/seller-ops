@@ -1,0 +1,50 @@
+syntax = "proto3";
+package sellerops.screening.v1;
+
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+import "sellerops/common/v1/pagination.proto";
+
+option go_package = "seller-ops/contracts/sellerops/screening/v1;screeningv1";
+enum ImportState {
+  IMPORT_STATE_UNSPECIFIED = 0;
+  IMPORT_STATE_UPLOADED = 1;
+  IMPORT_STATE_PARSING = 2;
+  IMPORT_STATE_PREVIEW = 3;
+  IMPORT_STATE_IMPORTING = 4;
+  IMPORT_STATE_COMPLETED = 5;
+  IMPORT_STATE_PARTIAL = 6;
+  IMPORT_STATE_FAILED = 7;
+}
+// Dates and source months are calendar values, not UTC instants.
+message ImportRecord {
+  string id = 1;
+  string file_name = 2;
+  ImportState state = 3;
+  string marketplace = 4;
+  string source_period = 5;
+  optional string observed_on = 6;
+  string source_type = 7;
+  string period_type = 8;
+  optional string period_start = 9;
+  optional string period_end = 10;
+  string default_sales_scope = 11;
+  google.protobuf.Struct counts = 12;
+  google.protobuf.Struct mapping = 13;
+  google.protobuf.Timestamp created_at = 14;
+  google.protobuf.Timestamp committed_at = 15;
+  // Transitional REST-only extensions retain extra columns, exact timestamp
+  // spellings and explicit nulls; stable business fields above are authoritative.
+  google.protobuf.Struct legacy_fields = 16;
+}
+message ListImportsRequest {
+  sellerops.common.v1.PaginationRequest pagination = 1;
+}
+message ListImportsResponse {
+  repeated ImportRecord items = 1;
+  sellerops.common.v1.PaginationResponse pagination = 2;
+}
+service ScreeningImportService {
+  // Identity is authenticated by the server, never supplied in the message.
+  rpc ListImports(ListImportsRequest) returns (ListImportsResponse);
+}

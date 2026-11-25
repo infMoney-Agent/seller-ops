@@ -1,6 +1,7 @@
 import { createHmac } from 'node:crypto';
 import { acceptsGzip, serverTiming } from '@/lib/http-performance';
 import { backendURL, isAllowedAppOrigin } from '@/lib/backend';
+import { connectImportList, importConnectFailure } from '@/features/screening/import-connect';
 import type { SellerSession } from '@/features/auth/session';
 
 export const runtime = 'nodejs';
@@ -77,6 +78,37 @@ async function proxy(request: Request, { params }: { params: Promise<{ path: str
       request.headers.get('x-seller-workspace') !== String(session.workspaceId)
     ) {
       return Response.json({ message: '工作区已切换，请刷新页面。' }, { status: 409 });
+    }
+    if (request.method === 'GET' && path === 'imports') {
+      const mode = process.env.SCREENING_IMPORTS_TRANSPORT || 'legacy';
+      if (!['legacy', 'connect'].includes(mode))
+        return Response.json({ message: '导入列表传输配置无效。' }, { status: 503 });
+      if (mode === 'connect') {
+        const apiStarted = performance.now();
+        const responseHeaders = () => ({
+          'Cache-Control': 'no-store',
+          'Server-Timing': serverTiming(
+            authDuration,
+            performance.now() - apiStarted,
+            performance.now() - started
+          )
+        });
+        try {
+          const result = await connectImportList(
+            url,
+            session,
+            secret,
+            AbortSignal.any([request.signal, AbortSignal.timeout(120000)])
+          );
+          return Response.json(result, { headers: responseHeaders() });
+        } catch (error) {
+          const failure = importConnectFailure(error);
+          return Response.json(failure.body, {
+            status: failure.status,
+            headers: responseHeaders()
+          });
+        }
+      }
     }
     const stamp = String(Math.floor(Date.now() / 1000));
     const targetPath = '/api/v1/screening/' + path + url.search;

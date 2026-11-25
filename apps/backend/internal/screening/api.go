@@ -68,7 +68,12 @@ func (s *service) route(w http.ResponseWriter, r *http.Request) (any, error) {
 		case "summary":
 			return s.summary(r)
 		case "imports":
-			return s.list(r, "ps_imports", "tenant_id=$1 AND NOT(counts ? 'data_deleted_at')", a.Tenant)
+			p, n := page(r)
+			result, err := s.listImports(ctx, a, p, n)
+			if err != nil {
+				return nil, err
+			}
+			return result.legacy(), nil
 		case "review-categories":
 			return s.reviewCategories(r)
 		case "review-workspace":

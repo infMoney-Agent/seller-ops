@@ -8,6 +8,32 @@ on:
 permissions:
   contents: read
 jobs:
+  proto:
+    name: Proto contracts and generated clients
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.3.10'
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: apps/backend/go.mod
+          cache-dependency-path: |
+            apps/backend/go.sum
+            gen/go/go.sum
+      - run: bun install --frozen-lockfile
+        working-directory: apps/web
+      - run: npm run proto:check
+      - run: npm run proto:breaking
+        env:
+          PROTO_BASE_REF: origin/dev
   web:
     name: Web typecheck build and browser acceptance
     runs-on: ubuntu-latest
@@ -45,6 +71,7 @@ jobs:
       - name: Profit form boundary checks
         working-directory: .
         run: npm run test:web-guidance
+      - run: npm run test:imports-connect
       - run: npm run typecheck
       - run: ./node_modules/.bin/oxlint src/features/screening "src/app/api/ecom/[...path]/route.ts" "src/app/api/ecom/screening/[...path]/route.ts"
       - name: Build Web
@@ -72,6 +99,7 @@ jobs:
           SCREENING_STORAGE_DIR: /tmp/screening-browser-data
           SCREENING_INTERNAL_SECRET: ci-browser-test-secret-with-at-least-32-characters
           SCREENING_BROWSER_FIXTURE: '1'
+          SCREENING_IMPORTS_TRANSPORT: connect
           ECOM_BROWSER_FIXTURE: '1'
           ECOM_INTERNAL_SECRET: ci-ecom-secret-with-at-least-32-characters
           ECOM_TEST_REDIS_URL: redis://127.0.0.1:6379/15
@@ -169,11 +197,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 3
     if: always()
-    needs: [web, auth, backend]
+    needs: [proto, web, auth, backend]
     steps:
       - name: Require all checks
         env:
+          PROTO: ${{ needs.proto.result }}
           WEB: ${{ needs.web.result }}
           AUTH: ${{ needs.auth.result }}
           BACKEND: ${{ needs.backend.result }}
-        run: test "$WEB" = success && test "$AUTH" = success && test "$BACKEND" = success
+        run: test "$PROTO" = success && test "$WEB" = success && test "$AUTH" = success && test "$BACKEND" = success

@@ -35,3 +35,11 @@ require (
 	golang.org/x/net v0.40.0 // indirect
 	golang.org/x/sys v0.34.0 // indirect
 )
+
+require (
+	connectrpc.com/connect v1.18.1
+	google.golang.org/protobuf v1.36.6
+	seller-ops/contracts v0.0.0
+)
+
+replace seller-ops/contracts => ../../gen/go

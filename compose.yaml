@@ -22,6 +22,7 @@ services:
       SELLER_APP_ORIGIN: https://${APP_DOMAIN}
       ECOM_API_URL: http://backend:8000
       SCREENING_API_URL: http://backend:8000
+      SCREENING_IMPORTS_TRANSPORT: ${SCREENING_IMPORTS_TRANSPORT:-legacy}
       ECOM_INTERNAL_SECRET: ${ECOM_INTERNAL_SECRET:?Set ECOM_INTERNAL_SECRET}
       SCREENING_INTERNAL_SECRET: ${SCREENING_INTERNAL_SECRET:?Set SCREENING_INTERNAL_SECRET}
   api:
@@ -39,7 +40,9 @@ services:
       DATABASE_URL: postgres://seller_app:${APP_DB_PASSWORD:?Set APP_DB_PASSWORD}@db:5432/seller_ops?sslmode=disable
   backend:
     profiles: [app]
-    build: ./apps/backend
+    build:
+      context: .
+      dockerfile: apps/backend/Dockerfile
     restart: on-failure
     depends_on:
       backend-migrate:
@@ -77,7 +80,9 @@ services:
       - screening-data:/screening-data
   backend-migrate:
     profiles: [app]
-    build: ./apps/backend
+    build:
+      context: .
+      dockerfile: apps/backend/Dockerfile
     environment: *backend-env
     command: [migrate]
     depends_on:

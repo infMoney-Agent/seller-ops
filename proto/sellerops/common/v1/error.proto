@@ -1,0 +1,9 @@
+syntax = "proto3";
+package sellerops.common.v1;
+
+option go_package = "seller-ops/contracts/sellerops/common/v1;commonv1";
+// Connect codes describe transport status; this detail retains business context.
+message ErrorDetail {
+  string reason = 1;
+  string request_id = 2;
+}

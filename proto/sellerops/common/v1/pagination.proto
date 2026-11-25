@@ -1,0 +1,14 @@
+syntax = "proto3";
+package sellerops.common.v1;
+
+option go_package = "seller-ops/contracts/sellerops/common/v1;commonv1";
+// Page numbering starts at one; page_size defaults to 50 and is capped at 100.
+message PaginationRequest {
+  int32 page = 1;
+  int32 page_size = 2;
+}
+message PaginationResponse {
+  int32 page = 1;
+  int32 page_size = 2;
+  int64 total = 3;
+}
