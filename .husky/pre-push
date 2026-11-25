@@ -1,2 +1,2 @@
-export PATH="$HOME/.bun/bin:$PATH"
-bun run build
+cd apps/web
+npm run build

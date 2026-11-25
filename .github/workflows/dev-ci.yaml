@@ -1,0 +1,213 @@
+name: dev-ci
+on:
+  pull_request:
+    branches: [dev, main]
+  merge_group:
+    branches: [dev, main]
+  workflow_call:
+permissions:
+  contents: read
+jobs:
+  proto:
+    name: Proto contracts and generated clients
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.3.10'
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: apps/backend/go.mod
+          cache-dependency-path: |
+            apps/backend/go.sum
+            proto/gen/go/go.sum
+      - run: bun install --frozen-lockfile
+        working-directory: apps/web
+      - run: npm run proto:check
+      - run: npm run proto:breaking
+        env:
+          PROTO_BASE_REF: origin/dev
+  web:
+    name: Web typecheck build and browser acceptance
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:17.7-alpine
+        env:
+          POSTGRES_PASSWORD: screening-test
+          POSTGRES_DB: screening_web_test
+        ports: ["55433:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres -d screening_web_test"
+          --health-interval 5s --health-timeout 3s --health-retries 15
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 3s --health-retries 15
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.3.10'
+      - run: bun install --frozen-lockfile
+      - name: Check shared web guidance
+        working-directory: .
+        run: npm run guidance:check
+      - name: Profit form boundary checks
+        working-directory: .
+        run: npm run test:web-guidance
+      - run: npm run test:imports-connect
+      - run: npm run typecheck
+      - run: ./node_modules/.bin/oxlint src/features/screening "src/app/api/ecom/[...path]/route.ts" "src/app/api/ecom/screening/[...path]/route.ts"
+      - name: Build Web
+        run: |
+          set +e
+          npm run build > /tmp/seller-web-build.log 2>&1
+          build_status=$?
+          cat /tmp/seller-web-build.log
+          if [ "$build_status" -ne 0 ]; then
+            node ../../scripts/report-ci-web-build.mjs /tmp/seller-web-build.log
+          fi
+          exit "$build_status"
+        env:
+          NEXT_PUBLIC_SENTRY_DISABLED: 'true'
+          NEXT_TELEMETRY_DISABLED: '1'
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: apps/backend/go.mod
+          cache-dependency-path: |
+            apps/backend/go.sum
+      - name: Browser acceptance against Go API
+        working-directory: .
+        env:
+          SCREENING_DATABASE_URL: postgresql://postgres:screening-test@127.0.0.1:55433/screening_web_test?sslmode=disable
+          SCREENING_STORAGE_DIR: /tmp/screening-browser-data
+          SCREENING_INTERNAL_SECRET: ci-browser-test-secret-with-at-least-32-characters
+          SCREENING_BROWSER_FIXTURE: '1'
+          SCREENING_IMPORTS_TRANSPORT: connect
+          SCREENING_IMPORT_READS_TRANSPORT: connect
+          SCREENING_IMPORT_WRITES_TRANSPORT: connect
+          SCREENING_BUSINESS_TRANSPORT: connect
+          ECOM_TRANSPORT: connect
+          AUTH_TRANSPORT: connect
+          ECOM_BROWSER_FIXTURE: '1'
+          ECOM_INTERNAL_SECRET: ci-ecom-secret-with-at-least-32-characters
+          ECOM_TEST_REDIS_URL: redis://127.0.0.1:6379/15
+          ECOM_API_URL: http://127.0.0.1:19581
+          SELLER_APP_ORIGIN: http://127.0.0.1:19443
+          SELLER_API_URL: http://127.0.0.1:19580
+          SCREENING_API_URL: http://127.0.0.1:19580
+          SCREENING_WEB_QA_URL: http://127.0.0.1:19443
+          NEXT_PUBLIC_SENTRY_DISABLED: 'true'
+        run: |
+          (cd apps/backend && go test ./internal/screening -c -o /tmp/screening-fixture)
+          (cd apps/backend && go test ./internal/ecom -c -o /tmp/ecom-fixture)
+          /tmp/ecom-fixture -test.run '^TestEcomBrowserFixture$' -test.timeout 5m > /tmp/ecom-api.log 2>&1 &
+          ecom_pid=$!
+          /tmp/screening-fixture -test.run '^TestBrowserFixture$' -test.timeout 5m > /tmp/screening-api.log 2>&1 &
+          api_pid=$!
+          npm --prefix apps/web run start -- --hostname 127.0.0.1 --port 19443 > /tmp/screening-web.log 2>&1 &
+          web_pid=$!
+          trap 'kill "$api_pid" "$web_pid" "$ecom_pid" 2>/dev/null || true' EXIT
+          for attempt in {1..60}; do
+            if curl -fsS http://127.0.0.1:19443/dashboard/ecom/screening -o /dev/null; then break; fi
+            sleep 1
+          done
+          (cd apps/backend && go test ./internal/ecom -count=1 -run '^TestBrowserScreening$' -v)
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: screening-browser-qa
+          path: |
+            /tmp/seller-web-build.log
+            /tmp/screening-go-qa
+            /tmp/screening-api.log
+            /tmp/ecom-api.log
+            /tmp/screening-web.log
+  auth:
+    name: Go authentication tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    services:
+      postgres:
+        image: postgres:17.7-alpine
+        env:
+          POSTGRES_PASSWORD: test-password
+          POSTGRES_DB: seller_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -h 127.0.0.1 -U postgres -d seller_test"
+          --health-interval 5s --health-timeout 3s --health-retries 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: apps/auth/go.mod
+          cache-dependency-path: apps/auth/go.sum
+      - run: go test -race ./...
+        working-directory: apps/auth
+        env:
+          TEST_DATABASE_URL: postgres://postgres:test-password@127.0.0.1:5432/seller_test?sslmode=disable
+  backend:
+    name: Go unified business and PostgreSQL Redis tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17.7-alpine
+        env:
+          POSTGRES_PASSWORD: screening-test
+          POSTGRES_DB: screening_ci_test
+        ports: ["55432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres -d screening_ci_test"
+          --health-interval 5s --health-timeout 3s --health-retries 15
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 3s --health-retries 15
+    defaults:
+      run:
+        working-directory: apps/backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: apps/backend/go.mod
+          cache-dependency-path: apps/backend/go.sum
+      - run: go test -race -count=1 -v ./...
+        env:
+          SCREENING_TEST_DATABASE_URL: postgresql://postgres:screening-test@127.0.0.1:55432/screening_ci_test?sslmode=disable
+          ECOM_TEST_REDIS_URL: redis://127.0.0.1:6379/15
+      - run: go vet ./...
+      - run: go build -trimpath ./...
+  required:
+    name: Dev CI required
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    if: always()
+    needs: [proto, web, auth, backend]
+    steps:
+      - name: Require all checks
+        env:
+          PROTO: ${{ needs.proto.result }}
+          WEB: ${{ needs.web.result }}
+          AUTH: ${{ needs.auth.result }}
+          BACKEND: ${{ needs.backend.result }}
+        run: test "$PROTO" = success && test "$WEB" = success && test "$AUTH" = success && test "$BACKEND" = success

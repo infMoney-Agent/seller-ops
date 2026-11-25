@@ -1,0 +1,6 @@
+services:
+  casdoor:
+    ports:
+      - "127.0.0.1:18000:8000"
+    environment:
+      origin: http://localhost:18000

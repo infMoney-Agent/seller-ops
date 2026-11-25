@@ -1,0 +1,747 @@
+{
+  "printers": {
+    "label": "3D 打印机",
+    "tiers": [
+      [
+        200,
+        12
+      ],
+      [
+        null,
+        5
+      ]
+    ],
+    "portion": true,
+    "minimum": "0.3",
+    "aliases": [
+      "3d printers",
+      "3d printing pens",
+      "3d打印机",
+      "3d打印笔",
+      "3D 打印机"
+    ],
+    "specific": true
+  },
+  "amazon": {
+    "label": "亚马逊设备配件",
+    "tiers": [
+      [
+        null,
+        45
+      ]
+    ],
+    "portion": false,
+    "minimum": "0.3",
+    "aliases": [
+      "亚马逊设备配件"
+    ],
+    "specific": true
+  },
+  "compact": {
+    "label": "小型电器",
+    "tiers": [
+      [
+        300,
+        15
+      ],
+      [
+        null,
+        8
+      ]
+    ],
+    "portion": true,
+    "minimum": "0.3",
+    "aliases": [
+      "compact appliances",
+      "small appliances",
+      "小家电",
+      "小型家电",
+      "小型电器"
+    ],
+    "specific": true
+  },
+  "appliances": {
+    "label": "大型电器",
+    "tiers": [
+      [
+        null,
+        8
+      ]
+    ],
+    "portion": false,
+    "minimum": "0.3",
+    "aliases": [
+      "full-size appliances",
+      "major appliances",
+      "大型电器"
+    ],
+    "specific": true
+  },
+  "auto": {
+    "label": "汽车和户外动力设备",
+    "tiers": [
+      [
+        null,
+        12
+      ]
+    ],
+    "portion": false,
+    "minimum": "0.3",
+    "aliases": [
+      "automotive",
+      "automotive and powersports",
+      "汽车用品",
+      "汽车和户外动力设备"
+    ],
+    "specific": false
+  },
+  "power": {
+    "label": "基础设备电动工具",
+    "tiers": [
+      [
+        null,
+        12
+      ]
+    ],
+    "portion": false,
+    "minimum": "0.3",
+    "aliases": [
+      "基础设备电动工具"
+    ],
+    "specific": true
+  },
+  "baby": {
+    "label": "母婴",
+    "tiers": [
+      [
+        10,
+        8
+      ],
+      [
+        null,
+        15
+      ]
+    ],
+    "portion": false,
+    "minimum": "0.3",
+    "aliases": [
+      "baby",
+      "baby products",
+      "母婴用品",
+      "母婴"
+    ],
+    "specific": false
+  },
+  "bags": {
+    "label": "背包、手提包和箱包",
+    "tiers": [
+      [
+        null,
+        15
+      ]
+    ],
+    "portion": false,
+    "minimum": "0.3",
+    "aliases": [
+      "luggage",
+      "luggage & travel gear",
+      "backpacks, handbags, and luggage",
+      "背包、手提包和箱包"
+    ],
+    "specific": true
+  },
+  "beauty": {
+    "label": "美妆个护健康",
+    "tiers": [
+      [
+        10,
+        8
+      ],
+      [
+        null,
+        15
+      ]
+    ],
+    "portion": false,
+    "minimum": "0.3",
+    "aliases": [
+      "beauty & personal care",
+      "health & household",
+      "beauty, health and personal care",
+      "美妆个护",
+      "美容个护",
+      "健康与家庭",
+      "健康与家居",
+      "美妆个护健康"
+    ],
+    "specific": false
+  },
+  "industrial": {
+    "label": "商业、工业与科学用品",
+    "tiers": [
+      [
+        null,
+        12
+      ]
+    ],
+    "portion": false,
+    "minimum": "0.3",
+    "aliases": [
+      "industrial & scientific",
+      "business, industrial, and scientific supplies",
+      "工业与科学",
+      "商业、工业与科学用品"
+    ],
+    "specific": false
+  },
+  "clothing": {
+    "label": "服装和配饰",
+    "tiers": [
+      [
+        15,
+        5
+      ],
+      [
+        20,
+        10
+      ],
+      [
+        null,
+        17
+      ]
+    ],
+    "portion": false,
+    "minimum": "0.3",
+    "aliases": [
+      "clothing",
+      "clothing and accessories",
+      "服装",
+      "服装配饰",
+      "服装和配饰"
+    ],
+    "specific": false
+  },
+  "computers": {
+    "label": "电脑",
+    "tiers": [
+      [
+        null,
+        8
+      ]
+    ],
+    "portion": false,
+    "minimum": "0.3",
+    "aliases": [
+      "computers",
+      "computers & tablets",
+      "电脑"
+    ],
+    "specific": true
+  },
+  "electronics": {
+    "label": "消费类电子产品",
+    "tiers": [
+      [
+        null,
+        8
+      ]
+    ],
+    "portion": false,
+    "minimum": "0.3",
+    "aliases": [
+      "consumer electronics",
+      "消费类电子产品"
+    ],
+    "specific": true
+  },
+  "accessories": {
+    "label": "电子产品配件",
+    "tiers": [
+      [
+        100,
+        15
+      ],
+      [
+        null,
+        8
+      ]
+    ],
+    "portion": true,
+    "minimum": "0.3",
+    "aliases": [
+      "electronics accessories",
+      "electronic accessories",
+      "电子配件",
+      "电子产品配件"
+    ],
+    "specific": true
+  },
+  "eyewear": {
+    "label": "眼镜",
+    "tiers": [
+      [
+        null,
+        15
+      ]
+    ],
+    "portion": false,
+    "minimum": "0.3",
+    "aliases": [
+      "eyewear",
+      "sunglasses",
+      "太阳镜",
+      "眼镜"
+    ],
+    "specific": true
+  },
+  "art": {
+    "label": "艺术品",
+    "tiers": [
+      [
+        100,
+        20
+      ],
+      [
+        1000,
+        15
+      ],
+      [
+        5000,
+        10
+      ],
+      [
+        null,
+        5
+      ]
+    ],
+    "portion": true,
+    "minimum": "1",
+    "aliases": [
+      "艺术品"
+    ],
+    "specific": false
+  },
+  "shoes": {
+    "label": "鞋靴",
+    "tiers": [
+      [
+        null,
+        15
+      ]
+    ],
+    "portion": false,
+    "minimum": "0.3",
+    "aliases": [
+      "shoes",
+      "footwear",
+      "鞋",
+      "鞋靴"
+    ],
+    "specific": true
+  },
+  "furniture": {
+    "label": "家具",
+    "tiers": [
+      [
+        200,
+        15
+      ],
+      [
+        null,
+        10
+      ]
+    ],
+    "portion": true,
+    "minimum": "0.3",
+    "aliases": [
+      "furniture",
+      "家具",
+      "家具"
+    ],
+    "specific": true
+  },
+  "gifts": {
+    "label": "礼品卡",
+    "tiers": [
+      [
+        null,
+        20
+      ]
+    ],
+    "portion": false,
+    "minimum": "0",
+    "aliases": [
+      "礼品卡"
+    ],
+    "specific": false
+  },
+  "grocery": {
+    "label": "食品",
+    "tiers": [
+      [
+        15,
+        8
+      ],
+      [
+        null,
+        15
+      ]
+    ],
+    "portion": false,
+    "minimum": "0",
+    "aliases": [
+      "grocery & gourmet food",
+      "grocery and gourmet",
+      "食品杂货",
+      "食品"
+    ],
+    "specific": false
+  },
+  "home": {
+    "label": "家居及厨房用品",
+    "tiers": [
+      [
+        null,
+        15
+      ]
+    ],
+    "portion": false,
+    "minimum": "0.3",
+    "aliases": [
+      "home & kitchen",
+      "home and kitchen",
+      "kitchen & dining",
+      "arts, crafts & sewing",
+      "家居与厨房",
+      "厨房与餐厅",
+      "艺术、工艺与缝纫",
+      "艺术、手工艺与缝纫",
+      "家居及厨房用品"
+    ],
+    "specific": false
+  },
+  "jewelry": {
+    "label": "珠宝首饰",
+    "tiers": [
+      [
+        250,
+        20
+      ],
+      [
+        null,
+        5
+      ]
+    ],
+    "portion": true,
+    "minimum": "0.3",
+    "aliases": [
+      "jewelry",
+      "珠宝",
+      "珠宝首饰"
+    ],
+    "specific": true
+  },
+  "garden": {
+    "label": "草坪和园艺",
+    "tiers": [
+      [
+        null,
+        15
+      ]
+    ],
+    "portion": false,
+    "minimum": "0.3",
+    "aliases": [
+      "patio, lawn & garden",
+      "lawn and garden",
+      "庭院、草坪与花园",
+      "庭院、草坪和花园",
+      "天井、草坪和花园",
+      "草坪和园艺"
+    ],
+    "specific": false
+  },
+  "mower": {
+    "label": "割草机和除雪机",
+    "tiers": [
+      [
+        500,
+        15
+      ],
+      [
+        null,
+        8
+      ]
+    ],
+    "portion": false,
+    "minimum": "0.3",
+    "aliases": [
+      "lawn mowers",
+      "snow throwers",
+      "snow blowers",
+      "割草机",
+      "除雪机",
+      "割草机和除雪机"
+    ],
+    "specific": true
+  },
+  "mattress": {
+    "label": "床垫",
+    "tiers": [
+      [
+        null,
+        15
+      ]
+    ],
+    "portion": false,
+    "minimum": "0.3",
+    "aliases": [
+      "mattresses",
+      "床垫",
+      "床垫"
+    ],
+    "specific": true
+  },
+  "media": {
+    "label": "媒介类商品",
+    "tiers": [
+      [
+        null,
+        15
+      ]
+    ],
+    "portion": false,
+    "minimum": "0",
+    "aliases": [
+      "books",
+      "dvd",
+      "movies & tv",
+      "cds & vinyl",
+      "software",
+      "图书",
+      "媒介类商品"
+    ],
+    "specific": false
+  },
+  "services": {
+    "label": "卖家自配送服务",
+    "tiers": [
+      [
+        null,
+        20
+      ]
+    ],
+    "portion": false,
+    "minimum": "0.3",
+    "aliases": [
+      "卖家自配送服务"
+    ],
+    "specific": false
+  },
+  "music": {
+    "label": "乐器和影音制作",
+    "tiers": [
+      [
+        null,
+        15
+      ]
+    ],
+    "portion": false,
+    "minimum": "0.3",
+    "aliases": [
+      "musical instruments",
+      "musical instruments and av production",
+      "乐器",
+      "乐器和影音制作"
+    ],
+    "specific": false
+  },
+  "office": {
+    "label": "办公用品",
+    "tiers": [
+      [
+        null,
+        15
+      ]
+    ],
+    "portion": false,
+    "minimum": "0.3",
+    "aliases": [
+      "office products",
+      "办公及学校用品",
+      "办公用品"
+    ],
+    "specific": false
+  },
+  "pets": {
+    "label": "宠物用品",
+    "tiers": [
+      [
+        null,
+        15
+      ]
+    ],
+    "portion": false,
+    "minimum": "0.3",
+    "aliases": [
+      "pet supplies",
+      "pet products",
+      "宠物用品"
+    ],
+    "specific": false
+  },
+  "prescription": {
+    "label": "宠物处方饲粮",
+    "tiers": [
+      [
+        null,
+        22
+      ]
+    ],
+    "portion": false,
+    "minimum": "0.3",
+    "aliases": [
+      "宠物处方饲粮"
+    ],
+    "specific": true
+  },
+  "sports": {
+    "label": "运动户外",
+    "tiers": [
+      [
+        null,
+        15
+      ]
+    ],
+    "portion": false,
+    "minimum": "0.3",
+    "aliases": [
+      "sports & outdoors",
+      "sports and outdoors",
+      "运动与户外",
+      "运动户外"
+    ],
+    "specific": false
+  },
+  "tires": {
+    "label": "轮胎",
+    "tiers": [
+      [
+        null,
+        10
+      ]
+    ],
+    "portion": false,
+    "minimum": "0.3",
+    "aliases": [
+      "tires",
+      "轮胎",
+      "轮胎"
+    ],
+    "specific": true
+  },
+  "tools": {
+    "label": "工具和家居装修",
+    "tiers": [
+      [
+        null,
+        15
+      ]
+    ],
+    "portion": false,
+    "minimum": "0.3",
+    "aliases": [
+      "tools & home improvement",
+      "tools and home improvement",
+      "工具与家装",
+      "工具和家居装修",
+      "工具和家居装修"
+    ],
+    "specific": false
+  },
+  "toys": {
+    "label": "玩具和游戏",
+    "tiers": [
+      [
+        null,
+        15
+      ]
+    ],
+    "portion": false,
+    "minimum": "0.3",
+    "aliases": [
+      "toys & games",
+      "toys and games",
+      "玩具与游戏",
+      "玩具和游戏"
+    ],
+    "specific": false
+  },
+  "games": {
+    "label": "视频游戏和游戏配件",
+    "tiers": [
+      [
+        null,
+        15
+      ]
+    ],
+    "portion": false,
+    "minimum": "0",
+    "aliases": [
+      "视频游戏和游戏配件"
+    ],
+    "specific": false
+  },
+  "consoles": {
+    "label": "视频游戏机",
+    "tiers": [
+      [
+        null,
+        8
+      ]
+    ],
+    "portion": false,
+    "minimum": "0",
+    "aliases": [
+      "consoles",
+      "video game consoles",
+      "游戏主机",
+      "视频游戏机"
+    ],
+    "specific": true
+  },
+  "watches": {
+    "label": "钟表",
+    "tiers": [
+      [
+        1500,
+        16
+      ],
+      [
+        null,
+        3
+      ]
+    ],
+    "portion": true,
+    "minimum": "0.3",
+    "aliases": [
+      "watches",
+      "手表",
+      "钟表"
+    ],
+    "specific": true
+  },
+  "other": {
+    "label": "其他",
+    "tiers": [
+      [
+        null,
+        15
+      ]
+    ],
+    "portion": false,
+    "minimum": "0.3",
+    "aliases": [],
+    "specific": false
+  }
+}

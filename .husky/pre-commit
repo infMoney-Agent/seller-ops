@@ -1,2 +1,2 @@
-export PATH="$HOME/.bun/bin:$PATH"
-lint-staged
+cd apps/web
+npx lint-staged

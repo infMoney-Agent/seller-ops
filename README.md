@@ -1,260 +1,96 @@
-<h1 align="center">Admin Dashboard Template with Next.js &amp; Shadcn UI</h1>
+# Seller Ops · 电商运营工作台
 
-<div align="center">Free, open source admin dashboard starter built with Next.js 16, shadcn/ui, Tailwind CSS, and TypeScript</div>
+Next.js 前端、Go 登录服务和 Go 业务后端组成的亚马逊运营工作台。业务后端已全部使用 Go，不需要 Python、Celery 或独立 Worker 进程。
 
-<div align="center">
-  <a href="https://dub.sh/shadcn-dashboard"><strong>View Demo</strong></a>
-</div>
+## 运行结构
 
-<br />
+| 应用进程 | 目录 | 默认内部端口 | 职责 |
+| --- | --- | --- | --- |
+| 登录服务 | `apps/auth` | 8080 | Casdoor OIDC、账号会话、租户及成员权限 |
+| 业务后端 | `apps/backend` | 8000 | 五个电商模块、产品初筛和所有后台任务 |
+| 前端 | `apps/web` | 3000 | 中文页面、会话验证和同域业务 API 代理 |
 
-<div align="center">
-  <img src="/public/shadcn-dashboard.png" alt="Shadcn Dashboard Cover" style="max-width: 100%; border-radius: 8px;" />
-</div>
+三个应用可以使用不同内部端口。浏览器通过 Caddy 的统一 HTTPS 入口访问前端；Casdoor 使用独立认证域名。PostgreSQL、Redis、Casdoor 和 Caddy 是基础服务，不属于上述三个应用进程。抓取网页时 Chromium 按需启动。
 
-<br />
+统一业务后端只监听一个端口。电商监控和初筛任务由同一 Go 进程中的 goroutine 执行，正常退出时会停止任务并释放连接。没有单独的 ecom-worker、screening-worker 或定时调度服务。
 
-<p align="center">
-  <a href="https://github.com/Kiranism/next-shadcn-dashboard-starter/stargazers"><img src="https://img.shields.io/github/stars/Kiranism/next-shadcn-dashboard-starter?style=social" alt="GitHub stars" /></a>
-  <a href="https://github.com/Kiranism/next-shadcn-dashboard-starter/network/members"><img src="https://img.shields.io/github/forks/Kiranism/next-shadcn-dashboard-starter?style=social" alt="Forks" /></a>
-  <a href="https://github.com/Kiranism/next-shadcn-dashboard-starter/blob/main/LICENSE"><img src="https://img.shields.io/github/license/Kiranism/next-shadcn-dashboard-starter" alt="MIT License" /></a>
-  <img src="https://img.shields.io/badge/Next.js-16-black" alt="Next.js" />
-  <a href="https://go.clerk.com/ILdYhn7"><img src="https://img.shields.io/badge/Sponsored_by-Clerk-6C47FF?style=flat-square&logo=clerk" alt="Sponsored by Clerk" /></a>
-</p>
+## 功能
 
-## Overview
+- 选品研究：读取 Amazon 美国站榜单当前页，通过已配置的模型评分。访问 Amazon 和模型均需要可用配置。
+- 商品页面生成：生成或优化标题、五点描述、描述、搜索词及 A+ 草稿，支持六种输出语言。
+- 评论分析、竞品监控和广告分析：按账号隔离数据，缺少外部授权或费用数据时明确提示。
+- 产品初筛：XLSX/CSV/ZIP 导入、跨月商品数据、父子体、规则初筛、单条及批量复核、利润快照和 Excel 导出。
 
-A free, open source (MIT) admin dashboard starter built with Next.js 16, shadcn/ui on Base UI primitives, TypeScript, and Tailwind CSS v4.
+账号登录后使用绑定的租户，不提供工作区切换。初筛业务库 `seller_screening` 与用户管理库 `seller_ops`、Casdoor 数据库分开；合并进程不会合并数据库。监控列表和快照沿用 Redis。
 
-Every feature is a working, production-ready implementation, not static demo UI. Tables search, filter, sort, and paginate for real. Forms validate and mutate with cache invalidation.
-Auth, organizations, and billing function end-to-end.
+## 目录
 
-Clone it, strip what you don't need with the built-in cleanup script, and start building on patterns you'd write yourself. It works well as a base for SaaS apps, internal tools, and admin panels.
-
-### Why This Template
-
-Most dashboard templates are static demo boilerplates: screens that look finished but need rebuilding the moment you wire in real data. This starter takes the opposite approach:
-
-- **Everything actually works.** Data tables run end-to-end: server prefetch, client-side React Query cache, and URL-synced search, filtering, sorting, and pagination via nuqs. Forms are built from reusable, composable fields with Zod validation, including advanced patterns like multi-step and dialog/sheet forms, with real create/update mutations and cache invalidation on success.
-- **Industry-standard implementations.** The data layer follows the official TanStack Query SSR pattern (server prefetch + `HydrationBoundary` + `useSuspenseQuery`), typed end to end, organized in a feature-based structure with a clean API layer per feature. These are patterns you copy into production code as-is, not mockups you rebuild from scratch.
-- **Minimal by design.** Deliberately lean, with no bloated boilerplate, so you spend your time tweaking it to your use case, not deleting someone else's code. The built-in [cleanup script](#cleanup-script-start-minimal-in-60-seconds) strips any feature you don't need in under a minute.
-
-### Tech Stack
-
-- Framework - [Next.js 16](https://nextjs.org/16)
-- Language - [TypeScript](https://www.typescriptlang.org)
-- Auth - [Clerk](https://go.clerk.com/ILdYhn7)
-- Error tracking - [Sentry](https://sentry.io/for/nextjs/?utm_source=github&utm_medium=paid-community&utm_campaign=general-fy26q2-nextjs&utm_content=github-banner-project-tryfree)
-- Styling - [Tailwind CSS v4](https://tailwindcss.com)
-- Components - [shadcn/ui](https://ui.shadcn.com) on [Base UI](https://base-ui.com) primitives
-- Charts - [Recharts](https://recharts.org) • [Evil Charts](https://evilcharts.com/)
-- Schema validation - [Zod](https://zod.dev)
-- Data fetching - [TanStack React Query](https://tanstack.com/query)
-- State management - [Zustand](https://zustand-demo.pmnd.rs)
-- Search param state - [Nuqs](https://nuqs.47ng.com/)
-- Tables - [TanStack Data Tables](https://ui.shadcn.com/docs/components/data-table) • [Dice Table](https://www.diceui.com/docs/components/data-table)
-- Forms - [TanStack Form](https://tanstack.com/form) + [Zod](https://zod.dev)
-- Command+K interface - [kbar](https://kbar.vercel.app/)
-- Linter / Formatter - [OxLint](https://oxc.rs/docs/guide/usage/linter) • [Oxfmt](https://oxc.rs/docs/guide/usage/formatter)
-- Pre-commit hooks - [Husky](https://typicode.github.io/husky/)
-- Themes - [tweakcn](https://tweakcn.com/)
-
-_Looking for a TanStack Start version? Here's the [repo](https://git.new/tanstack-start-dashboard)._
-
-## Features
-
-- Pre-built dashboard layout with sidebar, header, and content area
-- Analytics overview page with cards and charts
-- Data tables with React Query prefetch, client-side cache, search, filter, and pagination
-- Authentication and user management through Clerk
-- Multi-tenant workspaces using Clerk Organizations (create, switch, manage teams)
-- Billing and subscriptions via Clerk Billing for B2B, with plan management and feature gating
-- Client-side RBAC navigation that filters menu items by organization, permissions, and roles
-- Infobar component for tips, status messages, or contextual notes on any page
-- shadcn/ui components on Base UI primitives, styled with Tailwind CSS
-- Six-plus themes with a theme switcher
-- Feature-based folder structure
-- A starting point for SaaS dashboards, internal tools, and client admin panels
-
-## Use Cases
-
-A few things you can build with it:
-
-- SaaS admin dashboards
-- Internal tools and operations panels
-- Analytics dashboards
-- Client project admin panels
-- A boilerplate for new Next.js shadcn projects
-
-## Pages
-
-| Page                                                                                                                                                                  | Notes                                                                                                                                                                                |
-| :------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [Signup / Signin](https://go.clerk.com/ILdYhn7)                                                                                                                       | Auth handled by Clerk, with passwordless sign-in, social logins, and enterprise SSO. |
-| [Dashboard Overview](https://shadcn-dashboard.kiranism.dev/dashboard)                                                                                                 | Cards and Recharts graphs. Parallel routes give each section its own loading and error state.                                                                                       |
-| [Product List (Table)](https://shadcn-dashboard.kiranism.dev/dashboard/product)                                                                                       | TanStack Table plus React Query (server prefetch, client cache) with nuqs URL state for search, filter, and pagination. `shallow: true` keeps interactions on the client.           |
-| [Create Product Form](https://shadcn-dashboard.kiranism.dev/dashboard/product/new)                                                                                    | TanStack Form and Zod with `useMutation` for create and update. Cache is invalidated on success.                                                                                    |
-| [Users (Table)](https://shadcn-dashboard.kiranism.dev/dashboard/users)                                                                                                | Same setup as Products: React Query with nuqs, server prefetch, and client-side pagination and filtering.                                                                           |
-| [React Query Demo](https://shadcn-dashboard.kiranism.dev/dashboard/react-query)                                                                                       | A Pokemon API example showing the server prefetch, `HydrationBoundary`, and `useSuspenseQuery` pattern with client-side cache. |
-| [Profile](https://shadcn-dashboard.kiranism.dev/dashboard/profile)                                                                                                   | Clerk's account management UI for profile and security settings. |
-| [Kanban Board](https://shadcn-dashboard.kiranism.dev/dashboard/kanban)                                                                                                | Drag-and-drop task board built with dnd-kit and Zustand. Column sorting, priority badges, assignees, and due dates. |
-| [Chat](https://shadcn-dashboard.kiranism.dev/dashboard/chat)                                                                                                          | Messaging UI with a conversation list, message bubbles, quick replies, attachments, and an auto-reply demo. Multi-panel layout that works on mobile. |
-| [AI Chat](https://shadcn-dashboard.kiranism.dev/dashboard/ai-chat)                                                                                                    | Scripted AI chat that streams a predefined conversation through the real `useChat` lifecycle — no model, API route, or key. Built with the shadcn chat components (MessageScroller, Bubble, Marker). |
-| [Notifications](https://shadcn-dashboard.kiranism.dev/dashboard/notifications)                                                                                        | Notification center with a header badge, popover preview, and a full page with All / Unread / Read tabs. Includes mark-as-read and mark-all-as-read. |
-| [Workspaces](https://shadcn-dashboard.kiranism.dev/dashboard/workspaces)                                                                                              | Organization management using Clerk's `<OrganizationList />`. View, create, and switch between organizations. |
-| [Team Management](https://shadcn-dashboard.kiranism.dev/dashboard/workspaces/team)                                                                                    | Team management using Clerk's `<OrganizationProfile />`. Manage members, roles, permissions, security, and org details. Needs an active organization. |
-| [Billing & Plans](https://shadcn-dashboard.kiranism.dev/dashboard/billing)                                                                                            | Billing page using Clerk's `<PricingTable />`. View plans, subscribe, and manage subscriptions. Needs an active organization. |
-| [Exclusive Page](https://shadcn-dashboard.kiranism.dev/dashboard/exclusive)                                                                                           | Plan-based access control with Clerk's `<Protect>`. Only available to organizations on the Pro plan, with a fallback UI for everyone else. |
-| [Not Found](https://shadcn-dashboard.kiranism.dev/dashboard/notfound)                                                                                                 | A root-level not-found page.                                                                                                                                                        |
-| [Global Error](https://sentry.io/for/nextjs/?utm_source=github&utm_medium=paid-community&utm_campaign=general-fy26q2-nextjs&utm_content=github-banner-project-tryfree) | A shared error page wired to Sentry for logging, reports, and session replay. |
-
-## Folder Structure
-
-```plaintext
-src/
-├── app/                           # Next.js App Router directory
-│   ├── auth/                      # Auth pages (sign-in, sign-up)
-│   ├── dashboard/                 # Dashboard route group
-│   │   ├── overview/              # Analytics with parallel routes
-│   │   ├── product/               # Product CRUD pages (React Query)
-│   │   ├── users/                 # Users table (React Query + nuqs)
-│   │   ├── react-query/           # React Query demo page
-│   │   ├── kanban/                # Task board page
-│   │   ├── chat/                  # Messaging page
-│   │   ├── ai-chat/               # AI chat streaming demo
-│   │   ├── notifications/         # Notifications page
-│   │   ├── workspaces/            # Org management & teams
-│   │   ├── billing/               # Billing & plans
-│   │   ├── profile/               # User profile
-│   │   └── exclusive/             # Plan-gated page
-│   └── api/                       # API routes
-│
-├── components/                    # Shared components
-│   ├── ui/                        # UI primitives (buttons, inputs, dialogs, etc.)
-│   ├── layout/                    # Layout components (header, sidebar, etc.)
-│   ├── themes/                    # Theme system (selector, mode toggle, config)
-│   └── kbar/                      # Command+K interface
-│
-├── features/                      # Feature-based modules
-│   ├── overview/                  # Dashboard analytics (charts, cards)
-│   ├── products/                  # Product listing, form, tables (React Query)
-│   ├── users/                     # User management table (React Query)
-│   ├── react-query-demo/          # React Query demo (Pokemon API)
-│   ├── kanban/                    # Drag-drop task board
-│   ├── chat/                      # Messaging (conversations, bubbles, composer)
-│   ├── ai-chat/                   # Scripted useChat streaming demo (shadcn chat UI)
-│   ├── notifications/             # Notification center & store
-│   ├── auth/                      # Auth components
-│   └── profile/                   # Profile form schemas
-│
-├── lib/                           # Core utilities (query-client, searchparams, etc.)
-├── hooks/                         # Custom hooks
-├── config/                        # Navigation, infobar, data table config
-├── constants/                     # Mock data
-├── styles/                        # Global CSS & theme files
-│   └── themes/                    # Individual theme CSS files
-└── types/                         # TypeScript types
+```text
+apps/auth/                         Go 登录及账号管理
+apps/backend/main.go               统一业务进程入口
+apps/backend/internal/ecom/        采集、模型与原五个业务模块
+apps/backend/internal/screening/   初筛逻辑、内嵌迁移与规则
+apps/backend/scripts/init-db.sh    独立初筛数据库初始化
+apps/web/                          Next.js 前端
+compose.yaml                       当前部署配置
 ```
 
-## Getting Started
+## Compose 启动
 
-> [!NOTE]
-> This starter uses Next.js 16 (App Router) with React 19 and shadcn/ui. To run it locally:
+将 [环境配置示例](apps/auth/casdoor/env.example) 复制到仓库外的私有文件，填写密码、两个内部签名密钥和 OIDC 配置。已有数据卷不会自动重新执行 PostgreSQL 初始化脚本；独立初筛库由 `screening-db-init` 显式创建。
 
-Clone the repo:
-
-```
-git clone https://github.com/Kiranism/next-shadcn-dashboard-starter.git
-```
-
-- `bun install`
-- Copy the example env file: `cp env.example.txt .env.local`
-- Fill in the required variables in `.env.local`
-- `bun run dev`
-
-##### Environment variables
-
-See `env.example.txt` for the variables you need. They cover authentication and error tracking.
-
-##### Clerk setup
-
-For setting up Clerk auth (including organizations, workspaces, and teams), see [clerk_setup.md](./docs/clerk_setup.md).
-
-The app should now be running at http://localhost:3000.
-
-> [!WARNING]
-> After cloning or forking, be careful when pulling the latest changes. Updates can cause merge conflicts.
-
----
-
-## Cleanup Script: Start Minimal in 60 Seconds
-
-Most starters make you hand-delete demo pages and rip out dependencies. This one ships with a cleanup script that removes the optional features you don't need (folders, files, dependencies, docs, and env entries), leaving a minimal base to build on. Run `--list` to see what's removable:
-
-```bash
-bun run cleanup --interactive    # interactive mode
-bun run cleanup --list           # see available features
-bun run cleanup --dry-run chat   # preview before removing
-bun run cleanup kanban chat      # remove specific features
+```sh
+docker compose --env-file /path/to/seller.env --profile app config --quiet
+docker compose --env-file /path/to/seller.env --profile app up -d --build --remove-orphans
+docker compose --env-file /path/to/seller.env --profile app logs --tail=100 api backend web
 ```
 
-Run `bun run cleanup --help` for all options (with npm, pass flags after `--`: `npm run cleanup -- --list`). The replacement files it writes live in `scripts/cleanup-templates/` as real, typechecked code. When you're done, delete `scripts/cleanup.js`, `scripts/cleanup-templates/`, and the `cleanup` entry in `package.json`.
+`backend-migrate` 是部署时的一次性迁移步骤，成功后退出；`backend` 随后启动 API 和任务循环。保留原数据库、Redis 和文件卷，切换时移除旧的独立 Worker 容器。
 
-## FAQ
+首次配置 Casdoor、回调和 SSH 转发见 [部署说明](docs/deployment.md)。使用本地覆盖文件 `apps/auth/casdoor/compose.local.yaml` 时，应用入口为 `http://localhost:18443`，认证入口为 `http://localhost:18444`。
 
-**Is it production ready?**
-Yes. Every feature is a complete, working implementation: authentication, CRUD flows, table search/filter/sort/pagination, and form validation with mutations all function end-to-end. It's a starting point for real applications, not a visual mockup.
+## 原生进程启动
 
-**How is this different from other dashboard templates?**
-Most dashboard templates are static demo boilerplates: screens that look finished but need rebuilding once you wire in real data. Here the tables, forms, auth, organizations, and billing all work end-to-end, the implementations follow official TanStack and Next.js patterns, and a cleanup script keeps the base minimal so you tweak it to your use case instead of deleting code.
+业务后端的完整变量见 [配置示例](apps/backend/.env.example)。先配置独立 PostgreSQL、Redis、持久化文件目录和两个至少 32 字节的签名密钥。
 
-**Is it free for commercial use?**
-Yes. MIT-licensed and free for both personal and commercial projects: no paid tier, no license keys.
+```sh
+cd apps/backend
+go build -o seller-backend .
+./seller-backend migrate
+BACKEND_ADDR=127.0.0.1:8000 ./seller-backend serve
+```
 
-**Can I use it without Clerk?**
-Yes. Run `bun run cleanup clerk` to remove Clerk authentication (along with organizations and billing) and wire in your own auth solution.
+另开两个终端启动 `apps/auth` 的登录服务和 `apps/web` 的前端。Next.js 的配置为：
 
-**How do I remove demo pages or features I don't need?**
-Run `bun run cleanup --interactive` and pick what to strip, or `bun run cleanup --list` to see what can be removed.
+```text
+SELLER_API_URL=http://127.0.0.1:8080
+ECOM_API_URL=http://127.0.0.1:8000
+SCREENING_API_URL=http://127.0.0.1:8000
+SELLER_APP_ORIGIN=http://localhost:3000
+```
 
-**Does it support Next.js 16, React 19, and Tailwind CSS v4?**
-Yes. The template is built on Next.js 16 (App Router), React 19, and Tailwind CSS v4, with shadcn/ui on Base UI primitives, and is actively maintained to track new releases.
+前端的两个签名密钥分别与业务后端一致。登录服务的 `APP_ORIGIN` 和 Casdoor 的回调地址使用相同前端入口。网页采集需要 Chromium，可通过 `CHROME_BIN` 指定路径。
 
-**Can I use npm instead of Bun?**
-Yes. Bun is preferred, but npm works too, and the repo even ships both Node.js and Bun Dockerfiles for deployment.
+## 团队开发约定
 
-**Does it work with AI coding assistants?**
-Yes. The repo ships AGENTS.md and CLAUDE.md with the project's conventions, plus a bundled Claude Code skill (`.claude/skills/kiranism-shadcn-dashboard`) that teaches agents how to add pages, tables, forms, and navigation the template way. Works with Claude Code, Cursor, and any tool that reads AGENTS.md.
+所有贡献者及 AI 编程助手遵循 [AGENTS.md](AGENTS.md) 和 [CONTRIBUTING.md](CONTRIBUTING.md)。项目内已集成 [Modern Web Guidance](docs/web-development-guidance.md)，前端改动先查询指南，再实现和验证；通过 `npm run guidance:check` 检查接入完整性。
 
-**What data fetching pattern does it use?**
-TanStack React Query with the official SSR pattern: `prefetchQuery` on the server, `HydrationBoundary` with `dehydrate` for hydration, and `useSuspenseQuery` on the client, plus nuqs for URL-synced search-param state. Mutations invalidate the cache on success.
+## 检查与发布
 
-**How do I deploy it?**
-Deploy to Vercel out of the box, or use the included Docker setups: a Node.js Dockerfile and a Bun Dockerfile, both using Next.js standalone output mode. See the [deployment guide](./docs/deployment.md).
+```sh
+(cd apps/auth && go test ./...)
+(cd apps/backend && go test -race ./... && go vet ./...)
+(cd apps/web && bun install --frozen-lockfile)
+npm run typecheck
+NEXT_PUBLIC_SENTRY_DISABLED=true npm run build
+```
 
-## Deploy
+数据库测试只使用独立的 `*_test` 初筛库和认证测试库；电商 Redis 测试只使用 DB15。统一进程的路由、健康检查和 Worker 退出也有回归测试。浏览器验收使用隔离的合成数据。
 
-Deploy to Vercel out of the box, or use the included Docker setups: a Node.js Dockerfile and a Bun Dockerfile, both using Next.js standalone output mode. Full guide: [docs/deployment.md](./docs/deployment.md).
+合并到 `dev` 必须经过 PR 和 `Dev CI required` 检查，随后 CI/CD 发布 web、auth、backend 三个应用镜像。发布与回滚见 [CI/CD 说明](docs/ci-cd.md)和[Go 后端说明](docs/go-backend-migration.md)。
 
-### Support
+## 设计与许可证
 
-If this template saved you some time, a star is appreciated. You can also [buy me a coffee](https://buymeacoffee.com/kir4n) if you'd like.
+[产品初筛](docs/product-screening.md) · [九表数据库设计](docs/product-screening-database.md) · [SQL 快照](docs/product-screening-schema.sql) · [OpenAPI](docs/screening-openapi.json)
 
-[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-support-yellow?style=flat-square&logo=buymeacoffee)](https://buymeacoffee.com/kir4n)
-
-<!--
-
-SEO keywords:
-
-open source admin dashboard, nextjs admin dashboard, nextjs dashboard template,
-
-shadcn ui dashboard, admin dashboard starter, next.js 16, typescript dashboard,
-
-dashboard ui template, nextjs shadcn admin panel, react admin dashboard,
-
-tailwind css admin dashboard, production ready admin dashboard template,
-
-free react admin dashboard, nextjs 16 dashboard starter, working crud dashboard
-
--->
-
+历史验证记录保存在 `docs/archive`。仓库许可证见 [LICENSE](LICENSE)，引入的 EcomAgent MIT 许可证见 [后端](apps/backend/internal/ecom/LICENSE)和[前端](apps/web/src/features/ecom/LICENSE)。[上游项目](https://github.com/yoligehude14753/ecom-agent)的原始导入记录保留在 Git 历史中。

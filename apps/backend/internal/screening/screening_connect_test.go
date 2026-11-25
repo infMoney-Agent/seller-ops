@@ -1,0 +1,113 @@
+package screening
+
+import (
+	"connectrpc.com/connect"
+	"context"
+	"encoding/json"
+	"fmt"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
+	"net/http"
+	"net/http/httptest"
+	"reflect"
+	screeningv1 "seller-ops/contracts/sellerops/screening/v1"
+	"seller-ops/rpccompat"
+	"strings"
+	"testing"
+	"time"
+)
+
+func testScreeningRPCReadParity(t *testing.T, svc *service, server *httptest.Server) {
+	t.Helper()
+	id := uuid()
+	if _, err := svc.db.Exec(context.Background(), "INSERT INTO ps_products(tenant_id,id,asin,title)VALUES(501,$1,'RPC0000001','RPC fixture product')", id); err != nil {
+		t.Fatal(err)
+	}
+	cases := []struct {
+		name, path, input string
+		response          proto.Message
+	}{
+		{"ListProducts", "products", `{}`, &screeningv1.ListProductsResponse{}}, {"GetSummary", "summary", `{}`, &screeningv1.GetSummaryResponse{}}, {"GetProduct", "products/" + id, string(encoded(Object{"id": id})), &screeningv1.GetProductResponse{}}, {"GetProductFamily", "products/" + id + "/family", string(encoded(Object{"id": id})), &screeningv1.GetProductFamilyResponse{}},
+		{"ListProductMonthly", "products/" + id + "/monthly", string(encoded(Object{"id": id})), &screeningv1.ListProductMonthlyResponse{}}, {"ListProductObservations", "products/" + id + "/observations", string(encoded(Object{"id": id})), &screeningv1.ListProductObservationsResponse{}}, {"ListProductHistory", "products/" + id + "/history", string(encoded(Object{"id": id})), &screeningv1.ListProductHistoryResponse{}}, {"ListProductReferences", "products/" + id + "/references", string(encoded(Object{"id": id})), &screeningv1.ListProductReferencesResponse{}}, {"ListProfitScenarios", "products/" + id + "/profit-scenarios", string(encoded(Object{"id": id})), &screeningv1.ListProfitScenariosResponse{}},
+		{"ListParentMonthly", "parents/monthly", `{}`, &screeningv1.ListParentMonthlyResponse{}}, {"ListMonths", "months", `{}`, &screeningv1.ListMonthsResponse{}}, {"ListTrademarkOptions", "trademark-options", `{}`, &screeningv1.ListTrademarkOptionsResponse{}}, {"ListReviewCategories", "review-categories", `{}`, &screeningv1.ListReviewCategoriesResponse{}}, {"GetReviewWorkspace", "review-workspace", `{}`, &screeningv1.GetReviewWorkspaceResponse{}}, {"ListReviewBatches", "review-batches", `{}`, &screeningv1.ListReviewBatchesResponse{}}, {"ListPolicies", "policies", `{}`, &screeningv1.ListPoliciesResponse{}}, {"ListProfitTemplates", "profit/templates", `{}`, &screeningv1.ListProfitTemplatesResponse{}}, {"ListProfitProducts", "profit/products", `{}`, &screeningv1.ListProfitProductsResponse{}},
+	}
+	for _, tc := range cases {
+		t.Run("business/"+tc.name, func(t *testing.T) {
+			restPath := "/api/v1/screening/" + tc.path
+			req, _ := http.NewRequest("GET", server.URL+restPath, nil)
+			signImportRequest(req.Header, "GET", restPath, svc.cfg.Secret, 501, fmt.Sprint(time.Now().Unix()))
+			legacy, err := server.Client().Do(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer legacy.Body.Close()
+			if legacy.StatusCode != 200 {
+				t.Fatal("legacy", legacy.StatusCode)
+			}
+			procedure := ScreeningRPCPrefix + tc.name
+			req, _ = http.NewRequest("POST", server.URL+procedure, strings.NewReader(tc.input))
+			signImportRequest(req.Header, "POST", procedure, svc.cfg.Secret, 501, fmt.Sprint(time.Now().Unix()))
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("Connect-Protocol-Version", "1")
+			result, err := server.Client().Do(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer result.Body.Close()
+			if result.StatusCode != 200 {
+				var message any
+				json.NewDecoder(result.Body).Decode(&message)
+				t.Fatal("RPC", result.StatusCode, message)
+			}
+			var raw json.RawMessage
+			if err = json.NewDecoder(result.Body).Decode(&raw); err != nil {
+				t.Fatal(err)
+			}
+			if err = protojson.Unmarshal(raw, tc.response); err != nil {
+				t.Fatal(err)
+			}
+			field := tc.response.ProtoReflect().Descriptor().Fields().ByName("data")
+			data := tc.response.ProtoReflect().Get(field).Message().Interface()
+			projected, err := rpccompat.Legacy(data)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var a, b any
+			json.NewDecoder(legacy.Body).Decode(&a)
+			json.Unmarshal(encoded(projected), &b)
+			if !reflect.DeepEqual(a, b) {
+				t.Fatalf("legacy/RPC differs %s %s", encoded(a), encoded(b))
+			}
+		})
+	}
+}
+
+func TestRPCResourceFieldsCannotSelectAnotherOperation(t *testing.T) {
+	ctx := context.WithValue(context.Background(), identityKey{}, identity{Tenant: 501, User: 7, Role: "member"})
+	svc := &service{}
+	for _, id := range []string{"", uuid() + "/history", strings.Repeat("x", 36)} {
+		req := connect.NewRequest(&screeningv1.GetProductRequest{Id: &id})
+		if _, err := svc.GetProduct(ctx, req); connect.CodeOf(err) != connect.CodeInvalidArgument {
+			t.Fatal("invalid resource was not rejected", id, err)
+		}
+	}
+	key := strings.Repeat("a", 64) + "/products"
+	if _, err := svc.ListGroupProducts(ctx, connect.NewRequest(&screeningv1.ListGroupProductsRequest{GroupKey: &key})); connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Fatal("group path injection accepted", err)
+	}
+}
+
+func TestNumericStringProjection(t *testing.T) {
+	original := Object{"total": "9007199254740993", "page": 1, "page_size": 50, "items": []any{}}
+	var msg screeningv1.PageProduct
+	if err := rpccompat.FromLegacy(&msg, original); err != nil {
+		t.Fatal(err)
+	}
+	result, err := rpccompat.Legacy(&msg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result["total"] != original["total"] {
+		t.Fatalf("numeric string changed: %#v", result["total"])
+	}
+}

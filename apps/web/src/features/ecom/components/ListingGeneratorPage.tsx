@@ -1,0 +1,355 @@
+'use client';
+
+import { useEffect, useId, useRef, useState } from 'react';
+import { useMutation } from '@tanstack/react-query';
+import { Icons } from '@/components/icons';
+import { listingApi } from '../api';
+import { cn } from '@/lib/utils';
+import type { GeneratedListing } from '../types';
+
+const {
+  ecomFileText: FileText,
+  ecomCopy: Copy,
+  ecomCheck: Check,
+  ecomLoader2: Loader2,
+  ecomWand2: Wand2
+} = Icons;
+
+const LANGUAGES = [
+  { code: 'en', name: '英语（美国）' },
+  { code: 'de', name: '德语' },
+  { code: 'fr', name: '法语' },
+  { code: 'es', name: '西班牙语' },
+  { code: 'it', name: '意大利语' },
+  { code: 'jp', name: '日语' }
+];
+
+function CopyButton({ text, label }: { text: string; label: string }) {
+  const statusId = useId();
+  const [feedback, setFeedback] = useState('');
+  const lastMessage = useRef('');
+  const sequence = useRef(0);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      sequence.current += 1;
+      if (timer.current) clearTimeout(timer.current);
+    },
+    []
+  );
+  async function copy() {
+    const attempt = ++sequence.current;
+    if (timer.current) clearTimeout(timer.current);
+    let message: string;
+    try {
+      await navigator.clipboard.writeText(text);
+      message = '已复制';
+    } catch {
+      message = '复制失败，请重试或手动复制';
+    }
+    if (attempt !== sequence.current) return;
+    // Alternate repeated live-region messages so VoiceOver can announce retries.
+    if (message === lastMessage.current) message += '\u00a0';
+    lastMessage.current = message;
+    setFeedback(message);
+    timer.current = setTimeout(() => setFeedback(''), 4000);
+  }
+  return (
+    <span className='inline-flex items-center gap-2'>
+      <button
+        type='button'
+        aria-label={'复制' + label}
+        aria-describedby={statusId}
+        onClick={() => void copy()}
+        className='inline-flex min-h-6 min-w-6 items-center justify-center rounded text-slate-400 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-purple-400'
+      >
+        {feedback.startsWith('已复制') ? (
+          <Check aria-hidden='true' className='h-4 w-4 text-emerald-400' />
+        ) : (
+          <Copy aria-hidden='true' className='h-4 w-4' />
+        )}
+      </button>
+      <span id={statusId} role='status' aria-atomic='true' className='text-xs text-slate-300'>
+        {feedback}
+      </span>
+    </span>
+  );
+}
+
+function CharCount({ count, max }: { count: number; max: number }) {
+  const pct = count / max;
+  const color = pct > 0.9 ? 'text-red-400' : pct > 0.7 ? 'text-amber-400' : 'text-slate-500';
+  return (
+    <span className={cn('text-xs', color)}>
+      {count}/{max}
+    </span>
+  );
+}
+
+export default function ListingGeneratorPage() {
+  const fieldId = useId();
+  const [mode, setMode] = useState<'generate' | 'optimize'>('generate');
+  const [keyword, setKeyword] = useState('');
+  const [asin, setAsin] = useState('');
+  const [language, setLanguage] = useState('en');
+  const [productDetails, setProductDetails] = useState('');
+
+  const generateMutation = useMutation({
+    mutationFn: () =>
+      listingApi.generate({
+        keyword,
+        language,
+        product_details: productDetails ? JSON.parse(productDetails) : undefined
+      })
+  });
+
+  const optimizeMutation = useMutation({
+    mutationFn: () => listingApi.optimize({ asin, language })
+  });
+
+  const isPending = generateMutation.isPending || optimizeMutation.isPending;
+  const listing: GeneratedListing | undefined =
+    mode === 'generate' ? generateMutation.data : optimizeMutation.data;
+  const error = mode === 'generate' ? generateMutation.error : optimizeMutation.error;
+
+  const handleSubmit = () => {
+    if (mode === 'generate') generateMutation.mutate();
+    else optimizeMutation.mutate();
+  };
+
+  return (
+    <div className='p-4 sm:p-8 max-w-6xl mx-auto'>
+      <div className='mb-8'>
+        <h1 className='text-2xl font-bold text-white flex items-center gap-2'>
+          <FileText className='w-6 h-6 text-purple-400' />
+          商品页面生成
+        </h1>
+        <p className='text-slate-400 mt-1'>生成面向搜索和转化的亚马逊商品页面文案。</p>
+      </div>
+
+      {/* Mode toggle */}
+      <div className='flex gap-2 mb-6'>
+        {(['generate', 'optimize'] as const).map((m) => (
+          <button
+            key={m}
+            onClick={() => setMode(m)}
+            className={cn(
+              'px-4 py-2 rounded-lg text-sm font-medium transition-colors',
+              mode === m
+                ? 'bg-purple-600 text-white'
+                : 'bg-slate-800 text-slate-400 hover:text-white'
+            )}
+          >
+            {m === 'generate' ? '按关键词生成' : '按 ASIN 优化'}
+          </button>
+        ))}
+      </div>
+
+      {/* Input form */}
+      <div className='p-5 bg-slate-900 rounded-xl border border-slate-800 mb-6 space-y-4'>
+        {mode === 'generate' ? (
+          <>
+            <div>
+              <label
+                id={fieldId + '-ecom-field-1-label'}
+                htmlFor={fieldId + '-ecom-field-1'}
+                className='text-xs text-slate-400 font-medium mb-1 block'
+              >
+                主要关键词或商品描述 *
+              </label>
+              <input
+                aria-labelledby={fieldId + '-ecom-field-1-label'}
+                id={fieldId + '-ecom-field-1'}
+                value={keyword}
+                onChange={(e) => setKeyword(e.target.value)}
+                placeholder='例如：32 盎司不锈钢保温水壶'
+                className='w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-lg px-3 py-2.5 focus:ring-1 focus:ring-purple-500 outline-none placeholder:text-slate-600'
+              />
+            </div>
+            <div>
+              <label
+                id={fieldId + '-ecom-field-2-label'}
+                htmlFor={fieldId + '-ecom-field-2'}
+                className='text-xs text-slate-400 font-medium mb-1 block'
+              >
+                补充商品信息（可选，JSON 格式）
+              </label>
+              <textarea
+                aria-labelledby={fieldId + '-ecom-field-2-label'}
+                id={fieldId + '-ecom-field-2'}
+                value={productDetails}
+                onChange={(e) => setProductDetails(e.target.value)}
+                placeholder='{"price": 24.99, "material": "不锈钢", "capacity": "32oz"}'
+                rows={3}
+                className='w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-lg px-3 py-2.5 focus:ring-1 focus:ring-purple-500 outline-none placeholder:text-slate-600 font-mono resize-none'
+              />
+            </div>
+          </>
+        ) : (
+          <div>
+            <label
+              id={fieldId + '-ecom-field-3-label'}
+              htmlFor={fieldId + '-ecom-field-3'}
+              className='text-xs text-slate-400 font-medium mb-1 block'
+            >
+              待优化的 ASIN *
+            </label>
+            <input
+              aria-labelledby={fieldId + '-ecom-field-3-label'}
+              id={fieldId + '-ecom-field-3'}
+              value={asin}
+              onChange={(e) => setAsin(e.target.value.toUpperCase())}
+              placeholder='B01MFCXDYG'
+              maxLength={10}
+              className='w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-lg px-3 py-2.5 focus:ring-1 focus:ring-purple-500 outline-none placeholder:text-slate-600 font-mono'
+            />
+          </div>
+        )}
+
+        <div className='flex items-end gap-4'>
+          <div>
+            <label
+              id={fieldId + '-ecom-field-4-label'}
+              htmlFor={fieldId + '-ecom-field-4'}
+              className='text-xs text-slate-400 font-medium mb-1 block'
+            >
+              文案语言
+            </label>
+            <select
+              aria-labelledby={fieldId + '-ecom-field-4-label'}
+              id={fieldId + '-ecom-field-4'}
+              value={language}
+              onChange={(e) => setLanguage(e.target.value)}
+              className='bg-slate-800 border border-slate-700 text-white text-sm rounded-lg px-3 py-2 focus:ring-1 focus:ring-purple-500 outline-none'
+            >
+              {LANGUAGES.map((l) => (
+                <option key={l.code} value={l.code}>
+                  {l.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <button
+            onClick={handleSubmit}
+            disabled={isPending || (mode === 'generate' ? !keyword : !asin)}
+            className='flex items-center gap-2 px-6 py-2 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white font-medium rounded-lg transition-colors'
+          >
+            {isPending ? (
+              <Loader2 className='w-4 h-4 animate-spin' />
+            ) : (
+              <Wand2 className='w-4 h-4' />
+            )}
+            {isPending ? '处理中…' : mode === 'generate' ? '生成商品页面文案' : '优化商品页面文案'}
+          </button>
+        </div>
+      </div>
+
+      {error && (
+        <div className='mb-4 p-4 bg-red-900/30 border border-red-700 rounded-xl text-red-300 text-sm'>
+          {(error as Error).message}
+        </div>
+      )}
+
+      {/* Result */}
+      {listing && (
+        <div className='space-y-4'>
+          {/* SEO score */}
+          <div className='flex items-center justify-between p-4 bg-slate-900 rounded-xl border border-slate-800'>
+            <div>
+              <p className='text-white font-semibold'>商品页面文案已生成</p>
+              <p className='text-slate-400 text-sm mt-0.5'>
+                审核后可将各部分复制到亚马逊卖家平台。
+              </p>
+            </div>
+            <div className='text-right'>
+              <p className='text-xs text-slate-500 mb-1'>搜索优化评分</p>
+              <p
+                className={cn(
+                  'text-2xl font-bold',
+                  listing.seo_score >= 7
+                    ? 'text-emerald-400'
+                    : listing.seo_score >= 5
+                      ? 'text-amber-400'
+                      : 'text-red-400'
+                )}
+              >
+                {listing.seo_score.toFixed(1)}/10
+              </p>
+            </div>
+          </div>
+
+          {/* Title */}
+          <div className='p-5 bg-slate-900 rounded-xl border border-slate-800'>
+            <div className='flex items-center justify-between mb-3'>
+              <h3 className='text-white font-semibold text-sm'>商品标题</h3>
+              <div className='flex items-center gap-2'>
+                <CharCount count={listing.character_counts.title} max={200} />
+                <CopyButton label='商品标题' text={listing.title} />
+              </div>
+            </div>
+            <p className='text-slate-300 text-sm leading-relaxed'>{listing.title}</p>
+          </div>
+
+          {/* Bullet points */}
+          <div className='p-5 bg-slate-900 rounded-xl border border-slate-800'>
+            <div className='flex items-center justify-between mb-3'>
+              <h3 className='text-white font-semibold text-sm'>五点描述</h3>
+              <CopyButton label='五点描述' text={listing.bullet_points.join('\n')} />
+            </div>
+            <ul className='space-y-2'>
+              {listing.bullet_points.map((bp, i) => (
+                <li key={i} className='flex items-start gap-2 text-sm text-slate-300'>
+                  <span className='text-purple-400 font-bold mt-0.5'>{i + 1}.</span>
+                  <span>{bp}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* Description */}
+          <div className='p-5 bg-slate-900 rounded-xl border border-slate-800'>
+            <div className='flex items-center justify-between mb-3'>
+              <h3 className='text-white font-semibold text-sm'>商品描述</h3>
+              <div className='flex items-center gap-2'>
+                <CharCount count={listing.character_counts.description} max={2000} />
+                <CopyButton label='商品描述' text={listing.description} />
+              </div>
+            </div>
+            <p className='text-slate-300 text-sm leading-relaxed whitespace-pre-wrap'>
+              {listing.description}
+            </p>
+          </div>
+
+          {/* Search terms */}
+          <div className='p-5 bg-slate-900 rounded-xl border border-slate-800'>
+            <div className='flex items-center justify-between mb-3'>
+              <h3 className='text-white font-semibold text-sm'>后台搜索词</h3>
+              <div className='flex items-center gap-2'>
+                <CharCount count={listing.character_counts.search_terms} max={250} />
+                <CopyButton label='后台搜索词' text={listing.search_terms.join(' ')} />
+              </div>
+            </div>
+            <div className='flex flex-wrap gap-2'>
+              {listing.search_terms.map((t, i) => (
+                <span key={i} className='text-xs bg-slate-800 text-slate-300 px-2 py-1 rounded-lg'>
+                  {t}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          {/* A+ draft */}
+          {listing.a_plus_draft && (
+            <div className='p-5 bg-slate-900 rounded-xl border border-slate-800'>
+              <div className='flex items-center justify-between mb-3'>
+                <h3 className='text-white font-semibold text-sm'>A+ 内容草稿</h3>
+                <CopyButton label='A+ 内容草稿' text={listing.a_plus_draft} />
+              </div>
+              <p className='text-slate-300 text-sm leading-relaxed'>{listing.a_plus_draft}</p>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}

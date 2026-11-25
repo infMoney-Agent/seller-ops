@@ -1,0 +1,404 @@
+syntax = "proto3";
+package sellerops.auth.v1;
+
+import "google/protobuf/empty.proto";
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "seller-ops/contracts/sellerops/auth/v1;authv1";
+message Workspace {
+  optional int64 id = 1;
+  optional string name = 2;
+  optional string role = 3;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message SessionProfile {
+  optional int64 id = 1;
+  optional string name = 2;
+  optional string email = 3;
+  optional bool email_verified = 4;
+  optional int64 workspace_id = 5;
+  optional string role = 6;
+  repeated Workspace workspaces = 7;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message ManagedProductInput {
+  optional string name = 1;
+  optional string category = 2;
+  optional double price = 3;
+  optional string description = 4;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message ManagedProduct {
+  optional int64 id = 1;
+  optional string name = 2;
+  optional string category = 3;
+  optional double price = 4;
+  optional string description = 5;
+  google.protobuf.Timestamp created_at = 6 [json_name = "created_at"];
+  google.protobuf.Timestamp updated_at = 7 [json_name = "updated_at"];
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message ProductResult {
+  optional bool success = 1;
+  google.protobuf.Timestamp time = 2;
+  optional string message = 3;
+  ManagedProduct product = 4;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message ProductListResult {
+  optional bool success = 1;
+  google.protobuf.Timestamp time = 2;
+  optional string message = 3;
+  optional int64 total_products = 4 [json_name = "total_products"];
+  optional int64 offset = 5;
+  optional int64 limit = 6;
+  repeated ManagedProduct products = 7;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message Member {
+  optional int64 id = 1;
+  optional string name = 2;
+  optional string email = 3;
+  optional string role = 4;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message MemberItems {
+  repeated Member items = 1;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message MemberInput {
+  optional string role = 1;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message Invitation {
+  optional string id = 1;
+  optional string email = 2;
+  google.protobuf.Timestamp expires_at = 3;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message InvitationItems {
+  repeated Invitation items = 1;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message InvitationInput {
+  optional string email = 1;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message InvitationURL {
+  optional string url = 1;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message InvitationToken {
+  optional string token = 1;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message InvitationInspection {
+  optional string company_name = 1;
+  optional string email_hint = 2;
+  google.protobuf.Timestamp expires_at = 3;
+  optional string organization = 4;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message Company {
+  optional string name = 1;
+  optional string code = 2;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message JoinRequest {
+  optional int64 id = 1;
+  optional string company_name = 2;
+  optional string company_code = 3;
+  optional string state = 4;
+  optional string note = 5;
+  google.protobuf.Timestamp created_at = 6;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message RegistrationStatus {
+  JoinRequest request = 1;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message JoinApplicant {
+  optional int64 id = 1;
+  optional string name = 2;
+  optional string email = 3;
+  google.protobuf.Timestamp created_at = 4;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message JoinApplicants {
+  repeated JoinApplicant items = 1;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message CompanyTarget {
+  optional string target = 1;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message ApplyCompanyResult {
+  optional bool submitted = 1;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message JoinDecisionResult {
+  optional string state = 1;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message AuthQuery {
+  repeated string limit = 1;
+  repeated string page = 2;
+  repeated string categories = 3;
+  repeated string search = 4;
+  repeated string sort = 5;
+  map<string, AuthQueryValues> extra = 100;
+}
+message AuthQueryValues {
+  repeated string values = 1;
+}
+message GetSessionRequest {
+  optional string id = 1;
+  optional string action = 2;
+  AuthQuery query = 3;
+  google.protobuf.Struct body = 4;
+}
+message GetSessionResponse {
+  SessionProfile data = 1;
+  int32 status_code = 2;
+}
+message ListManagedProductsRequest {
+  optional string id = 1;
+  optional string action = 2;
+  AuthQuery query = 3;
+  google.protobuf.Struct body = 4;
+}
+message ListManagedProductsResponse {
+  ProductListResult data = 1;
+  int32 status_code = 2;
+}
+message GetManagedProductRequest {
+  optional string id = 1;
+  optional string action = 2;
+  AuthQuery query = 3;
+  google.protobuf.Struct body = 4;
+}
+message GetManagedProductResponse {
+  ProductResult data = 1;
+  int32 status_code = 2;
+}
+message CreateManagedProductRequest {
+  optional string id = 1;
+  optional string action = 2;
+  AuthQuery query = 3;
+  ManagedProductInput body = 4;
+}
+message CreateManagedProductResponse {
+  ProductResult data = 1;
+  int32 status_code = 2;
+}
+message UpdateManagedProductRequest {
+  optional string id = 1;
+  optional string action = 2;
+  AuthQuery query = 3;
+  ManagedProductInput body = 4;
+}
+message UpdateManagedProductResponse {
+  ProductResult data = 1;
+  int32 status_code = 2;
+}
+message PatchManagedProductRequest {
+  optional string id = 1;
+  optional string action = 2;
+  AuthQuery query = 3;
+  ManagedProductInput body = 4;
+}
+message PatchManagedProductResponse {
+  ProductResult data = 1;
+  int32 status_code = 2;
+}
+message DeleteManagedProductRequest {
+  optional string id = 1;
+  optional string action = 2;
+  AuthQuery query = 3;
+  google.protobuf.Struct body = 4;
+}
+message DeleteManagedProductResponse {
+  ProductResult data = 1;
+  int32 status_code = 2;
+}
+message ListMembersRequest {
+  optional string id = 1;
+  optional string action = 2;
+  AuthQuery query = 3;
+  google.protobuf.Struct body = 4;
+}
+message ListMembersResponse {
+  MemberItems data = 1;
+  int32 status_code = 2;
+}
+message UpdateMemberRequest {
+  optional string id = 1;
+  optional string action = 2;
+  AuthQuery query = 3;
+  MemberInput body = 4;
+}
+message UpdateMemberResponse {
+  google.protobuf.Empty data = 1;
+  int32 status_code = 2;
+}
+message RemoveMemberRequest {
+  optional string id = 1;
+  optional string action = 2;
+  AuthQuery query = 3;
+  google.protobuf.Struct body = 4;
+}
+message RemoveMemberResponse {
+  google.protobuf.Empty data = 1;
+  int32 status_code = 2;
+}
+message ListInvitationsRequest {
+  optional string id = 1;
+  optional string action = 2;
+  AuthQuery query = 3;
+  google.protobuf.Struct body = 4;
+}
+message ListInvitationsResponse {
+  InvitationItems data = 1;
+  int32 status_code = 2;
+}
+message CreateInvitationRequest {
+  optional string id = 1;
+  optional string action = 2;
+  AuthQuery query = 3;
+  InvitationInput body = 4;
+}
+message CreateInvitationResponse {
+  InvitationURL data = 1;
+  int32 status_code = 2;
+}
+message RevokeInvitationRequest {
+  optional string id = 1;
+  optional string action = 2;
+  AuthQuery query = 3;
+  google.protobuf.Struct body = 4;
+}
+message RevokeInvitationResponse {
+  google.protobuf.Empty data = 1;
+  int32 status_code = 2;
+}
+message InspectInvitationRequest {
+  optional string id = 1;
+  optional string action = 2;
+  AuthQuery query = 3;
+  InvitationToken body = 4;
+}
+message InspectInvitationResponse {
+  InvitationInspection data = 1;
+  int32 status_code = 2;
+}
+message AcceptInvitationRequest {
+  optional string id = 1;
+  optional string action = 2;
+  AuthQuery query = 3;
+  InvitationToken body = 4;
+}
+message WorkspaceJoined {
+  optional int64 workspace_id = 1;
+  google.protobuf.Struct legacy_fields = 998;
+  repeated string omitted_fields = 999;
+}
+message AcceptInvitationResponse {
+  WorkspaceJoined data = 1;
+  int32 status_code = 2;
+}
+message GetCompanyRequest {
+  optional string id = 1;
+  optional string action = 2;
+  AuthQuery query = 3;
+  google.protobuf.Struct body = 4;
+}
+message GetCompanyResponse {
+  Company data = 1;
+  int32 status_code = 2;
+}
+message GetRegistrationStatusRequest {
+  optional string id = 1;
+  optional string action = 2;
+  AuthQuery query = 3;
+  google.protobuf.Struct body = 4;
+}
+message GetRegistrationStatusResponse {
+  RegistrationStatus data = 1;
+  int32 status_code = 2;
+}
+message ListJoinRequestsRequest {
+  optional string id = 1;
+  optional string action = 2;
+  AuthQuery query = 3;
+  google.protobuf.Struct body = 4;
+}
+message ListJoinRequestsResponse {
+  JoinApplicants data = 1;
+  int32 status_code = 2;
+}
+message ApplyToCompanyRequest {
+  optional string id = 1;
+  optional string action = 2;
+  AuthQuery query = 3;
+  CompanyTarget body = 4;
+}
+message ApplyToCompanyResponse {
+  ApplyCompanyResult data = 1;
+  int32 status_code = 2;
+}
+message DecideJoinRequestRequest {
+  optional string id = 1;
+  optional string action = 2;
+  AuthQuery query = 3;
+  google.protobuf.Struct body = 4;
+}
+message DecideJoinRequestResponse {
+  JoinDecisionResult data = 1;
+  int32 status_code = 2;
+}
+service AuthService {
+  rpc GetSession(GetSessionRequest) returns (GetSessionResponse);
+  rpc ListManagedProducts(ListManagedProductsRequest) returns (ListManagedProductsResponse);
+  rpc GetManagedProduct(GetManagedProductRequest) returns (GetManagedProductResponse);
+  rpc CreateManagedProduct(CreateManagedProductRequest) returns (CreateManagedProductResponse);
+  rpc UpdateManagedProduct(UpdateManagedProductRequest) returns (UpdateManagedProductResponse);
+  rpc PatchManagedProduct(PatchManagedProductRequest) returns (PatchManagedProductResponse);
+  rpc DeleteManagedProduct(DeleteManagedProductRequest) returns (DeleteManagedProductResponse);
+  rpc ListMembers(ListMembersRequest) returns (ListMembersResponse);
+  rpc UpdateMember(UpdateMemberRequest) returns (UpdateMemberResponse);
+  rpc RemoveMember(RemoveMemberRequest) returns (RemoveMemberResponse);
+  rpc ListInvitations(ListInvitationsRequest) returns (ListInvitationsResponse);
+  rpc CreateInvitation(CreateInvitationRequest) returns (CreateInvitationResponse);
+  rpc RevokeInvitation(RevokeInvitationRequest) returns (RevokeInvitationResponse);
+  rpc InspectInvitation(InspectInvitationRequest) returns (InspectInvitationResponse);
+  rpc AcceptInvitation(AcceptInvitationRequest) returns (AcceptInvitationResponse);
+  rpc GetCompany(GetCompanyRequest) returns (GetCompanyResponse);
+  rpc GetRegistrationStatus(GetRegistrationStatusRequest) returns (GetRegistrationStatusResponse);
+  rpc ListJoinRequests(ListJoinRequestsRequest) returns (ListJoinRequestsResponse);
+  rpc ApplyToCompany(ApplyToCompanyRequest) returns (ApplyToCompanyResponse);
+  rpc DecideJoinRequest(DecideJoinRequestRequest) returns (DecideJoinRequestResponse);
+}

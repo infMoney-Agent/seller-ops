@@ -1,0 +1,186 @@
+syntax = "proto3";
+package sellerops.screening.v1;
+
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+import "sellerops/common/v1/pagination.proto";
+
+option go_package = "seller-ops/contracts/sellerops/screening/v1;screeningv1";
+enum ImportState {
+  IMPORT_STATE_UNSPECIFIED = 0;
+  IMPORT_STATE_UPLOADED = 1;
+  IMPORT_STATE_PARSING = 2;
+  IMPORT_STATE_PREVIEW = 3;
+  IMPORT_STATE_IMPORTING = 4;
+  IMPORT_STATE_COMPLETED = 5;
+  IMPORT_STATE_PARTIAL = 6;
+  IMPORT_STATE_FAILED = 7;
+}
+// Dates and source months are calendar values, not UTC instants.
+message ImportRecord {
+  string id = 1;
+  string file_name = 2;
+  ImportState state = 3;
+  string marketplace = 4;
+  string source_period = 5;
+  optional string observed_on = 6;
+  string source_type = 7;
+  string period_type = 8;
+  optional string period_start = 9;
+  optional string period_end = 10;
+  string default_sales_scope = 11;
+  google.protobuf.Struct counts = 12;
+  google.protobuf.Struct mapping = 13;
+  google.protobuf.Timestamp created_at = 14;
+  google.protobuf.Timestamp committed_at = 15;
+  // Transitional REST-only extensions retain extra columns, exact timestamp
+  // spellings and explicit nulls; stable business fields above are authoritative.
+  google.protobuf.Struct legacy_fields = 16;
+}
+message ListImportsRequest {
+  sellerops.common.v1.PaginationRequest pagination = 1;
+}
+message ListImportsResponse {
+  repeated ImportRecord items = 1;
+  sellerops.common.v1.PaginationResponse pagination = 2;
+}
+message GetImportRequest {
+  string id = 1;
+}
+message GetImportResponse {
+  ImportRecord item = 1;
+  optional string latest_job_id = 2;
+}
+enum ImportRowState {
+  IMPORT_ROW_STATE_UNSPECIFIED = 0;
+  IMPORT_ROW_STATE_VALID = 1;
+  IMPORT_ROW_STATE_INVALID = 2;
+  IMPORT_ROW_STATE_COMMITTED = 3;
+}
+message ImportPreviewRow {
+  string id = 1;
+  string import_id = 2;
+  string member_path = 3;
+  string sheet_name = 4;
+  int32 row_no = 5;
+  optional string product_id = 6;
+  ImportRowState state = 7;
+  google.protobuf.Struct raw_data = 8;
+  // Normalized source values, row errors and future source-only columns.
+  google.protobuf.Struct legacy_fields = 9;
+}
+message ListImportRowsRequest {
+  string import_id = 1;
+  sellerops.common.v1.PaginationRequest pagination = 2;
+}
+message ListImportRowsResponse {
+  repeated ImportPreviewRow items = 1;
+  sellerops.common.v1.PaginationResponse pagination = 2;
+}
+enum JobState {
+  JOB_STATE_UNSPECIFIED = 0;
+  JOB_STATE_QUEUED = 1;
+  JOB_STATE_RUNNING = 2;
+  JOB_STATE_SUCCEEDED = 3;
+  JOB_STATE_PARTIAL = 4;
+  JOB_STATE_FAILED = 5;
+  JOB_STATE_PREVIEW = 6;
+  JOB_STATE_APPLIED = 7;
+  JOB_STATE_UNDONE = 8;
+}
+message JobRecord {
+  string id = 1;
+  string kind = 2;
+  JobState state = 3;
+  int32 progress = 4;
+  int32 attempts = 5;
+  google.protobuf.Timestamp created_at = 6;
+  google.protobuf.Timestamp updated_at = 7;
+  // Public job fields only. Internal payload, lease token and request hash omitted.
+  google.protobuf.Struct legacy_fields = 8;
+}
+message GetJobRequest {
+  string id = 1;
+}
+message GetJobResponse {
+  JobRecord item = 1;
+}
+message ImportMutationMetadata {
+  string idempotency_key = 1;
+  string original_query = 2;
+}
+message ImportSettings {
+  optional string source_period = 1;
+  optional string observed_on = 2;
+  optional string source_type = 3;
+  optional string period_type = 4;
+  optional string period_start = 5;
+  optional string period_end = 6;
+  optional string default_sales_scope = 7;
+  // Legacy optional fields are preserved without restoring mapping UI.
+  google.protobuf.Struct mapping = 8;
+  repeated string clear_fields = 9;
+  google.protobuf.Struct legacy_fields = 10;
+}
+message GetImportRemovalPreviewRequest {
+  string id = 1;
+}
+message GetImportRemovalPreviewResponse {
+  int64 products = 1;
+  int64 exclusive_products = 2;
+  int64 source_rows = 3;
+}
+message CommitImportRequest {
+  string id = 1;
+  ImportMutationMetadata mutation = 2;
+  google.protobuf.Struct legacy_fields = 3;
+}
+message UpdateImportSettingsRequest {
+  string id = 1;
+  ImportMutationMetadata mutation = 2;
+  ImportSettings settings = 3;
+}
+message RetryImportJobRequest {
+  string id = 1;
+  ImportMutationMetadata mutation = 2;
+  google.protobuf.Struct legacy_fields = 3;
+}
+message ImportJobSubmission {
+  string job_id = 1;
+  string state = 2;
+  optional string import_id = 3;
+  google.protobuf.Struct legacy_fields = 4;
+}
+message CommitImportResponse {
+  ImportJobSubmission submission = 1;
+}
+message UpdateImportSettingsResponse {
+  ImportJobSubmission submission = 1;
+}
+message RetryImportJobResponse {
+  ImportJobSubmission submission = 1;
+}
+message DeleteImportRequest {
+  string id = 1;
+  ImportMutationMetadata mutation = 2;
+}
+message DeleteImportResponse {
+  string id = 1;
+  bool deleted = 2;
+  optional int64 removed_products = 3;
+  optional int64 retained_products = 4;
+  optional int64 removed_monthly = 5;
+}
+service ScreeningImportService {
+  // Identity is authenticated by the server, never supplied in the message.
+  rpc ListImports(ListImportsRequest) returns (ListImportsResponse);
+  rpc GetImport(GetImportRequest) returns (GetImportResponse);
+  rpc ListImportRows(ListImportRowsRequest) returns (ListImportRowsResponse);
+  // Shared public task status used by the import workflow; no request-log jobs.
+  rpc GetJob(GetJobRequest) returns (GetJobResponse);
+  rpc GetImportRemovalPreview(GetImportRemovalPreviewRequest) returns (GetImportRemovalPreviewResponse);
+  rpc CommitImport(CommitImportRequest) returns (CommitImportResponse);
+  rpc UpdateImportSettings(UpdateImportSettingsRequest) returns (UpdateImportSettingsResponse);
+  rpc DeleteImport(DeleteImportRequest) returns (DeleteImportResponse);
+  rpc RetryImportJob(RetryImportJobRequest) returns (RetryImportJobResponse);
+}

@@ -1,0 +1,30 @@
+import { useCallback, type ComponentProps } from 'react';
+import { KBarResults, useMatches } from 'kbar';
+import ResultItem from './result-item';
+
+type RenderArgs = Parameters<NonNullable<ComponentProps<typeof KBarResults>['onRender']>>[0];
+
+export default function RenderResults() {
+  const { results, rootActionId } = useMatches();
+  const onRender = useCallback(
+    ({ item, active }: RenderArgs) =>
+      typeof item === 'string' ? (
+        <div className='text-muted-foreground px-4 pt-3 pb-1 text-xs font-medium tracking-wider uppercase'>
+          {item}
+        </div>
+      ) : (
+        <ResultItem action={item} active={active} currentRootActionId={rootActionId ?? ''} />
+      ),
+    [rootActionId]
+  );
+
+  if (!results.length) {
+    return (
+      <div className='text-muted-foreground flex h-full items-center justify-center px-4 text-center text-sm'>
+        未找到匹配结果。
+      </div>
+    );
+  }
+
+  return <KBarResults items={results} onRender={onRender} />;
+}
