@@ -96,3 +96,18 @@ func TestRPCResourceFieldsCannotSelectAnotherOperation(t *testing.T) {
 		t.Fatal("group path injection accepted", err)
 	}
 }
+
+func TestNumericStringProjection(t *testing.T) {
+	original := Object{"total": "9007199254740993", "page": 1, "page_size": 50, "items": []any{}}
+	var msg screeningv1.PageProduct
+	if err := rpccompat.FromLegacy(&msg, original); err != nil {
+		t.Fatal(err)
+	}
+	result, err := rpccompat.Legacy(&msg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result["total"] != original["total"] {
+		t.Fatalf("numeric string changed: %#v", result["total"])
+	}
+}

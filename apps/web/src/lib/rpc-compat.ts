@@ -70,6 +70,14 @@ export function prepareRPCJSON(schema: DescMessage, value: JsonValue): JsonValue
           : one(v);
     if (result !== null || v === null) out[field.jsonName] = result;
     if (field.message?.typeName === 'google.protobuf.Timestamp') extra[key] = v;
+    if (
+      typeof v === 'string' &&
+      field.fieldKind === 'scalar' &&
+      field.scalar !== ScalarType.STRING &&
+      field.scalar !== ScalarType.BOOL &&
+      field.scalar !== ScalarType.BYTES
+    )
+      extra[key] = v;
   }
   for (const [key, v] of Object.entries(value)) if (!known.has(key)) extra[key] = v;
   if (schema.fields.some((f) => f.name === 'legacy_fields')) out.legacyFields = extra;
@@ -89,6 +97,16 @@ function restore(schema: DescMessage, value: JsonValue): JsonValue {
       !Object.hasOwn(value, field.jsonName)
     )
       continue;
+    const extraValue = value.legacyFields;
+    if (
+      extraValue &&
+      typeof extraValue === 'object' &&
+      !Array.isArray(extraValue) &&
+      Object.hasOwn(extraValue, name(field))
+    ) {
+      out[name(field)] = extraValue[name(field)];
+      continue;
+    }
     const v = value[field.jsonName];
     const one = (item: JsonValue): JsonValue => {
       if (field.enum && typeof item === 'string') return enumText(field, item);

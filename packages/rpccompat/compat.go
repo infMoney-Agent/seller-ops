@@ -114,6 +114,12 @@ func prepare(md protoreflect.MessageDescriptor, v any) (any, error) {
 			return nil, err
 		}
 		out[f.JSONName()] = item
+		if _, ok := value.(string); ok && !f.IsList() && !f.IsMap() {
+			switch f.Kind() {
+			case protoreflect.Int64Kind, protoreflect.Uint64Kind, protoreflect.Sint64Kind, protoreflect.Fixed64Kind, protoreflect.Sfixed64Kind, protoreflect.DoubleKind, protoreflect.FloatKind:
+				extra[key] = value
+			}
+		}
 		if f.Kind() == protoreflect.MessageKind && string(f.Message().FullName()) == "google.protobuf.Timestamp" {
 			extra[key] = value
 		}
