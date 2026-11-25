@@ -96,20 +96,47 @@ jobs:
           : "${DEPLOY_KEY:?Missing DEPLOY_SSH_KEY}" "${DEPLOY_HOST_KEY:?Missing DEPLOY_KNOWN_HOSTS}"
           umask 077
           transfer_dir=$(mktemp -d)
-          trap 'rm -rf -- "$transfer_dir"' EXIT
+          export PROD_TRANSFER_DIR="$transfer_dir" PROD_ARCHIVE_DIGEST=""
+          ssh_prod() {
+            ssh -T -p "${DEPLOY_PORT:-22}" -o BatchMode=yes -o ConnectTimeout=15 \
+              -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -o IdentitiesOnly=yes \
+              -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$PROD_TRANSFER_DIR/known_hosts" \
+              -i "$PROD_TRANSFER_DIR/key" "$DEPLOY_USER@$DEPLOY_HOST" "$1"
+          }
+          cleanup_transfer() {
+            if [[ -n "$PROD_ARCHIVE_DIGEST" ]]; then
+              ssh_prod "discard $GITHUB_SHA $IMAGE $PROD_ARCHIVE_DIGEST" </dev/null >/dev/null 2>&1 || true
+            fi
+            rm -rf -- "$PROD_TRANSFER_DIR"
+          }
+          trap cleanup_transfer EXIT
           printf '%s\n' "$DEPLOY_KEY" > "$transfer_dir/key"
           printf '%s\n' "$DEPLOY_HOST_KEY" > "$transfer_dir/known_hosts"
           docker save "$PREFIX-$IMAGE:$GITHUB_SHA" | gzip -1 > "$transfer_dir/image.tar.gz"
           digest=$(sha256sum "$transfer_dir/image.tar.gz")
-          digest=${digest%% *}
+          export PROD_ARCHIVE_DIGEST="${digest%% *}"
+          split -b 4194304 -d -a 3 "$transfer_dir/image.tar.gz" "$transfer_dir/chunk."
+          chunks=("$transfer_dir"/chunk.*)
+          (( ${#chunks[@]} <= 256 )) || { echo 'Image archive exceeds chunk limit' >&2; exit 1; }
+          ssh_prod "begin $GITHUB_SHA $IMAGE $PROD_ARCHIVE_DIGEST" </dev/null
+          send_chunk() {
+            local file=$1 index checksum attempt
+            index=${file##*.}
+            checksum=$(sha256sum "$file")
+            checksum=${checksum%% *}
+            for attempt in 1 2 3; do
+              if ssh_prod "chunk $GITHUB_SHA $IMAGE $PROD_ARCHIVE_DIGEST $index $checksum" <"$file"; then
+                return 0
+              fi
+              [[ $attempt == 3 ]] || sleep 5
+            done
+            return 1
+          }
+          export -f ssh_prod send_chunk
+          printf '%s\0' "${chunks[@]}" | xargs -0 -n 1 -P 8 bash -c 'send_chunk "$1"' _
           for attempt in 1 2 3; do
-            if {
-              printf '%s\n%s\n%s\n%s\n' "$REGISTRY" "$PREFIX" "$REG_USER" "$REG_PASS"
-              cat "$transfer_dir/image.tar.gz"
-            } | ssh -T -p "${DEPLOY_PORT:-22}" -o BatchMode=yes -o ConnectTimeout=15 \
-                -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -o IdentitiesOnly=yes \
-                -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$transfer_dir/known_hosts" \
-                -i "$transfer_dir/key" "$DEPLOY_USER@$DEPLOY_HOST" "upload $GITHUB_SHA $IMAGE $digest"; then
+            if printf '%s\n%s\n%s\n%s\n' "$REGISTRY" "$PREFIX" "$REG_USER" "$REG_PASS" |
+              ssh_prod "publish $GITHUB_SHA $IMAGE $PROD_ARCHIVE_DIGEST ${#chunks[@]}"; then
               exit 0
             fi
             [[ $attempt == 3 ]] || sleep 5
