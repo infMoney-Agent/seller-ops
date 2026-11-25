@@ -43,3 +43,5 @@ Go 集成测试只使用名称以 _test 结尾的独立 PostgreSQL，验证默�
 CI 必须通过 Proto 生成/兼容检查、Go 回归、Web 类型/lint/生产构建；现有浏览器验收在 connect 模式运行，旧 HTTP 由新旧投影对比回归覆盖。
 
 本轮隔离验收结果：Go race 全套回归、go vet、Web 类型检查与生产构建、TS 兼容单测、Proto lint/生成漂移检查均通过。Connect 模式下完整浏览器流程通过（29.52 秒）。首次引入时 origin/dev 尚无契约，兼容性检查按 bootstrap 规则跳过。
+
+2026-11-25 运行环境验证：已先以 legacy 启动，再切到 connect；两种内部接口对当前 10 条导入历史的数量与 ID 顺序核对一致，公网入口返回正常登录跳转。runtime.json 已持久化 connect。发布构建保留原生环境现有认证页面，未升级认证服务；数据库无变更。备份位于原生运行目录 backups/proto-pilot-1795579585214。
