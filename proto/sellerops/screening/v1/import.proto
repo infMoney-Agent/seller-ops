@@ -44,7 +44,72 @@ message ListImportsResponse {
   repeated ImportRecord items = 1;
   sellerops.common.v1.PaginationResponse pagination = 2;
 }
+message GetImportRequest {
+  string id = 1;
+}
+message GetImportResponse {
+  ImportRecord item = 1;
+  optional string latest_job_id = 2;
+}
+enum ImportRowState {
+  IMPORT_ROW_STATE_UNSPECIFIED = 0;
+  IMPORT_ROW_STATE_VALID = 1;
+  IMPORT_ROW_STATE_INVALID = 2;
+  IMPORT_ROW_STATE_COMMITTED = 3;
+}
+message ImportPreviewRow {
+  string id = 1;
+  string import_id = 2;
+  string member_path = 3;
+  string sheet_name = 4;
+  int32 row_no = 5;
+  optional string product_id = 6;
+  ImportRowState state = 7;
+  google.protobuf.Struct raw_data = 8;
+  // Normalized source values, row errors and future source-only columns.
+  google.protobuf.Struct legacy_fields = 9;
+}
+message ListImportRowsRequest {
+  string import_id = 1;
+  sellerops.common.v1.PaginationRequest pagination = 2;
+}
+message ListImportRowsResponse {
+  repeated ImportPreviewRow items = 1;
+  sellerops.common.v1.PaginationResponse pagination = 2;
+}
+enum JobState {
+  JOB_STATE_UNSPECIFIED = 0;
+  JOB_STATE_QUEUED = 1;
+  JOB_STATE_RUNNING = 2;
+  JOB_STATE_SUCCEEDED = 3;
+  JOB_STATE_PARTIAL = 4;
+  JOB_STATE_FAILED = 5;
+  JOB_STATE_PREVIEW = 6;
+  JOB_STATE_APPLIED = 7;
+  JOB_STATE_UNDONE = 8;
+}
+message JobRecord {
+  string id = 1;
+  string kind = 2;
+  JobState state = 3;
+  int32 progress = 4;
+  int32 attempts = 5;
+  google.protobuf.Timestamp created_at = 6;
+  google.protobuf.Timestamp updated_at = 7;
+  // Public job fields only. Internal payload, lease token and request hash omitted.
+  google.protobuf.Struct legacy_fields = 8;
+}
+message GetJobRequest {
+  string id = 1;
+}
+message GetJobResponse {
+  JobRecord item = 1;
+}
 service ScreeningImportService {
   // Identity is authenticated by the server, never supplied in the message.
   rpc ListImports(ListImportsRequest) returns (ListImportsResponse);
+  rpc GetImport(GetImportRequest) returns (GetImportResponse);
+  rpc ListImportRows(ListImportRowsRequest) returns (ListImportRowsResponse);
+  // Shared public task status used by the import workflow; no request-log jobs.
+  rpc GetJob(GetJobRequest) returns (GetJobResponse);
 }

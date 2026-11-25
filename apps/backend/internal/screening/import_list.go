@@ -43,7 +43,7 @@ func importRecord(row Object) ImportListRecord {
 	}
 	return ImportListRecord{ID: str(row["id"]), FileName: str(row["file_name"]), State: str(row["state"]), Marketplace: str(row["marketplace"]), SourcePeriod: str(row["source_period"]), SourceType: str(row["source_type"]), PeriodType: str(row["period_type"]), DefaultSalesScope: str(row["default_sales_scope"]), ObservedOn: optionalImportString(row["observed_on"]), PeriodStart: optionalImportString(row["period_start"]), PeriodEnd: optionalImportString(row["period_end"]), Counts: importObject(row["counts"]), Mapping: importObject(row["mapping"]), LegacyFields: extra, CreatedAt: str(row["created_at"]), CommittedAt: str(row["committed_at"])}
 }
-func (s *service) listImports(ctx context.Context, a identity, p, n int) (*ImportList, error) {
+func normalizeImportPage(p, n int) (int, int) {
 	if p < 1 {
 		p = 1
 	}
@@ -53,6 +53,10 @@ func (s *service) listImports(ctx context.Context, a identity, p, n int) (*Impor
 	if n > 100 {
 		n = 100
 	}
+	return p, n
+}
+func (s *service) listImports(ctx context.Context, a identity, p, n int) (*ImportList, error) {
+	p, n = normalizeImportPage(p, n)
 	var total int64
 	const where = "tenant_id=$1 AND NOT(counts ? 'data_deleted_at')"
 	if err := s.db.QueryRow(ctx, "SELECT count(*) FROM ps_imports WHERE "+where, a.Tenant).Scan(&total); err != nil {
@@ -99,4 +103,32 @@ func importStructMap(value Object) (map[string]any, error) {
 		return nil, fmt.Errorf("invalid import extension: %w", err)
 	}
 	return out, nil
+}
+
+func validImportResourceID(id string) error {
+	if !uuidPattern.MatchString(id) {
+		return fail(422, "资源ID无效")
+	}
+	return nil
+}
+func (s *service) getImport(ctx context.Context, a identity, id string) (Object, error) {
+	if err := validImportResourceID(id); err != nil {
+		return nil, err
+	}
+	return s.one(ctx, "SELECT to_jsonb(i)||jsonb_build_object('latest_job_id',(SELECT j.id FROM ps_jobs j WHERE j.tenant_id=i.tenant_id AND j.kind IN ('parse','import') AND j.payload->>'import_id'=i.id::text ORDER BY j.updated_at DESC,j.id DESC LIMIT 1)) FROM ps_imports i WHERE tenant_id=$1 AND id=$2::uuid AND NOT(counts ? 'data_deleted_at')", a.Tenant, id)
+}
+func (s *service) importRows(ctx context.Context, a identity, id string, p, n int) (any, error) {
+	if err := validImportResourceID(id); err != nil {
+		return nil, err
+	}
+	if _, err := s.one(ctx, "SELECT to_jsonb(i) FROM ps_imports i WHERE tenant_id=$1 AND id=$2::uuid AND NOT(counts ? 'data_deleted_at')", a.Tenant, id); err != nil {
+		return nil, err
+	}
+	return s.listPage(ctx, p, n, "ps_import_rows", "tenant_id=$1 AND import_id=$2::uuid", a.Tenant, id)
+}
+func (s *service) getPublicJob(ctx context.Context, a identity, id string) (Object, error) {
+	if err := validImportResourceID(id); err != nil {
+		return nil, err
+	}
+	return s.one(ctx, "SELECT to_jsonb(j)-'payload'-'lease_token'-'request_hash' FROM ps_jobs j WHERE tenant_id=$1 AND id=$2::uuid AND kind<>'request'", a.Tenant, id)
 }

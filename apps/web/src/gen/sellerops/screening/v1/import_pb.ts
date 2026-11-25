@@ -14,7 +14,7 @@ import type { JsonObject, Message } from "@bufbuild/protobuf";
  * Describes the file sellerops/screening/v1/import.proto.
  */
 export const file_sellerops_screening_v1_import: GenFile = /*@__PURE__*/
-  fileDesc("CiNzZWxsZXJvcHMvc2NyZWVuaW5nL3YxL2ltcG9ydC5wcm90bxIWc2VsbGVyb3BzLnNjcmVlbmluZy52MSK3BAoMSW1wb3J0UmVjb3JkEgoKAmlkGAEgASgJEhEKCWZpbGVfbmFtZRgCIAEoCRIyCgVzdGF0ZRgDIAEoDjIjLnNlbGxlcm9wcy5zY3JlZW5pbmcudjEuSW1wb3J0U3RhdGUSEwoLbWFya2V0cGxhY2UYBCABKAkSFQoNc291cmNlX3BlcmlvZBgFIAEoCRIYCgtvYnNlcnZlZF9vbhgGIAEoCUgAiAEBEhMKC3NvdXJjZV90eXBlGAcgASgJEhMKC3BlcmlvZF90eXBlGAggASgJEhkKDHBlcmlvZF9zdGFydBgJIAEoCUgBiAEBEhcKCnBlcmlvZF9lbmQYCiABKAlIAogBARIbChNkZWZhdWx0X3NhbGVzX3Njb3BlGAsgASgJEicKBmNvdW50cxgMIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QSKAoHbWFwcGluZxgNIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QSLgoKY3JlYXRlZF9hdBgOIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASMAoMY29tbWl0dGVkX2F0GA8gASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIuCg1sZWdhY3lfZmllbGRzGBAgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdEIOCgxfb2JzZXJ2ZWRfb25CDwoNX3BlcmlvZF9zdGFydEINCgtfcGVyaW9kX2VuZCJQChJMaXN0SW1wb3J0c1JlcXVlc3QSOgoKcGFnaW5hdGlvbhgBIAEoCzImLnNlbGxlcm9wcy5jb21tb24udjEuUGFnaW5hdGlvblJlcXVlc3QihwEKE0xpc3RJbXBvcnRzUmVzcG9uc2USMwoFaXRlbXMYASADKAsyJC5zZWxsZXJvcHMuc2NyZWVuaW5nLnYxLkltcG9ydFJlY29yZBI7CgpwYWdpbmF0aW9uGAIgASgLMicuc2VsbGVyb3BzLmNvbW1vbi52MS5QYWdpbmF0aW9uUmVzcG9uc2Uq5QEKC0ltcG9ydFN0YXRlEhwKGElNUE9SVF9TVEFURV9VTlNQRUNJRklFRBAAEhkKFUlNUE9SVF9TVEFURV9VUExPQURFRBABEhgKFElNUE9SVF9TVEFURV9QQVJTSU5HEAISGAoUSU1QT1JUX1NUQVRFX1BSRVZJRVcQAxIaChZJTVBPUlRfU1RBVEVfSU1QT1JUSU5HEAQSGgoWSU1QT1JUX1NUQVRFX0NPTVBMRVRFRBAFEhgKFElNUE9SVF9TVEFURV9QQVJUSUFMEAYSFwoTSU1QT1JUX1NUQVRFX0ZBSUxFRBAHMoABChZTY3JlZW5pbmdJbXBvcnRTZXJ2aWNlEmYKC0xpc3RJbXBvcnRzEiouc2VsbGVyb3BzLnNjcmVlbmluZy52MS5MaXN0SW1wb3J0c1JlcXVlc3QaKy5zZWxsZXJvcHMuc2NyZWVuaW5nLnYxLkxpc3RJbXBvcnRzUmVzcG9uc2VCOVo3c2VsbGVyLW9wcy9jb250cmFjdHMvc2VsbGVyb3BzL3NjcmVlbmluZy92MTtzY3JlZW5pbmd2MWIGcHJvdG8z", [file_google_protobuf_struct, file_google_protobuf_timestamp, file_sellerops_common_v1_pagination]);
+  fileDesc("CiNzZWxsZXJvcHMvc2NyZWVuaW5nL3YxL2ltcG9ydC5wcm90bxIWc2VsbGVyb3BzLnNjcmVlbmluZy52MSK3BAoMSW1wb3J0UmVjb3JkEgoKAmlkGAEgASgJEhEKCWZpbGVfbmFtZRgCIAEoCRIyCgVzdGF0ZRgDIAEoDjIjLnNlbGxlcm9wcy5zY3JlZW5pbmcudjEuSW1wb3J0U3RhdGUSEwoLbWFya2V0cGxhY2UYBCABKAkSFQoNc291cmNlX3BlcmlvZBgFIAEoCRIYCgtvYnNlcnZlZF9vbhgGIAEoCUgAiAEBEhMKC3NvdXJjZV90eXBlGAcgASgJEhMKC3BlcmlvZF90eXBlGAggASgJEhkKDHBlcmlvZF9zdGFydBgJIAEoCUgBiAEBEhcKCnBlcmlvZF9lbmQYCiABKAlIAogBARIbChNkZWZhdWx0X3NhbGVzX3Njb3BlGAsgASgJEicKBmNvdW50cxgMIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QSKAoHbWFwcGluZxgNIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QSLgoKY3JlYXRlZF9hdBgOIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASMAoMY29tbWl0dGVkX2F0GA8gASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIuCg1sZWdhY3lfZmllbGRzGBAgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdEIOCgxfb2JzZXJ2ZWRfb25CDwoNX3BlcmlvZF9zdGFydEINCgtfcGVyaW9kX2VuZCJQChJMaXN0SW1wb3J0c1JlcXVlc3QSOgoKcGFnaW5hdGlvbhgBIAEoCzImLnNlbGxlcm9wcy5jb21tb24udjEuUGFnaW5hdGlvblJlcXVlc3QihwEKE0xpc3RJbXBvcnRzUmVzcG9uc2USMwoFaXRlbXMYASADKAsyJC5zZWxsZXJvcHMuc2NyZWVuaW5nLnYxLkltcG9ydFJlY29yZBI7CgpwYWdpbmF0aW9uGAIgASgLMicuc2VsbGVyb3BzLmNvbW1vbi52MS5QYWdpbmF0aW9uUmVzcG9uc2UiHgoQR2V0SW1wb3J0UmVxdWVzdBIKCgJpZBgBIAEoCSJ1ChFHZXRJbXBvcnRSZXNwb25zZRIyCgRpdGVtGAEgASgLMiQuc2VsbGVyb3BzLnNjcmVlbmluZy52MS5JbXBvcnRSZWNvcmQSGgoNbGF0ZXN0X2pvYl9pZBgCIAEoCUgAiAEBQhAKDl9sYXRlc3Rfam9iX2lkIqQCChBJbXBvcnRQcmV2aWV3Um93EgoKAmlkGAEgASgJEhEKCWltcG9ydF9pZBgCIAEoCRITCgttZW1iZXJfcGF0aBgDIAEoCRISCgpzaGVldF9uYW1lGAQgASgJEg4KBnJvd19ubxgFIAEoBRIXCgpwcm9kdWN0X2lkGAYgASgJSACIAQESNQoFc3RhdGUYByABKA4yJi5zZWxsZXJvcHMuc2NyZWVuaW5nLnYxLkltcG9ydFJvd1N0YXRlEikKCHJhd19kYXRhGAggASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdBIuCg1sZWdhY3lfZmllbGRzGAkgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdEINCgtfcHJvZHVjdF9pZCJmChVMaXN0SW1wb3J0Um93c1JlcXVlc3QSEQoJaW1wb3J0X2lkGAEgASgJEjoKCnBhZ2luYXRpb24YAiABKAsyJi5zZWxsZXJvcHMuY29tbW9uLnYxLlBhZ2luYXRpb25SZXF1ZXN0Io4BChZMaXN0SW1wb3J0Um93c1Jlc3BvbnNlEjcKBWl0ZW1zGAEgAygLMiguc2VsbGVyb3BzLnNjcmVlbmluZy52MS5JbXBvcnRQcmV2aWV3Um93EjsKCnBhZ2luYXRpb24YAiABKAsyJy5zZWxsZXJvcHMuY29tbW9uLnYxLlBhZ2luYXRpb25SZXNwb25zZSKKAgoJSm9iUmVjb3JkEgoKAmlkGAEgASgJEgwKBGtpbmQYAiABKAkSLwoFc3RhdGUYAyABKA4yIC5zZWxsZXJvcHMuc2NyZWVuaW5nLnYxLkpvYlN0YXRlEhAKCHByb2dyZXNzGAQgASgFEhAKCGF0dGVtcHRzGAUgASgFEi4KCmNyZWF0ZWRfYXQYBiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCnVwZGF0ZWRfYXQYByABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KDWxlZ2FjeV9maWVsZHMYCCABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0IhsKDUdldEpvYlJlcXVlc3QSCgoCaWQYASABKAkiQQoOR2V0Sm9iUmVzcG9uc2USLwoEaXRlbRgBIAEoCzIhLnNlbGxlcm9wcy5zY3JlZW5pbmcudjEuSm9iUmVjb3JkKuUBCgtJbXBvcnRTdGF0ZRIcChhJTVBPUlRfU1RBVEVfVU5TUEVDSUZJRUQQABIZChVJTVBPUlRfU1RBVEVfVVBMT0FERUQQARIYChRJTVBPUlRfU1RBVEVfUEFSU0lORxACEhgKFElNUE9SVF9TVEFURV9QUkVWSUVXEAMSGgoWSU1QT1JUX1NUQVRFX0lNUE9SVElORxAEEhoKFklNUE9SVF9TVEFURV9DT01QTEVURUQQBRIYChRJTVBPUlRfU1RBVEVfUEFSVElBTBAGEhcKE0lNUE9SVF9TVEFURV9GQUlMRUQQByqMAQoOSW1wb3J0Um93U3RhdGUSIAocSU1QT1JUX1JPV19TVEFURV9VTlNQRUNJRklFRBAAEhoKFklNUE9SVF9ST1dfU1RBVEVfVkFMSUQQARIcChhJTVBPUlRfUk9XX1NUQVRFX0lOVkFMSUQQAhIeChpJTVBPUlRfUk9XX1NUQVRFX0NPTU1JVFRFRBADKtwBCghKb2JTdGF0ZRIZChVKT0JfU1RBVEVfVU5TUEVDSUZJRUQQABIUChBKT0JfU1RBVEVfUVVFVUVEEAESFQoRSk9CX1NUQVRFX1JVTk5JTkcQAhIXChNKT0JfU1RBVEVfU1VDQ0VFREVEEAMSFQoRSk9CX1NUQVRFX1BBUlRJQUwQBBIUChBKT0JfU1RBVEVfRkFJTEVEEAUSFQoRSk9CX1NUQVRFX1BSRVZJRVcQBhIVChFKT0JfU1RBVEVfQVBQTElFRBAHEhQKEEpPQl9TVEFURV9VTkRPTkUQCDKsAwoWU2NyZWVuaW5nSW1wb3J0U2VydmljZRJmCgtMaXN0SW1wb3J0cxIqLnNlbGxlcm9wcy5zY3JlZW5pbmcudjEuTGlzdEltcG9ydHNSZXF1ZXN0Gisuc2VsbGVyb3BzLnNjcmVlbmluZy52MS5MaXN0SW1wb3J0c1Jlc3BvbnNlEmAKCUdldEltcG9ydBIoLnNlbGxlcm9wcy5zY3JlZW5pbmcudjEuR2V0SW1wb3J0UmVxdWVzdBopLnNlbGxlcm9wcy5zY3JlZW5pbmcudjEuR2V0SW1wb3J0UmVzcG9uc2USbwoOTGlzdEltcG9ydFJvd3MSLS5zZWxsZXJvcHMuc2NyZWVuaW5nLnYxLkxpc3RJbXBvcnRSb3dzUmVxdWVzdBouLnNlbGxlcm9wcy5zY3JlZW5pbmcudjEuTGlzdEltcG9ydFJvd3NSZXNwb25zZRJXCgZHZXRKb2ISJS5zZWxsZXJvcHMuc2NyZWVuaW5nLnYxLkdldEpvYlJlcXVlc3QaJi5zZWxsZXJvcHMuc2NyZWVuaW5nLnYxLkdldEpvYlJlc3BvbnNlQjlaN3NlbGxlci1vcHMvY29udHJhY3RzL3NlbGxlcm9wcy9zY3JlZW5pbmcvdjE7c2NyZWVuaW5ndjFiBnByb3RvMw", [file_google_protobuf_struct, file_google_protobuf_timestamp, file_sellerops_common_v1_pagination]);
 
 /**
  * Dates and source months are calendar values, not UTC instants.
@@ -153,6 +153,236 @@ export const ListImportsResponseSchema: GenMessage<ListImportsResponse> = /*@__P
   messageDesc(file_sellerops_screening_v1_import, 2);
 
 /**
+ * @generated from message sellerops.screening.v1.GetImportRequest
+ */
+export type GetImportRequest = Message<"sellerops.screening.v1.GetImportRequest"> & {
+  /**
+   * @generated from field: string id = 1;
+   */
+  id: string;
+};
+
+/**
+ * Describes the message sellerops.screening.v1.GetImportRequest.
+ * Use `create(GetImportRequestSchema)` to create a new message.
+ */
+export const GetImportRequestSchema: GenMessage<GetImportRequest> = /*@__PURE__*/
+  messageDesc(file_sellerops_screening_v1_import, 3);
+
+/**
+ * @generated from message sellerops.screening.v1.GetImportResponse
+ */
+export type GetImportResponse = Message<"sellerops.screening.v1.GetImportResponse"> & {
+  /**
+   * @generated from field: sellerops.screening.v1.ImportRecord item = 1;
+   */
+  item?: ImportRecord | undefined;
+
+  /**
+   * @generated from field: optional string latest_job_id = 2;
+   */
+  latestJobId?: string | undefined;
+};
+
+/**
+ * Describes the message sellerops.screening.v1.GetImportResponse.
+ * Use `create(GetImportResponseSchema)` to create a new message.
+ */
+export const GetImportResponseSchema: GenMessage<GetImportResponse> = /*@__PURE__*/
+  messageDesc(file_sellerops_screening_v1_import, 4);
+
+/**
+ * @generated from message sellerops.screening.v1.ImportPreviewRow
+ */
+export type ImportPreviewRow = Message<"sellerops.screening.v1.ImportPreviewRow"> & {
+  /**
+   * @generated from field: string id = 1;
+   */
+  id: string;
+
+  /**
+   * @generated from field: string import_id = 2;
+   */
+  importId: string;
+
+  /**
+   * @generated from field: string member_path = 3;
+   */
+  memberPath: string;
+
+  /**
+   * @generated from field: string sheet_name = 4;
+   */
+  sheetName: string;
+
+  /**
+   * @generated from field: int32 row_no = 5;
+   */
+  rowNo: number;
+
+  /**
+   * @generated from field: optional string product_id = 6;
+   */
+  productId?: string | undefined;
+
+  /**
+   * @generated from field: sellerops.screening.v1.ImportRowState state = 7;
+   */
+  state: ImportRowState;
+
+  /**
+   * @generated from field: google.protobuf.Struct raw_data = 8;
+   */
+  rawData?: JsonObject | undefined;
+
+  /**
+   * Normalized source values, row errors and future source-only columns.
+   *
+   * @generated from field: google.protobuf.Struct legacy_fields = 9;
+   */
+  legacyFields?: JsonObject | undefined;
+};
+
+/**
+ * Describes the message sellerops.screening.v1.ImportPreviewRow.
+ * Use `create(ImportPreviewRowSchema)` to create a new message.
+ */
+export const ImportPreviewRowSchema: GenMessage<ImportPreviewRow> = /*@__PURE__*/
+  messageDesc(file_sellerops_screening_v1_import, 5);
+
+/**
+ * @generated from message sellerops.screening.v1.ListImportRowsRequest
+ */
+export type ListImportRowsRequest = Message<"sellerops.screening.v1.ListImportRowsRequest"> & {
+  /**
+   * @generated from field: string import_id = 1;
+   */
+  importId: string;
+
+  /**
+   * @generated from field: sellerops.common.v1.PaginationRequest pagination = 2;
+   */
+  pagination?: PaginationRequest | undefined;
+};
+
+/**
+ * Describes the message sellerops.screening.v1.ListImportRowsRequest.
+ * Use `create(ListImportRowsRequestSchema)` to create a new message.
+ */
+export const ListImportRowsRequestSchema: GenMessage<ListImportRowsRequest> = /*@__PURE__*/
+  messageDesc(file_sellerops_screening_v1_import, 6);
+
+/**
+ * @generated from message sellerops.screening.v1.ListImportRowsResponse
+ */
+export type ListImportRowsResponse = Message<"sellerops.screening.v1.ListImportRowsResponse"> & {
+  /**
+   * @generated from field: repeated sellerops.screening.v1.ImportPreviewRow items = 1;
+   */
+  items: ImportPreviewRow[];
+
+  /**
+   * @generated from field: sellerops.common.v1.PaginationResponse pagination = 2;
+   */
+  pagination?: PaginationResponse | undefined;
+};
+
+/**
+ * Describes the message sellerops.screening.v1.ListImportRowsResponse.
+ * Use `create(ListImportRowsResponseSchema)` to create a new message.
+ */
+export const ListImportRowsResponseSchema: GenMessage<ListImportRowsResponse> = /*@__PURE__*/
+  messageDesc(file_sellerops_screening_v1_import, 7);
+
+/**
+ * @generated from message sellerops.screening.v1.JobRecord
+ */
+export type JobRecord = Message<"sellerops.screening.v1.JobRecord"> & {
+  /**
+   * @generated from field: string id = 1;
+   */
+  id: string;
+
+  /**
+   * @generated from field: string kind = 2;
+   */
+  kind: string;
+
+  /**
+   * @generated from field: sellerops.screening.v1.JobState state = 3;
+   */
+  state: JobState;
+
+  /**
+   * @generated from field: int32 progress = 4;
+   */
+  progress: number;
+
+  /**
+   * @generated from field: int32 attempts = 5;
+   */
+  attempts: number;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp created_at = 6;
+   */
+  createdAt?: Timestamp | undefined;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp updated_at = 7;
+   */
+  updatedAt?: Timestamp | undefined;
+
+  /**
+   * Public job fields only. Internal payload, lease token and request hash omitted.
+   *
+   * @generated from field: google.protobuf.Struct legacy_fields = 8;
+   */
+  legacyFields?: JsonObject | undefined;
+};
+
+/**
+ * Describes the message sellerops.screening.v1.JobRecord.
+ * Use `create(JobRecordSchema)` to create a new message.
+ */
+export const JobRecordSchema: GenMessage<JobRecord> = /*@__PURE__*/
+  messageDesc(file_sellerops_screening_v1_import, 8);
+
+/**
+ * @generated from message sellerops.screening.v1.GetJobRequest
+ */
+export type GetJobRequest = Message<"sellerops.screening.v1.GetJobRequest"> & {
+  /**
+   * @generated from field: string id = 1;
+   */
+  id: string;
+};
+
+/**
+ * Describes the message sellerops.screening.v1.GetJobRequest.
+ * Use `create(GetJobRequestSchema)` to create a new message.
+ */
+export const GetJobRequestSchema: GenMessage<GetJobRequest> = /*@__PURE__*/
+  messageDesc(file_sellerops_screening_v1_import, 9);
+
+/**
+ * @generated from message sellerops.screening.v1.GetJobResponse
+ */
+export type GetJobResponse = Message<"sellerops.screening.v1.GetJobResponse"> & {
+  /**
+   * @generated from field: sellerops.screening.v1.JobRecord item = 1;
+   */
+  item?: JobRecord | undefined;
+};
+
+/**
+ * Describes the message sellerops.screening.v1.GetJobResponse.
+ * Use `create(GetJobResponseSchema)` to create a new message.
+ */
+export const GetJobResponseSchema: GenMessage<GetJobResponse> = /*@__PURE__*/
+  messageDesc(file_sellerops_screening_v1_import, 10);
+
+/**
  * @generated from enum sellerops.screening.v1.ImportState
  */
 export enum ImportState {
@@ -204,6 +434,93 @@ export const ImportStateSchema: GenEnum<ImportState> = /*@__PURE__*/
   enumDesc(file_sellerops_screening_v1_import, 0);
 
 /**
+ * @generated from enum sellerops.screening.v1.ImportRowState
+ */
+export enum ImportRowState {
+  /**
+   * @generated from enum value: IMPORT_ROW_STATE_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: IMPORT_ROW_STATE_VALID = 1;
+   */
+  VALID = 1,
+
+  /**
+   * @generated from enum value: IMPORT_ROW_STATE_INVALID = 2;
+   */
+  INVALID = 2,
+
+  /**
+   * @generated from enum value: IMPORT_ROW_STATE_COMMITTED = 3;
+   */
+  COMMITTED = 3,
+}
+
+/**
+ * Describes the enum sellerops.screening.v1.ImportRowState.
+ */
+export const ImportRowStateSchema: GenEnum<ImportRowState> = /*@__PURE__*/
+  enumDesc(file_sellerops_screening_v1_import, 1);
+
+/**
+ * @generated from enum sellerops.screening.v1.JobState
+ */
+export enum JobState {
+  /**
+   * @generated from enum value: JOB_STATE_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: JOB_STATE_QUEUED = 1;
+   */
+  QUEUED = 1,
+
+  /**
+   * @generated from enum value: JOB_STATE_RUNNING = 2;
+   */
+  RUNNING = 2,
+
+  /**
+   * @generated from enum value: JOB_STATE_SUCCEEDED = 3;
+   */
+  SUCCEEDED = 3,
+
+  /**
+   * @generated from enum value: JOB_STATE_PARTIAL = 4;
+   */
+  PARTIAL = 4,
+
+  /**
+   * @generated from enum value: JOB_STATE_FAILED = 5;
+   */
+  FAILED = 5,
+
+  /**
+   * @generated from enum value: JOB_STATE_PREVIEW = 6;
+   */
+  PREVIEW = 6,
+
+  /**
+   * @generated from enum value: JOB_STATE_APPLIED = 7;
+   */
+  APPLIED = 7,
+
+  /**
+   * @generated from enum value: JOB_STATE_UNDONE = 8;
+   */
+  UNDONE = 8,
+}
+
+/**
+ * Describes the enum sellerops.screening.v1.JobState.
+ */
+export const JobStateSchema: GenEnum<JobState> = /*@__PURE__*/
+  enumDesc(file_sellerops_screening_v1_import, 2);
+
+/**
  * @generated from service sellerops.screening.v1.ScreeningImportService
  */
 export const ScreeningImportService: GenService<{
@@ -216,6 +533,32 @@ export const ScreeningImportService: GenService<{
     methodKind: "unary";
     input: typeof ListImportsRequestSchema;
     output: typeof ListImportsResponseSchema;
+  },
+  /**
+   * @generated from rpc sellerops.screening.v1.ScreeningImportService.GetImport
+   */
+  getImport: {
+    methodKind: "unary";
+    input: typeof GetImportRequestSchema;
+    output: typeof GetImportResponseSchema;
+  },
+  /**
+   * @generated from rpc sellerops.screening.v1.ScreeningImportService.ListImportRows
+   */
+  listImportRows: {
+    methodKind: "unary";
+    input: typeof ListImportRowsRequestSchema;
+    output: typeof ListImportRowsResponseSchema;
+  },
+  /**
+   * Shared public task status used by the import workflow; no request-log jobs.
+   *
+   * @generated from rpc sellerops.screening.v1.ScreeningImportService.GetJob
+   */
+  getJob: {
+    methodKind: "unary";
+    input: typeof GetJobRequestSchema;
+    output: typeof GetJobResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_sellerops_screening_v1_import, 0);

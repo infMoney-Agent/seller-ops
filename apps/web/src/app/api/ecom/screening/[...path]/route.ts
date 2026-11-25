@@ -1,7 +1,7 @@
 import { createHmac } from 'node:crypto';
 import { acceptsGzip, serverTiming } from '@/lib/http-performance';
 import { backendURL, isAllowedAppOrigin } from '@/lib/backend';
-import { connectImportList, importConnectFailure } from '@/features/screening/import-connect';
+import { connectImportRead, importConnectFailure } from '@/features/screening/import-connect';
 import type { SellerSession } from '@/features/auth/session';
 
 export const runtime = 'nodejs';
@@ -79,10 +79,14 @@ async function proxy(request: Request, { params }: { params: Promise<{ path: str
     ) {
       return Response.json({ message: '工作区已切换，请刷新页面。' }, { status: 409 });
     }
-    if (request.method === 'GET' && path === 'imports') {
-      const mode = process.env.SCREENING_IMPORTS_TRANSPORT || 'legacy';
+    const importRead = new RegExp(`^(?:imports/${uuid}(?:/preview)?|jobs/${uuid})$`).test(path);
+    if (request.method === 'GET' && (path === 'imports' || importRead)) {
+      const mode =
+        (path === 'imports'
+          ? process.env.SCREENING_IMPORTS_TRANSPORT
+          : process.env.SCREENING_IMPORT_READS_TRANSPORT) || 'legacy';
       if (!['legacy', 'connect'].includes(mode))
-        return Response.json({ message: '导入列表传输配置无效。' }, { status: 503 });
+        return Response.json({ message: '导入查询传输配置无效。' }, { status: 503 });
       if (mode === 'connect') {
         const apiStarted = performance.now();
         const responseHeaders = () => ({
@@ -94,8 +98,9 @@ async function proxy(request: Request, { params }: { params: Promise<{ path: str
           )
         });
         try {
-          const result = await connectImportList(
+          const result = await connectImportRead(
             url,
+            path,
             session,
             secret,
             AbortSignal.any([request.signal, AbortSignal.timeout(120000)])

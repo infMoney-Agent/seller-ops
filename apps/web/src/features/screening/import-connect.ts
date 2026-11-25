@@ -5,15 +5,29 @@ import { createConnectTransport } from '@connectrpc/connect-node';
 import { ScreeningImportService } from '@/gen/sellerops/screening/v1/import_pb';
 import { ErrorDetailSchema } from '@/gen/sellerops/common/v1/error_pb';
 import type { SellerSession } from '@/features/auth/session';
-import { importPagination, legacyImportList } from './import-list-compat';
-const procedure = '/' + ScreeningImportService.typeName + '/ListImports';
-export async function connectImportList(
+import {
+  importPagination,
+  legacyImportList,
+  legacyImportDetail,
+  legacyJob
+} from './import-list-compat';
+export async function connectImportRead(
   url: URL,
+  path: string,
   session: SellerSession,
   secret: string,
   signal: AbortSignal
 ) {
-  const pagination = importPagination(url.searchParams);
+  const parts = path.split('/');
+  const name =
+    path === 'imports'
+      ? 'ListImports'
+      : parts[0] === 'jobs'
+        ? 'GetJob'
+        : parts[2] === 'preview'
+          ? 'ListImportRows'
+          : 'GetImport';
+  const procedure = '/' + ScreeningImportService.typeName + '/' + name;
   const stamp = String(Math.floor(Date.now() / 1000));
   const signature = createHmac('sha256', secret)
     .update(
@@ -34,20 +48,30 @@ export async function connectImportList(
     defaultTimeoutMs: 120000
   });
   const client = createClient(ScreeningImportService, transport);
-  const response = await client.listImports(
-    { pagination },
-    {
-      signal,
-      headers: {
-        'x-seller-user': String(session.id),
-        'x-seller-workspace': String(session.workspaceId),
-        'x-seller-role': session.role,
-        'x-screening-time': stamp,
-        'x-screening-signature': signature
-      }
+  const options = {
+    signal,
+    headers: {
+      'x-seller-user': String(session.id),
+      'x-seller-workspace': String(session.workspaceId),
+      'x-seller-role': session.role,
+      'x-screening-time': stamp,
+      'x-screening-signature': signature
     }
-  );
-  return legacyImportList(response);
+  };
+  if (name === 'ListImports')
+    return legacyImportList(
+      await client.listImports({ pagination: importPagination(url.searchParams) }, options)
+    );
+  if (name === 'GetImport')
+    return legacyImportDetail(await client.getImport({ id: parts[1] }, options));
+  if (name === 'ListImportRows')
+    return legacyImportList(
+      await client.listImportRows(
+        { importId: parts[1], pagination: importPagination(url.searchParams) },
+        options
+      )
+    );
+  return legacyJob(await client.getJob({ id: parts[1] }, options));
 }
 export function importConnectFailure(error: unknown): {
   status: number;

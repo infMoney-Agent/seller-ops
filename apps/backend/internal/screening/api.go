@@ -25,8 +25,12 @@ func page(r *http.Request) (int, int) {
 }
 func (s *service) list(r *http.Request, table, where string, args ...any) (any, error) {
 	p, n := page(r)
+	return s.listPage(r.Context(), p, n, table, where, args...)
+}
+func (s *service) listPage(ctx context.Context, p, n int, table, where string, args ...any) (any, error) {
+	p, n = normalizeImportPage(p, n)
 	var total int64
-	if e := s.db.QueryRow(r.Context(), "SELECT count(*) FROM "+table+" WHERE "+where, args...).Scan(&total); e != nil {
+	if e := s.db.QueryRow(ctx, "SELECT count(*) FROM "+table+" WHERE "+where, args...).Scan(&total); e != nil {
 		return nil, e
 	}
 	order := "created_at DESC,id DESC"
@@ -34,7 +38,7 @@ func (s *service) list(r *http.Request, table, where string, args ...any) (any, 
 		order = "member_path,sheet_name,row_no,id"
 	}
 	args = append(args, n, (p-1)*n)
-	items, e := s.query(r.Context(), fmt.Sprintf("SELECT to_jsonb(t) FROM %s t WHERE %s ORDER BY %s LIMIT $%d OFFSET $%d", table, where, order, len(args)-1, len(args)), args...)
+	items, e := s.query(ctx, fmt.Sprintf("SELECT to_jsonb(t) FROM %s t WHERE %s ORDER BY %s LIMIT $%d OFFSET $%d", table, where, order, len(args)-1, len(args)), args...)
 	return Object{"items": items, "total": total, "page": p, "page_size": n}, e
 }
 func (s *service) route(w http.ResponseWriter, r *http.Request) (any, error) {
@@ -139,17 +143,18 @@ func (s *service) route(w http.ResponseWriter, r *http.Request) (any, error) {
 					return s.importRemovalPreview(ctx, a, id)
 				}
 				if len(parts) == 2 {
-					return s.one(ctx, "SELECT to_jsonb(i)||jsonb_build_object('latest_job_id',(SELECT j.id FROM ps_jobs j WHERE j.tenant_id=i.tenant_id AND j.kind IN ('parse','import') AND j.payload->>'import_id'=i.id::text ORDER BY j.updated_at DESC,j.id DESC LIMIT 1)) FROM ps_imports i WHERE tenant_id=$1 AND id=$2::uuid AND NOT(counts ? 'data_deleted_at')", a.Tenant, id)
+					return s.getImport(ctx, a, id)
+				}
+				if parts[2] == "preview" {
+					p, n := page(r)
+					return s.importRows(ctx, a, id, p, n)
 				}
 				if _, e := s.one(ctx, "SELECT to_jsonb(i) FROM ps_imports i WHERE tenant_id=$1 AND id=$2::uuid AND NOT(counts ? 'data_deleted_at')", a.Tenant, id); e != nil {
 					return nil, e
 				}
-				if parts[2] == "preview" {
-					return s.list(r, "ps_import_rows", "tenant_id=$1 AND import_id=$2::uuid", a.Tenant, id)
-				}
 				return s.importDownload(w, r, id, parts[2])
 			case "jobs", "screen-runs":
-				return s.one(ctx, "SELECT to_jsonb(j)-'payload'-'lease_token'-'request_hash' FROM ps_jobs j WHERE tenant_id=$1 AND id=$2::uuid AND kind<>'request'", a.Tenant, id)
+				return s.getPublicJob(ctx, a, id)
 			case "review-batches":
 				return s.one(ctx, "SELECT to_jsonb(j)-'lease_token' FROM ps_jobs j WHERE tenant_id=$1 AND id=$2::uuid AND kind='review'", a.Tenant, id)
 			case "exports":

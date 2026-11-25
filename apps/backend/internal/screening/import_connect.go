@@ -4,6 +4,7 @@ import (
 	"connectrpc.com/connect"
 	"context"
 	"errors"
+	"github.com/jackc/pgx/v5"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"net/http"
@@ -34,6 +35,9 @@ func rpcError(err error) *connect.Error {
 		case 422:
 			code, reason = connect.CodeInvalidArgument, "INVALID_ARGUMENT"
 		}
+	}
+	if errors.Is(err, pgx.ErrNoRows) {
+		code, message, reason = connect.CodeNotFound, "资源不存在", "NOT_FOUND"
 	}
 	if errors.Is(err, context.Canceled) {
 		code, message, reason = connect.CodeCanceled, "请求已取消", "CANCELED"
@@ -132,4 +136,116 @@ func (s *service) registerImportsRPC(mux *http.ServeMux) {
 		r = r.WithContext(context.WithValue(r.Context(), identityKey{}, a))
 		handler.ServeHTTP(w, r)
 	}))
+}
+
+func rpcActor(ctx context.Context) (identity, error) {
+	a, ok := ctx.Value(identityKey{}).(identity)
+	if !ok {
+		return a, fail(401, "身份签名无效")
+	}
+	return a, nil
+}
+func rpcStruct(row Object) (*structpb.Struct, error) {
+	m, err := importStructMap(row)
+	if err != nil {
+		return nil, err
+	}
+	return structpb.NewStruct(m)
+}
+func (s *service) GetImport(ctx context.Context, req *connect.Request[screeningv1.GetImportRequest]) (*connect.Response[screeningv1.GetImportResponse], error) {
+	a, err := rpcActor(ctx)
+	if err != nil {
+		return nil, rpcError(err)
+	}
+	row, err := s.getImport(ctx, a, req.Msg.Id)
+	if err != nil {
+		return nil, rpcError(err)
+	}
+	item, err := rpcImport(importRecord(row))
+	if err != nil {
+		return nil, rpcError(err)
+	}
+	return connect.NewResponse(&screeningv1.GetImportResponse{Item: item, LatestJobId: optionalImportString(row["latest_job_id"])}), nil
+}
+
+var importRowStates = map[string]screeningv1.ImportRowState{"valid": screeningv1.ImportRowState_IMPORT_ROW_STATE_VALID, "invalid": screeningv1.ImportRowState_IMPORT_ROW_STATE_INVALID, "committed": screeningv1.ImportRowState_IMPORT_ROW_STATE_COMMITTED}
+
+func rpcImportRow(row Object) (*screeningv1.ImportPreviewRow, error) {
+	state, ok := importRowStates[str(row["state"])]
+	if !ok {
+		return nil, errors.New("unknown import row state")
+	}
+	raw, err := rpcStruct(importObject(row["raw_data"]))
+	if err != nil {
+		return nil, err
+	}
+	extra := Object{}
+	for k, v := range row {
+		extra[k] = v
+	}
+	for _, k := range []string{"id", "import_id", "member_path", "sheet_name", "row_no", "product_id", "state", "raw_data"} {
+		delete(extra, k)
+	}
+	legacy, err := rpcStruct(extra)
+	if err != nil {
+		return nil, err
+	}
+	return &screeningv1.ImportPreviewRow{Id: str(row["id"]), ImportId: str(row["import_id"]), MemberPath: str(row["member_path"]), SheetName: str(row["sheet_name"]), RowNo: int32(integer(row["row_no"])), ProductId: optionalImportString(row["product_id"]), State: state, RawData: raw, LegacyFields: legacy}, nil
+}
+func (s *service) ListImportRows(ctx context.Context, req *connect.Request[screeningv1.ListImportRowsRequest]) (*connect.Response[screeningv1.ListImportRowsResponse], error) {
+	a, err := rpcActor(ctx)
+	if err != nil {
+		return nil, rpcError(err)
+	}
+	value, err := s.importRows(ctx, a, req.Msg.ImportId, int(req.Msg.GetPagination().GetPage()), int(req.Msg.GetPagination().GetPageSize()))
+	if err != nil {
+		return nil, rpcError(err)
+	}
+	result := value.(Object)
+	out := &screeningv1.ListImportRowsResponse{Items: []*screeningv1.ImportPreviewRow{}, Pagination: &commonv1.PaginationResponse{Page: int32(result["page"].(int)), PageSize: int32(result["page_size"].(int)), Total: result["total"].(int64)}}
+	for _, row := range result["items"].([]Object) {
+		item, err := rpcImportRow(row)
+		if err != nil {
+			return nil, rpcError(err)
+		}
+		out.Items = append(out.Items, item)
+	}
+	return connect.NewResponse(out), nil
+}
+
+var jobStates = map[string]screeningv1.JobState{"queued": screeningv1.JobState_JOB_STATE_QUEUED, "running": screeningv1.JobState_JOB_STATE_RUNNING, "succeeded": screeningv1.JobState_JOB_STATE_SUCCEEDED, "partial": screeningv1.JobState_JOB_STATE_PARTIAL, "failed": screeningv1.JobState_JOB_STATE_FAILED, "preview": screeningv1.JobState_JOB_STATE_PREVIEW, "applied": screeningv1.JobState_JOB_STATE_APPLIED, "undone": screeningv1.JobState_JOB_STATE_UNDONE}
+
+func (s *service) GetJob(ctx context.Context, req *connect.Request[screeningv1.GetJobRequest]) (*connect.Response[screeningv1.GetJobResponse], error) {
+	a, err := rpcActor(ctx)
+	if err != nil {
+		return nil, rpcError(err)
+	}
+	row, err := s.getPublicJob(ctx, a, req.Msg.Id)
+	if err != nil {
+		return nil, rpcError(err)
+	}
+	state, ok := jobStates[str(row["state"])]
+	if !ok {
+		return nil, rpcError(errors.New("unknown task state"))
+	}
+	extra := Object{}
+	for k, v := range row {
+		extra[k] = v
+	}
+	for _, k := range []string{"id", "kind", "state", "progress", "attempts"} {
+		delete(extra, k)
+	}
+	legacy, err := rpcStruct(extra)
+	if err != nil {
+		return nil, rpcError(err)
+	}
+	created, err := importTimestamp(str(row["created_at"]))
+	if err != nil {
+		return nil, rpcError(err)
+	}
+	updated, err := importTimestamp(str(row["updated_at"]))
+	if err != nil {
+		return nil, rpcError(err)
+	}
+	return connect.NewResponse(&screeningv1.GetJobResponse{Item: &screeningv1.JobRecord{Id: str(row["id"]), Kind: str(row["kind"]), State: state, Progress: int32(integer(row["progress"])), Attempts: int32(integer(row["attempts"])), CreatedAt: created, UpdatedAt: updated, LegacyFields: legacy}}), nil
 }

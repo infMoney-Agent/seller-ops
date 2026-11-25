@@ -45,3 +45,15 @@ CI 必须通过 Proto 生成/兼容检查、Go 回归、Web 类型/lint/生产�
 本轮隔离验收结果：Go race 全套回归、go vet、Web 类型检查与生产构建、TS 兼容单测、Proto lint/生成漂移检查均通过。Connect 模式下完整浏览器流程通过（29.52 秒）。首次引入时 origin/dev 尚无契约，兼容性检查按 bootstrap 规则跳过。
 
 2026-11-25 运行环境验证：已先以 legacy 启动，再切到 connect；两种内部接口对当前 10 条导入历史的数量与 ID 顺序核对一致，公网入口返回正常登录跳转。runtime.json 已持久化 connect。发布构建保留原生环境现有认证页面，未升级认证服务；数据库无变更。备份位于原生运行目录 backups/proto-pilot-1795579585214。
+
+## 第二阶段：导入查询链路
+
+新增 GetImport、ListImportRows、GetJob：分别兼容 GET imports/{id}、imports/{id}/preview、jobs/{id}。原生上传、下载、确认导入、删除与重试继续走原 HTTP；不把文件内容放入 Unary 消息。
+
+SCREENING_IMPORT_READS_TRANSPORT=legacy|connect 单独控制这三个只读接口，默认 legacy；原有列表开关不变。切换需重启 Web，错误不自动回退。CI 浏览器验收同时开启两个 connect 开关。
+
+详情保留 latest_job_id 的 null 语义；行预览按子文件、工作表、行号和 ID 排序，原始价格文本、空白、错误数组和标准化数据保留。批次被删除或不属于当前公司时，详情与预览均返回 404。任务仅暴露既有公开投影，禁止 payload、lease_token、request_hash；请求日志类型不可查询。资源 ID 无效返回 422。任务八种现有状态均显式建模，时间字段沿用精确旧 JSON 文本。
+
+领域查询继续使用普通 Go 数据，与 REST 和 Connect 共用，不修改 SQL 模式或业务数据。新增读取适配也将 pgx.ErrNoRows 映射为 Connect not_found，避免资源不存在错误变成 500。
+
+第二阶段验收：Web 类型检查、6 项 TS 单测（35 断言）、Go race 相关回归及安全/新旧投影测试、go vet、生产构建通过；相对于上一阶段 origin/codex/proto-imports-pilot 的 Buf breaking 检查通过。双 Connect 开关下浏览器完整验收通过（31.57 秒）。测试使用独立 PostgreSQL 与 Redis 数据库15。

@@ -54,6 +54,53 @@ func TestImportsConnectIdentity(t *testing.T) {
 		}
 	}
 }
+func TestImportReadsConnectIdentity(t *testing.T) {
+	svc := &service{cfg: Config{Secret: strings.Repeat("s", 32)}}
+	server := httptest.NewServer(svc.handler())
+	defer server.Close()
+	client := screeningv1connect.NewScreeningImportServiceClient(server.Client(), server.URL, connect.WithProtoJSON())
+	for _, method := range []string{"detail", "rows", "job"} {
+		for _, kind := range []string{"unsigned", "forged", "expired", "wrong-procedure"} {
+			t.Run(method+"/"+kind, func(t *testing.T) {
+				sign := func(h http.Header, path string) {
+					if kind == "unsigned" {
+						return
+					}
+					stamp := fmt.Sprint(time.Now().Unix())
+					if kind == "expired" {
+						stamp = fmt.Sprint(time.Now().Add(-2 * time.Minute).Unix())
+					}
+					if kind == "wrong-procedure" {
+						path = screeningv1connect.ScreeningImportServiceListImportsProcedure
+					}
+					signImportRequest(h, "POST", path, svc.cfg.Secret, 501, stamp)
+					if kind == "forged" {
+						h.Set("x-seller-workspace", "502")
+					}
+				}
+				var err error
+				switch method {
+				case "detail":
+					req := connect.NewRequest(&screeningv1.GetImportRequest{Id: uuid()})
+					sign(req.Header(), screeningv1connect.ScreeningImportServiceGetImportProcedure)
+					_, err = client.GetImport(context.Background(), req)
+				case "rows":
+					req := connect.NewRequest(&screeningv1.ListImportRowsRequest{ImportId: uuid()})
+					sign(req.Header(), screeningv1connect.ScreeningImportServiceListImportRowsProcedure)
+					_, err = client.ListImportRows(context.Background(), req)
+				case "job":
+					req := connect.NewRequest(&screeningv1.GetJobRequest{Id: uuid()})
+					sign(req.Header(), screeningv1connect.ScreeningImportServiceGetJobProcedure)
+					_, err = client.GetJob(context.Background(), req)
+				}
+				if connect.CodeOf(err) != connect.CodeUnauthenticated {
+					t.Fatal(err)
+				}
+			})
+		}
+	}
+}
+
 func TestImportsConnectParity(t *testing.T) {
 	raw := os.Getenv("SCREENING_TEST_DATABASE_URL")
 	if raw == "" {
@@ -108,6 +155,7 @@ func TestImportsConnectParity(t *testing.T) {
 	server := httptest.NewServer(svc.handler())
 	defer server.Close()
 	client := screeningv1connect.NewScreeningImportServiceClient(server.Client(), server.URL, connect.WithProtoJSON())
+	testImportReadRPC(t, svc, server, client)
 	for _, tc := range []struct {
 		p, n   int32
 		tenant int64
@@ -166,3 +214,160 @@ func TestImportsConnectParity(t *testing.T) {
 		}
 	}
 }
+
+func legacyRPCImport(item *screeningv1.ImportRecord) Object {
+	state := ""
+	for k, v := range importStates {
+		if v == item.State {
+			state = k
+		}
+	}
+	return (ImportListRecord{ID: item.Id, FileName: item.FileName, State: state, Marketplace: item.Marketplace, SourcePeriod: item.SourcePeriod, SourceType: item.SourceType, PeriodType: item.PeriodType, DefaultSalesScope: item.DefaultSalesScope, ObservedOn: item.ObservedOn, PeriodStart: item.PeriodStart, PeriodEnd: item.PeriodEnd, Counts: item.Counts.AsMap(), Mapping: item.Mapping.AsMap(), LegacyFields: item.LegacyFields.AsMap()}).legacy()
+}
+func testImportReadRPC(t *testing.T, svc *service, server *httptest.Server, client screeningv1connect.ScreeningImportServiceClient) {
+	t.Helper()
+	ctx := context.Background()
+	var id, deleted string
+	if err := svc.db.QueryRow(ctx, "SELECT id::text FROM ps_imports WHERE tenant_id=501 AND file_name='商品-000.xlsx'").Scan(&id); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.db.QueryRow(ctx, "SELECT id::text FROM ps_imports WHERE tenant_id=501 AND counts ? 'data_deleted_at'").Scan(&deleted); err != nil {
+		t.Fatal(err)
+	}
+	for i, state := range []string{"valid", "invalid", "committed"} {
+		_, err := svc.db.Exec(ctx, "INSERT INTO ps_import_rows(tenant_id,id,import_id,member_path,sheet_name,row_no,state,raw_data,normalized_data,errors) VALUES(501,$1,$2,'member.csv','中文表',$3,$4,$5::jsonb,$6::jsonb,$7::jsonb)", uuid(), id, i+2, state, encoded(Object{"ASIN": "B0TEST0001", "价格": "19.990000", "blank": nil, "zero": 0}), encoded(Object{"price_usd": "19.990000"}), encoded([]Object{{"message": "缺少商品标题", "column": "商品标题"}}))
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	jobIDs := []string{}
+	for _, state := range []string{"queued", "running", "succeeded", "partial", "failed", "preview", "applied", "undone"} {
+		job := uuid()
+		jobIDs = append(jobIDs, job)
+		_, err := svc.db.Exec(ctx, "INSERT INTO ps_jobs(tenant_id,id,kind,state,idempotency_key,payload,result,error,progress,attempts,created_by,lease_token,request_hash) VALUES(501,$1,'parse',$2,$1::uuid::text,$3::jsonb,$4::jsonb,$5::jsonb,0,0,7,$6,'private-hash')", job, state, encoded(Object{"import_id": id, "internal": "never expose"}), encoded(Object{"count": 0}), encoded(Object{"message": "错误详情"}), uuid())
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	hidden := uuid()
+	if _, err := svc.db.Exec(ctx, "INSERT INTO ps_jobs(tenant_id,id,kind,idempotency_key,created_by) VALUES(501,$1,'request',$1::uuid::text,7)", hidden); err != nil {
+		t.Fatal(err)
+	}
+	type check struct {
+		kind, id, query string
+		tenant          int64
+		status          int
+	}
+	cases := []check{{"detail", id, "", 501, 200}, {"rows", id, "?page=2&page_size=2", 501, 200}, {"rows", id, "?page=99&page_size=1000", 501, 200}, {"rows", id, "", 501, 200}, {"detail", id, "", 502, 404}, {"rows", id, "", 502, 404}, {"detail", deleted, "", 501, 404}, {"rows", deleted, "", 501, 404}, {"detail", uuid(), "", 501, 404}, {"detail", "bad-id", "", 501, 422}, {"rows", "bad-id", "", 501, 422}, {"job", hidden, "", 501, 404}, {"job", jobIDs[0], "", 502, 404}, {"job", "bad-id", "", 501, 422}}
+	for _, job := range jobIDs {
+		cases = append(cases, check{"job", job, "", 501, 200})
+	}
+	for _, tc := range cases {
+		t.Run(tc.kind+"/"+tc.id+tc.query+fmt.Sprint(tc.tenant), func(t *testing.T) {
+			sign := func(h http.Header, path string) {
+				signImportRequest(h, "POST", path, svc.cfg.Secret, tc.tenant, fmt.Sprint(time.Now().Unix()))
+			}
+			var got any
+			var err error
+			restPath := "/api/v1/screening/imports/" + tc.id
+			switch tc.kind {
+			case "detail":
+				req := connect.NewRequest(&screeningv1.GetImportRequest{Id: tc.id})
+				sign(req.Header(), screeningv1connect.ScreeningImportServiceGetImportProcedure)
+				var out *connect.Response[screeningv1.GetImportResponse]
+				out, err = client.GetImport(ctx, req)
+				if err == nil {
+					got = legacyRPCImport(out.Msg.Item)
+				}
+			case "rows":
+				restPath += "/preview"
+				p, n := page(&http.Request{URL: mustImportURL(tc.query)})
+				req := connect.NewRequest(&screeningv1.ListImportRowsRequest{ImportId: tc.id, Pagination: &commonv1.PaginationRequest{Page: int32(p), PageSize: int32(n)}})
+				sign(req.Header(), screeningv1connect.ScreeningImportServiceListImportRowsProcedure)
+				var out *connect.Response[screeningv1.ListImportRowsResponse]
+				out, err = client.ListImportRows(ctx, req)
+				if err == nil {
+					items := []Object{}
+					for _, row := range out.Msg.Items {
+						item := row.LegacyFields.AsMap()
+						item["id"] = row.Id
+						item["import_id"] = row.ImportId
+						item["member_path"] = row.MemberPath
+						item["sheet_name"] = row.SheetName
+						item["row_no"] = row.RowNo
+						item["product_id"] = nil
+						if row.ProductId != nil {
+							item["product_id"] = *row.ProductId
+						}
+						for k, v := range importRowStates {
+							if v == row.State {
+								item["state"] = k
+							}
+						}
+						item["raw_data"] = row.RawData.AsMap()
+						items = append(items, item)
+					}
+					got = Object{"items": items, "page": out.Msg.Pagination.Page, "page_size": out.Msg.Pagination.PageSize, "total": out.Msg.Pagination.Total}
+				}
+			case "job":
+				restPath = "/api/v1/screening/jobs/" + tc.id
+				req := connect.NewRequest(&screeningv1.GetJobRequest{Id: tc.id})
+				sign(req.Header(), screeningv1connect.ScreeningImportServiceGetJobProcedure)
+				var out *connect.Response[screeningv1.GetJobResponse]
+				out, err = client.GetJob(ctx, req)
+				if err == nil {
+					item := out.Msg.Item
+					v := item.LegacyFields.AsMap()
+					v["id"] = item.Id
+					v["kind"] = item.Kind
+					v["progress"] = item.Progress
+					v["attempts"] = item.Attempts
+					for k, state := range jobStates {
+						if state == item.State {
+							v["state"] = k
+						}
+					}
+					for _, private := range []string{"payload", "lease_token", "request_hash"} {
+						if _, ok := v[private]; ok {
+							t.Fatal("private field leaked", private)
+						}
+					}
+					got = v
+				}
+			}
+			restPath += tc.query
+			rest, _ := http.NewRequest("GET", server.URL+restPath, nil)
+			signImportRequest(rest.Header, "GET", restPath, svc.cfg.Secret, tc.tenant, fmt.Sprint(time.Now().Unix()))
+			res, e := server.Client().Do(rest)
+			if e != nil {
+				t.Fatal(e)
+			}
+			defer res.Body.Close()
+			if res.StatusCode != tc.status {
+				t.Fatal("REST status", res.StatusCode, tc.status)
+			}
+			if tc.status != 200 {
+				want := connect.CodeNotFound
+				if tc.status == 422 {
+					want = connect.CodeInvalidArgument
+				}
+				if connect.CodeOf(err) != want {
+					t.Fatalf("RPC error %v want %v", err, want)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			var old, projected any
+			if e = json.NewDecoder(res.Body).Decode(&old); e != nil {
+				t.Fatal(e)
+			}
+			json.Unmarshal(encoded(got), &projected)
+			if !reflect.DeepEqual(old, projected) {
+				t.Fatalf("projection mismatch old=%s got=%s", encoded(old), encoded(projected))
+			}
+		})
+	}
+}
+func mustImportURL(query string) *url.URL { u, _ := url.Parse("http://test/" + query); return u }

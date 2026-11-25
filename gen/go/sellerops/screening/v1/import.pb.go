@@ -88,6 +88,125 @@ func (ImportState) EnumDescriptor() ([]byte, []int) {
 	return file_sellerops_screening_v1_import_proto_rawDescGZIP(), []int{0}
 }
 
+type ImportRowState int32
+
+const (
+	ImportRowState_IMPORT_ROW_STATE_UNSPECIFIED ImportRowState = 0
+	ImportRowState_IMPORT_ROW_STATE_VALID       ImportRowState = 1
+	ImportRowState_IMPORT_ROW_STATE_INVALID     ImportRowState = 2
+	ImportRowState_IMPORT_ROW_STATE_COMMITTED   ImportRowState = 3
+)
+
+// Enum value maps for ImportRowState.
+var (
+	ImportRowState_name = map[int32]string{
+		0: "IMPORT_ROW_STATE_UNSPECIFIED",
+		1: "IMPORT_ROW_STATE_VALID",
+		2: "IMPORT_ROW_STATE_INVALID",
+		3: "IMPORT_ROW_STATE_COMMITTED",
+	}
+	ImportRowState_value = map[string]int32{
+		"IMPORT_ROW_STATE_UNSPECIFIED": 0,
+		"IMPORT_ROW_STATE_VALID":       1,
+		"IMPORT_ROW_STATE_INVALID":     2,
+		"IMPORT_ROW_STATE_COMMITTED":   3,
+	}
+)
+
+func (x ImportRowState) Enum() *ImportRowState {
+	p := new(ImportRowState)
+	*p = x
+	return p
+}
+
+func (x ImportRowState) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ImportRowState) Descriptor() protoreflect.EnumDescriptor {
+	return file_sellerops_screening_v1_import_proto_enumTypes[1].Descriptor()
+}
+
+func (ImportRowState) Type() protoreflect.EnumType {
+	return &file_sellerops_screening_v1_import_proto_enumTypes[1]
+}
+
+func (x ImportRowState) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ImportRowState.Descriptor instead.
+func (ImportRowState) EnumDescriptor() ([]byte, []int) {
+	return file_sellerops_screening_v1_import_proto_rawDescGZIP(), []int{1}
+}
+
+type JobState int32
+
+const (
+	JobState_JOB_STATE_UNSPECIFIED JobState = 0
+	JobState_JOB_STATE_QUEUED      JobState = 1
+	JobState_JOB_STATE_RUNNING     JobState = 2
+	JobState_JOB_STATE_SUCCEEDED   JobState = 3
+	JobState_JOB_STATE_PARTIAL     JobState = 4
+	JobState_JOB_STATE_FAILED      JobState = 5
+	JobState_JOB_STATE_PREVIEW     JobState = 6
+	JobState_JOB_STATE_APPLIED     JobState = 7
+	JobState_JOB_STATE_UNDONE      JobState = 8
+)
+
+// Enum value maps for JobState.
+var (
+	JobState_name = map[int32]string{
+		0: "JOB_STATE_UNSPECIFIED",
+		1: "JOB_STATE_QUEUED",
+		2: "JOB_STATE_RUNNING",
+		3: "JOB_STATE_SUCCEEDED",
+		4: "JOB_STATE_PARTIAL",
+		5: "JOB_STATE_FAILED",
+		6: "JOB_STATE_PREVIEW",
+		7: "JOB_STATE_APPLIED",
+		8: "JOB_STATE_UNDONE",
+	}
+	JobState_value = map[string]int32{
+		"JOB_STATE_UNSPECIFIED": 0,
+		"JOB_STATE_QUEUED":      1,
+		"JOB_STATE_RUNNING":     2,
+		"JOB_STATE_SUCCEEDED":   3,
+		"JOB_STATE_PARTIAL":     4,
+		"JOB_STATE_FAILED":      5,
+		"JOB_STATE_PREVIEW":     6,
+		"JOB_STATE_APPLIED":     7,
+		"JOB_STATE_UNDONE":      8,
+	}
+)
+
+func (x JobState) Enum() *JobState {
+	p := new(JobState)
+	*p = x
+	return p
+}
+
+func (x JobState) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (JobState) Descriptor() protoreflect.EnumDescriptor {
+	return file_sellerops_screening_v1_import_proto_enumTypes[2].Descriptor()
+}
+
+func (JobState) Type() protoreflect.EnumType {
+	return &file_sellerops_screening_v1_import_proto_enumTypes[2]
+}
+
+func (x JobState) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use JobState.Descriptor instead.
+func (JobState) EnumDescriptor() ([]byte, []int) {
+	return file_sellerops_screening_v1_import_proto_rawDescGZIP(), []int{2}
+}
+
 // Dates and source months are calendar values, not UTC instants.
 type ImportRecord struct {
 	state             protoimpl.MessageState `protogen:"open.v1"`
@@ -351,6 +470,504 @@ func (x *ListImportsResponse) GetPagination() *v1.PaginationResponse {
 	return nil
 }
 
+type GetImportRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetImportRequest) Reset() {
+	*x = GetImportRequest{}
+	mi := &file_sellerops_screening_v1_import_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetImportRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetImportRequest) ProtoMessage() {}
+
+func (x *GetImportRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_sellerops_screening_v1_import_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetImportRequest.ProtoReflect.Descriptor instead.
+func (*GetImportRequest) Descriptor() ([]byte, []int) {
+	return file_sellerops_screening_v1_import_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *GetImportRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+type GetImportResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Item          *ImportRecord          `protobuf:"bytes,1,opt,name=item,proto3" json:"item,omitempty"`
+	LatestJobId   *string                `protobuf:"bytes,2,opt,name=latest_job_id,json=latestJobId,proto3,oneof" json:"latest_job_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetImportResponse) Reset() {
+	*x = GetImportResponse{}
+	mi := &file_sellerops_screening_v1_import_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetImportResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetImportResponse) ProtoMessage() {}
+
+func (x *GetImportResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_sellerops_screening_v1_import_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetImportResponse.ProtoReflect.Descriptor instead.
+func (*GetImportResponse) Descriptor() ([]byte, []int) {
+	return file_sellerops_screening_v1_import_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *GetImportResponse) GetItem() *ImportRecord {
+	if x != nil {
+		return x.Item
+	}
+	return nil
+}
+
+func (x *GetImportResponse) GetLatestJobId() string {
+	if x != nil && x.LatestJobId != nil {
+		return *x.LatestJobId
+	}
+	return ""
+}
+
+type ImportPreviewRow struct {
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	Id         string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	ImportId   string                 `protobuf:"bytes,2,opt,name=import_id,json=importId,proto3" json:"import_id,omitempty"`
+	MemberPath string                 `protobuf:"bytes,3,opt,name=member_path,json=memberPath,proto3" json:"member_path,omitempty"`
+	SheetName  string                 `protobuf:"bytes,4,opt,name=sheet_name,json=sheetName,proto3" json:"sheet_name,omitempty"`
+	RowNo      int32                  `protobuf:"varint,5,opt,name=row_no,json=rowNo,proto3" json:"row_no,omitempty"`
+	ProductId  *string                `protobuf:"bytes,6,opt,name=product_id,json=productId,proto3,oneof" json:"product_id,omitempty"`
+	State      ImportRowState         `protobuf:"varint,7,opt,name=state,proto3,enum=sellerops.screening.v1.ImportRowState" json:"state,omitempty"`
+	RawData    *structpb.Struct       `protobuf:"bytes,8,opt,name=raw_data,json=rawData,proto3" json:"raw_data,omitempty"`
+	// Normalized source values, row errors and future source-only columns.
+	LegacyFields  *structpb.Struct `protobuf:"bytes,9,opt,name=legacy_fields,json=legacyFields,proto3" json:"legacy_fields,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ImportPreviewRow) Reset() {
+	*x = ImportPreviewRow{}
+	mi := &file_sellerops_screening_v1_import_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ImportPreviewRow) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ImportPreviewRow) ProtoMessage() {}
+
+func (x *ImportPreviewRow) ProtoReflect() protoreflect.Message {
+	mi := &file_sellerops_screening_v1_import_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ImportPreviewRow.ProtoReflect.Descriptor instead.
+func (*ImportPreviewRow) Descriptor() ([]byte, []int) {
+	return file_sellerops_screening_v1_import_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *ImportPreviewRow) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *ImportPreviewRow) GetImportId() string {
+	if x != nil {
+		return x.ImportId
+	}
+	return ""
+}
+
+func (x *ImportPreviewRow) GetMemberPath() string {
+	if x != nil {
+		return x.MemberPath
+	}
+	return ""
+}
+
+func (x *ImportPreviewRow) GetSheetName() string {
+	if x != nil {
+		return x.SheetName
+	}
+	return ""
+}
+
+func (x *ImportPreviewRow) GetRowNo() int32 {
+	if x != nil {
+		return x.RowNo
+	}
+	return 0
+}
+
+func (x *ImportPreviewRow) GetProductId() string {
+	if x != nil && x.ProductId != nil {
+		return *x.ProductId
+	}
+	return ""
+}
+
+func (x *ImportPreviewRow) GetState() ImportRowState {
+	if x != nil {
+		return x.State
+	}
+	return ImportRowState_IMPORT_ROW_STATE_UNSPECIFIED
+}
+
+func (x *ImportPreviewRow) GetRawData() *structpb.Struct {
+	if x != nil {
+		return x.RawData
+	}
+	return nil
+}
+
+func (x *ImportPreviewRow) GetLegacyFields() *structpb.Struct {
+	if x != nil {
+		return x.LegacyFields
+	}
+	return nil
+}
+
+type ListImportRowsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ImportId      string                 `protobuf:"bytes,1,opt,name=import_id,json=importId,proto3" json:"import_id,omitempty"`
+	Pagination    *v1.PaginationRequest  `protobuf:"bytes,2,opt,name=pagination,proto3" json:"pagination,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListImportRowsRequest) Reset() {
+	*x = ListImportRowsRequest{}
+	mi := &file_sellerops_screening_v1_import_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListImportRowsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListImportRowsRequest) ProtoMessage() {}
+
+func (x *ListImportRowsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_sellerops_screening_v1_import_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListImportRowsRequest.ProtoReflect.Descriptor instead.
+func (*ListImportRowsRequest) Descriptor() ([]byte, []int) {
+	return file_sellerops_screening_v1_import_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *ListImportRowsRequest) GetImportId() string {
+	if x != nil {
+		return x.ImportId
+	}
+	return ""
+}
+
+func (x *ListImportRowsRequest) GetPagination() *v1.PaginationRequest {
+	if x != nil {
+		return x.Pagination
+	}
+	return nil
+}
+
+type ListImportRowsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Items         []*ImportPreviewRow    `protobuf:"bytes,1,rep,name=items,proto3" json:"items,omitempty"`
+	Pagination    *v1.PaginationResponse `protobuf:"bytes,2,opt,name=pagination,proto3" json:"pagination,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListImportRowsResponse) Reset() {
+	*x = ListImportRowsResponse{}
+	mi := &file_sellerops_screening_v1_import_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListImportRowsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListImportRowsResponse) ProtoMessage() {}
+
+func (x *ListImportRowsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_sellerops_screening_v1_import_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListImportRowsResponse.ProtoReflect.Descriptor instead.
+func (*ListImportRowsResponse) Descriptor() ([]byte, []int) {
+	return file_sellerops_screening_v1_import_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *ListImportRowsResponse) GetItems() []*ImportPreviewRow {
+	if x != nil {
+		return x.Items
+	}
+	return nil
+}
+
+func (x *ListImportRowsResponse) GetPagination() *v1.PaginationResponse {
+	if x != nil {
+		return x.Pagination
+	}
+	return nil
+}
+
+type JobRecord struct {
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Id        string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Kind      string                 `protobuf:"bytes,2,opt,name=kind,proto3" json:"kind,omitempty"`
+	State     JobState               `protobuf:"varint,3,opt,name=state,proto3,enum=sellerops.screening.v1.JobState" json:"state,omitempty"`
+	Progress  int32                  `protobuf:"varint,4,opt,name=progress,proto3" json:"progress,omitempty"`
+	Attempts  int32                  `protobuf:"varint,5,opt,name=attempts,proto3" json:"attempts,omitempty"`
+	CreatedAt *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	// Public job fields only. Internal payload, lease token and request hash omitted.
+	LegacyFields  *structpb.Struct `protobuf:"bytes,8,opt,name=legacy_fields,json=legacyFields,proto3" json:"legacy_fields,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *JobRecord) Reset() {
+	*x = JobRecord{}
+	mi := &file_sellerops_screening_v1_import_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *JobRecord) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*JobRecord) ProtoMessage() {}
+
+func (x *JobRecord) ProtoReflect() protoreflect.Message {
+	mi := &file_sellerops_screening_v1_import_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use JobRecord.ProtoReflect.Descriptor instead.
+func (*JobRecord) Descriptor() ([]byte, []int) {
+	return file_sellerops_screening_v1_import_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *JobRecord) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *JobRecord) GetKind() string {
+	if x != nil {
+		return x.Kind
+	}
+	return ""
+}
+
+func (x *JobRecord) GetState() JobState {
+	if x != nil {
+		return x.State
+	}
+	return JobState_JOB_STATE_UNSPECIFIED
+}
+
+func (x *JobRecord) GetProgress() int32 {
+	if x != nil {
+		return x.Progress
+	}
+	return 0
+}
+
+func (x *JobRecord) GetAttempts() int32 {
+	if x != nil {
+		return x.Attempts
+	}
+	return 0
+}
+
+func (x *JobRecord) GetCreatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return nil
+}
+
+func (x *JobRecord) GetUpdatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.UpdatedAt
+	}
+	return nil
+}
+
+func (x *JobRecord) GetLegacyFields() *structpb.Struct {
+	if x != nil {
+		return x.LegacyFields
+	}
+	return nil
+}
+
+type GetJobRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetJobRequest) Reset() {
+	*x = GetJobRequest{}
+	mi := &file_sellerops_screening_v1_import_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetJobRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetJobRequest) ProtoMessage() {}
+
+func (x *GetJobRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_sellerops_screening_v1_import_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetJobRequest.ProtoReflect.Descriptor instead.
+func (*GetJobRequest) Descriptor() ([]byte, []int) {
+	return file_sellerops_screening_v1_import_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *GetJobRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+type GetJobResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Item          *JobRecord             `protobuf:"bytes,1,opt,name=item,proto3" json:"item,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetJobResponse) Reset() {
+	*x = GetJobResponse{}
+	mi := &file_sellerops_screening_v1_import_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetJobResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetJobResponse) ProtoMessage() {}
+
+func (x *GetJobResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_sellerops_screening_v1_import_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetJobResponse.ProtoReflect.Descriptor instead.
+func (*GetJobResponse) Descriptor() ([]byte, []int) {
+	return file_sellerops_screening_v1_import_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *GetJobResponse) GetItem() *JobRecord {
+	if x != nil {
+		return x.Item
+	}
+	return nil
+}
+
 var File_sellerops_screening_v1_import_proto protoreflect.FileDescriptor
 
 const file_sellerops_screening_v1_import_proto_rawDesc = "" +
@@ -390,7 +1007,52 @@ const file_sellerops_screening_v1_import_proto_rawDesc = "" +
 	"\x05items\x18\x01 \x03(\v2$.sellerops.screening.v1.ImportRecordR\x05items\x12G\n" +
 	"\n" +
 	"pagination\x18\x02 \x01(\v2'.sellerops.common.v1.PaginationResponseR\n" +
-	"pagination*\xe5\x01\n" +
+	"pagination\"\"\n" +
+	"\x10GetImportRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\"\x88\x01\n" +
+	"\x11GetImportResponse\x128\n" +
+	"\x04item\x18\x01 \x01(\v2$.sellerops.screening.v1.ImportRecordR\x04item\x12'\n" +
+	"\rlatest_job_id\x18\x02 \x01(\tH\x00R\vlatestJobId\x88\x01\x01B\x10\n" +
+	"\x0e_latest_job_id\"\xf9\x02\n" +
+	"\x10ImportPreviewRow\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1b\n" +
+	"\timport_id\x18\x02 \x01(\tR\bimportId\x12\x1f\n" +
+	"\vmember_path\x18\x03 \x01(\tR\n" +
+	"memberPath\x12\x1d\n" +
+	"\n" +
+	"sheet_name\x18\x04 \x01(\tR\tsheetName\x12\x15\n" +
+	"\x06row_no\x18\x05 \x01(\x05R\x05rowNo\x12\"\n" +
+	"\n" +
+	"product_id\x18\x06 \x01(\tH\x00R\tproductId\x88\x01\x01\x12<\n" +
+	"\x05state\x18\a \x01(\x0e2&.sellerops.screening.v1.ImportRowStateR\x05state\x122\n" +
+	"\braw_data\x18\b \x01(\v2\x17.google.protobuf.StructR\arawData\x12<\n" +
+	"\rlegacy_fields\x18\t \x01(\v2\x17.google.protobuf.StructR\flegacyFieldsB\r\n" +
+	"\v_product_id\"|\n" +
+	"\x15ListImportRowsRequest\x12\x1b\n" +
+	"\timport_id\x18\x01 \x01(\tR\bimportId\x12F\n" +
+	"\n" +
+	"pagination\x18\x02 \x01(\v2&.sellerops.common.v1.PaginationRequestR\n" +
+	"pagination\"\xa1\x01\n" +
+	"\x16ListImportRowsResponse\x12>\n" +
+	"\x05items\x18\x01 \x03(\v2(.sellerops.screening.v1.ImportPreviewRowR\x05items\x12G\n" +
+	"\n" +
+	"pagination\x18\x02 \x01(\v2'.sellerops.common.v1.PaginationResponseR\n" +
+	"pagination\"\xd3\x02\n" +
+	"\tJobRecord\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
+	"\x04kind\x18\x02 \x01(\tR\x04kind\x126\n" +
+	"\x05state\x18\x03 \x01(\x0e2 .sellerops.screening.v1.JobStateR\x05state\x12\x1a\n" +
+	"\bprogress\x18\x04 \x01(\x05R\bprogress\x12\x1a\n" +
+	"\battempts\x18\x05 \x01(\x05R\battempts\x129\n" +
+	"\n" +
+	"created_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
+	"\n" +
+	"updated_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12<\n" +
+	"\rlegacy_fields\x18\b \x01(\v2\x17.google.protobuf.StructR\flegacyFields\"\x1f\n" +
+	"\rGetJobRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\"G\n" +
+	"\x0eGetJobResponse\x125\n" +
+	"\x04item\x18\x01 \x01(\v2!.sellerops.screening.v1.JobRecordR\x04item*\xe5\x01\n" +
 	"\vImportState\x12\x1c\n" +
 	"\x18IMPORT_STATE_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15IMPORT_STATE_UPLOADED\x10\x01\x12\x18\n" +
@@ -399,9 +1061,27 @@ const file_sellerops_screening_v1_import_proto_rawDesc = "" +
 	"\x16IMPORT_STATE_IMPORTING\x10\x04\x12\x1a\n" +
 	"\x16IMPORT_STATE_COMPLETED\x10\x05\x12\x18\n" +
 	"\x14IMPORT_STATE_PARTIAL\x10\x06\x12\x17\n" +
-	"\x13IMPORT_STATE_FAILED\x10\a2\x80\x01\n" +
+	"\x13IMPORT_STATE_FAILED\x10\a*\x8c\x01\n" +
+	"\x0eImportRowState\x12 \n" +
+	"\x1cIMPORT_ROW_STATE_UNSPECIFIED\x10\x00\x12\x1a\n" +
+	"\x16IMPORT_ROW_STATE_VALID\x10\x01\x12\x1c\n" +
+	"\x18IMPORT_ROW_STATE_INVALID\x10\x02\x12\x1e\n" +
+	"\x1aIMPORT_ROW_STATE_COMMITTED\x10\x03*\xdc\x01\n" +
+	"\bJobState\x12\x19\n" +
+	"\x15JOB_STATE_UNSPECIFIED\x10\x00\x12\x14\n" +
+	"\x10JOB_STATE_QUEUED\x10\x01\x12\x15\n" +
+	"\x11JOB_STATE_RUNNING\x10\x02\x12\x17\n" +
+	"\x13JOB_STATE_SUCCEEDED\x10\x03\x12\x15\n" +
+	"\x11JOB_STATE_PARTIAL\x10\x04\x12\x14\n" +
+	"\x10JOB_STATE_FAILED\x10\x05\x12\x15\n" +
+	"\x11JOB_STATE_PREVIEW\x10\x06\x12\x15\n" +
+	"\x11JOB_STATE_APPLIED\x10\a\x12\x14\n" +
+	"\x10JOB_STATE_UNDONE\x10\b2\xac\x03\n" +
 	"\x16ScreeningImportService\x12f\n" +
-	"\vListImports\x12*.sellerops.screening.v1.ListImportsRequest\x1a+.sellerops.screening.v1.ListImportsResponseB9Z7seller-ops/contracts/sellerops/screening/v1;screeningv1b\x06proto3"
+	"\vListImports\x12*.sellerops.screening.v1.ListImportsRequest\x1a+.sellerops.screening.v1.ListImportsResponse\x12`\n" +
+	"\tGetImport\x12(.sellerops.screening.v1.GetImportRequest\x1a).sellerops.screening.v1.GetImportResponse\x12o\n" +
+	"\x0eListImportRows\x12-.sellerops.screening.v1.ListImportRowsRequest\x1a..sellerops.screening.v1.ListImportRowsResponse\x12W\n" +
+	"\x06GetJob\x12%.sellerops.screening.v1.GetJobRequest\x1a&.sellerops.screening.v1.GetJobResponseB9Z7seller-ops/contracts/sellerops/screening/v1;screeningv1b\x06proto3"
 
 var (
 	file_sellerops_screening_v1_import_proto_rawDescOnce sync.Once
@@ -415,35 +1095,63 @@ func file_sellerops_screening_v1_import_proto_rawDescGZIP() []byte {
 	return file_sellerops_screening_v1_import_proto_rawDescData
 }
 
-var file_sellerops_screening_v1_import_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_sellerops_screening_v1_import_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
+var file_sellerops_screening_v1_import_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
+var file_sellerops_screening_v1_import_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
 var file_sellerops_screening_v1_import_proto_goTypes = []any{
-	(ImportState)(0),              // 0: sellerops.screening.v1.ImportState
-	(*ImportRecord)(nil),          // 1: sellerops.screening.v1.ImportRecord
-	(*ListImportsRequest)(nil),    // 2: sellerops.screening.v1.ListImportsRequest
-	(*ListImportsResponse)(nil),   // 3: sellerops.screening.v1.ListImportsResponse
-	(*structpb.Struct)(nil),       // 4: google.protobuf.Struct
-	(*timestamppb.Timestamp)(nil), // 5: google.protobuf.Timestamp
-	(*v1.PaginationRequest)(nil),  // 6: sellerops.common.v1.PaginationRequest
-	(*v1.PaginationResponse)(nil), // 7: sellerops.common.v1.PaginationResponse
+	(ImportState)(0),               // 0: sellerops.screening.v1.ImportState
+	(ImportRowState)(0),            // 1: sellerops.screening.v1.ImportRowState
+	(JobState)(0),                  // 2: sellerops.screening.v1.JobState
+	(*ImportRecord)(nil),           // 3: sellerops.screening.v1.ImportRecord
+	(*ListImportsRequest)(nil),     // 4: sellerops.screening.v1.ListImportsRequest
+	(*ListImportsResponse)(nil),    // 5: sellerops.screening.v1.ListImportsResponse
+	(*GetImportRequest)(nil),       // 6: sellerops.screening.v1.GetImportRequest
+	(*GetImportResponse)(nil),      // 7: sellerops.screening.v1.GetImportResponse
+	(*ImportPreviewRow)(nil),       // 8: sellerops.screening.v1.ImportPreviewRow
+	(*ListImportRowsRequest)(nil),  // 9: sellerops.screening.v1.ListImportRowsRequest
+	(*ListImportRowsResponse)(nil), // 10: sellerops.screening.v1.ListImportRowsResponse
+	(*JobRecord)(nil),              // 11: sellerops.screening.v1.JobRecord
+	(*GetJobRequest)(nil),          // 12: sellerops.screening.v1.GetJobRequest
+	(*GetJobResponse)(nil),         // 13: sellerops.screening.v1.GetJobResponse
+	(*structpb.Struct)(nil),        // 14: google.protobuf.Struct
+	(*timestamppb.Timestamp)(nil),  // 15: google.protobuf.Timestamp
+	(*v1.PaginationRequest)(nil),   // 16: sellerops.common.v1.PaginationRequest
+	(*v1.PaginationResponse)(nil),  // 17: sellerops.common.v1.PaginationResponse
 }
 var file_sellerops_screening_v1_import_proto_depIdxs = []int32{
 	0,  // 0: sellerops.screening.v1.ImportRecord.state:type_name -> sellerops.screening.v1.ImportState
-	4,  // 1: sellerops.screening.v1.ImportRecord.counts:type_name -> google.protobuf.Struct
-	4,  // 2: sellerops.screening.v1.ImportRecord.mapping:type_name -> google.protobuf.Struct
-	5,  // 3: sellerops.screening.v1.ImportRecord.created_at:type_name -> google.protobuf.Timestamp
-	5,  // 4: sellerops.screening.v1.ImportRecord.committed_at:type_name -> google.protobuf.Timestamp
-	4,  // 5: sellerops.screening.v1.ImportRecord.legacy_fields:type_name -> google.protobuf.Struct
-	6,  // 6: sellerops.screening.v1.ListImportsRequest.pagination:type_name -> sellerops.common.v1.PaginationRequest
-	1,  // 7: sellerops.screening.v1.ListImportsResponse.items:type_name -> sellerops.screening.v1.ImportRecord
-	7,  // 8: sellerops.screening.v1.ListImportsResponse.pagination:type_name -> sellerops.common.v1.PaginationResponse
-	2,  // 9: sellerops.screening.v1.ScreeningImportService.ListImports:input_type -> sellerops.screening.v1.ListImportsRequest
-	3,  // 10: sellerops.screening.v1.ScreeningImportService.ListImports:output_type -> sellerops.screening.v1.ListImportsResponse
-	10, // [10:11] is the sub-list for method output_type
-	9,  // [9:10] is the sub-list for method input_type
-	9,  // [9:9] is the sub-list for extension type_name
-	9,  // [9:9] is the sub-list for extension extendee
-	0,  // [0:9] is the sub-list for field type_name
+	14, // 1: sellerops.screening.v1.ImportRecord.counts:type_name -> google.protobuf.Struct
+	14, // 2: sellerops.screening.v1.ImportRecord.mapping:type_name -> google.protobuf.Struct
+	15, // 3: sellerops.screening.v1.ImportRecord.created_at:type_name -> google.protobuf.Timestamp
+	15, // 4: sellerops.screening.v1.ImportRecord.committed_at:type_name -> google.protobuf.Timestamp
+	14, // 5: sellerops.screening.v1.ImportRecord.legacy_fields:type_name -> google.protobuf.Struct
+	16, // 6: sellerops.screening.v1.ListImportsRequest.pagination:type_name -> sellerops.common.v1.PaginationRequest
+	3,  // 7: sellerops.screening.v1.ListImportsResponse.items:type_name -> sellerops.screening.v1.ImportRecord
+	17, // 8: sellerops.screening.v1.ListImportsResponse.pagination:type_name -> sellerops.common.v1.PaginationResponse
+	3,  // 9: sellerops.screening.v1.GetImportResponse.item:type_name -> sellerops.screening.v1.ImportRecord
+	1,  // 10: sellerops.screening.v1.ImportPreviewRow.state:type_name -> sellerops.screening.v1.ImportRowState
+	14, // 11: sellerops.screening.v1.ImportPreviewRow.raw_data:type_name -> google.protobuf.Struct
+	14, // 12: sellerops.screening.v1.ImportPreviewRow.legacy_fields:type_name -> google.protobuf.Struct
+	16, // 13: sellerops.screening.v1.ListImportRowsRequest.pagination:type_name -> sellerops.common.v1.PaginationRequest
+	8,  // 14: sellerops.screening.v1.ListImportRowsResponse.items:type_name -> sellerops.screening.v1.ImportPreviewRow
+	17, // 15: sellerops.screening.v1.ListImportRowsResponse.pagination:type_name -> sellerops.common.v1.PaginationResponse
+	2,  // 16: sellerops.screening.v1.JobRecord.state:type_name -> sellerops.screening.v1.JobState
+	15, // 17: sellerops.screening.v1.JobRecord.created_at:type_name -> google.protobuf.Timestamp
+	15, // 18: sellerops.screening.v1.JobRecord.updated_at:type_name -> google.protobuf.Timestamp
+	14, // 19: sellerops.screening.v1.JobRecord.legacy_fields:type_name -> google.protobuf.Struct
+	11, // 20: sellerops.screening.v1.GetJobResponse.item:type_name -> sellerops.screening.v1.JobRecord
+	4,  // 21: sellerops.screening.v1.ScreeningImportService.ListImports:input_type -> sellerops.screening.v1.ListImportsRequest
+	6,  // 22: sellerops.screening.v1.ScreeningImportService.GetImport:input_type -> sellerops.screening.v1.GetImportRequest
+	9,  // 23: sellerops.screening.v1.ScreeningImportService.ListImportRows:input_type -> sellerops.screening.v1.ListImportRowsRequest
+	12, // 24: sellerops.screening.v1.ScreeningImportService.GetJob:input_type -> sellerops.screening.v1.GetJobRequest
+	5,  // 25: sellerops.screening.v1.ScreeningImportService.ListImports:output_type -> sellerops.screening.v1.ListImportsResponse
+	7,  // 26: sellerops.screening.v1.ScreeningImportService.GetImport:output_type -> sellerops.screening.v1.GetImportResponse
+	10, // 27: sellerops.screening.v1.ScreeningImportService.ListImportRows:output_type -> sellerops.screening.v1.ListImportRowsResponse
+	13, // 28: sellerops.screening.v1.ScreeningImportService.GetJob:output_type -> sellerops.screening.v1.GetJobResponse
+	25, // [25:29] is the sub-list for method output_type
+	21, // [21:25] is the sub-list for method input_type
+	21, // [21:21] is the sub-list for extension type_name
+	21, // [21:21] is the sub-list for extension extendee
+	0,  // [0:21] is the sub-list for field type_name
 }
 
 func init() { file_sellerops_screening_v1_import_proto_init() }
@@ -452,13 +1160,15 @@ func file_sellerops_screening_v1_import_proto_init() {
 		return
 	}
 	file_sellerops_screening_v1_import_proto_msgTypes[0].OneofWrappers = []any{}
+	file_sellerops_screening_v1_import_proto_msgTypes[4].OneofWrappers = []any{}
+	file_sellerops_screening_v1_import_proto_msgTypes[5].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_sellerops_screening_v1_import_proto_rawDesc), len(file_sellerops_screening_v1_import_proto_rawDesc)),
-			NumEnums:      1,
-			NumMessages:   3,
+			NumEnums:      3,
+			NumMessages:   11,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

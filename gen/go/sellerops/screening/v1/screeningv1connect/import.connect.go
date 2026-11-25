@@ -36,6 +36,15 @@ const (
 	// ScreeningImportServiceListImportsProcedure is the fully-qualified name of the
 	// ScreeningImportService's ListImports RPC.
 	ScreeningImportServiceListImportsProcedure = "/sellerops.screening.v1.ScreeningImportService/ListImports"
+	// ScreeningImportServiceGetImportProcedure is the fully-qualified name of the
+	// ScreeningImportService's GetImport RPC.
+	ScreeningImportServiceGetImportProcedure = "/sellerops.screening.v1.ScreeningImportService/GetImport"
+	// ScreeningImportServiceListImportRowsProcedure is the fully-qualified name of the
+	// ScreeningImportService's ListImportRows RPC.
+	ScreeningImportServiceListImportRowsProcedure = "/sellerops.screening.v1.ScreeningImportService/ListImportRows"
+	// ScreeningImportServiceGetJobProcedure is the fully-qualified name of the ScreeningImportService's
+	// GetJob RPC.
+	ScreeningImportServiceGetJobProcedure = "/sellerops.screening.v1.ScreeningImportService/GetJob"
 )
 
 // ScreeningImportServiceClient is a client for the sellerops.screening.v1.ScreeningImportService
@@ -43,6 +52,10 @@ const (
 type ScreeningImportServiceClient interface {
 	// Identity is authenticated by the server, never supplied in the message.
 	ListImports(context.Context, *connect.Request[v1.ListImportsRequest]) (*connect.Response[v1.ListImportsResponse], error)
+	GetImport(context.Context, *connect.Request[v1.GetImportRequest]) (*connect.Response[v1.GetImportResponse], error)
+	ListImportRows(context.Context, *connect.Request[v1.ListImportRowsRequest]) (*connect.Response[v1.ListImportRowsResponse], error)
+	// Shared public task status used by the import workflow; no request-log jobs.
+	GetJob(context.Context, *connect.Request[v1.GetJobRequest]) (*connect.Response[v1.GetJobResponse], error)
 }
 
 // NewScreeningImportServiceClient constructs a client for the
@@ -63,12 +76,33 @@ func NewScreeningImportServiceClient(httpClient connect.HTTPClient, baseURL stri
 			connect.WithSchema(screeningImportServiceMethods.ByName("ListImports")),
 			connect.WithClientOptions(opts...),
 		),
+		getImport: connect.NewClient[v1.GetImportRequest, v1.GetImportResponse](
+			httpClient,
+			baseURL+ScreeningImportServiceGetImportProcedure,
+			connect.WithSchema(screeningImportServiceMethods.ByName("GetImport")),
+			connect.WithClientOptions(opts...),
+		),
+		listImportRows: connect.NewClient[v1.ListImportRowsRequest, v1.ListImportRowsResponse](
+			httpClient,
+			baseURL+ScreeningImportServiceListImportRowsProcedure,
+			connect.WithSchema(screeningImportServiceMethods.ByName("ListImportRows")),
+			connect.WithClientOptions(opts...),
+		),
+		getJob: connect.NewClient[v1.GetJobRequest, v1.GetJobResponse](
+			httpClient,
+			baseURL+ScreeningImportServiceGetJobProcedure,
+			connect.WithSchema(screeningImportServiceMethods.ByName("GetJob")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // screeningImportServiceClient implements ScreeningImportServiceClient.
 type screeningImportServiceClient struct {
-	listImports *connect.Client[v1.ListImportsRequest, v1.ListImportsResponse]
+	listImports    *connect.Client[v1.ListImportsRequest, v1.ListImportsResponse]
+	getImport      *connect.Client[v1.GetImportRequest, v1.GetImportResponse]
+	listImportRows *connect.Client[v1.ListImportRowsRequest, v1.ListImportRowsResponse]
+	getJob         *connect.Client[v1.GetJobRequest, v1.GetJobResponse]
 }
 
 // ListImports calls sellerops.screening.v1.ScreeningImportService.ListImports.
@@ -76,11 +110,30 @@ func (c *screeningImportServiceClient) ListImports(ctx context.Context, req *con
 	return c.listImports.CallUnary(ctx, req)
 }
 
+// GetImport calls sellerops.screening.v1.ScreeningImportService.GetImport.
+func (c *screeningImportServiceClient) GetImport(ctx context.Context, req *connect.Request[v1.GetImportRequest]) (*connect.Response[v1.GetImportResponse], error) {
+	return c.getImport.CallUnary(ctx, req)
+}
+
+// ListImportRows calls sellerops.screening.v1.ScreeningImportService.ListImportRows.
+func (c *screeningImportServiceClient) ListImportRows(ctx context.Context, req *connect.Request[v1.ListImportRowsRequest]) (*connect.Response[v1.ListImportRowsResponse], error) {
+	return c.listImportRows.CallUnary(ctx, req)
+}
+
+// GetJob calls sellerops.screening.v1.ScreeningImportService.GetJob.
+func (c *screeningImportServiceClient) GetJob(ctx context.Context, req *connect.Request[v1.GetJobRequest]) (*connect.Response[v1.GetJobResponse], error) {
+	return c.getJob.CallUnary(ctx, req)
+}
+
 // ScreeningImportServiceHandler is an implementation of the
 // sellerops.screening.v1.ScreeningImportService service.
 type ScreeningImportServiceHandler interface {
 	// Identity is authenticated by the server, never supplied in the message.
 	ListImports(context.Context, *connect.Request[v1.ListImportsRequest]) (*connect.Response[v1.ListImportsResponse], error)
+	GetImport(context.Context, *connect.Request[v1.GetImportRequest]) (*connect.Response[v1.GetImportResponse], error)
+	ListImportRows(context.Context, *connect.Request[v1.ListImportRowsRequest]) (*connect.Response[v1.ListImportRowsResponse], error)
+	// Shared public task status used by the import workflow; no request-log jobs.
+	GetJob(context.Context, *connect.Request[v1.GetJobRequest]) (*connect.Response[v1.GetJobResponse], error)
 }
 
 // NewScreeningImportServiceHandler builds an HTTP handler from the service implementation. It
@@ -96,10 +149,34 @@ func NewScreeningImportServiceHandler(svc ScreeningImportServiceHandler, opts ..
 		connect.WithSchema(screeningImportServiceMethods.ByName("ListImports")),
 		connect.WithHandlerOptions(opts...),
 	)
+	screeningImportServiceGetImportHandler := connect.NewUnaryHandler(
+		ScreeningImportServiceGetImportProcedure,
+		svc.GetImport,
+		connect.WithSchema(screeningImportServiceMethods.ByName("GetImport")),
+		connect.WithHandlerOptions(opts...),
+	)
+	screeningImportServiceListImportRowsHandler := connect.NewUnaryHandler(
+		ScreeningImportServiceListImportRowsProcedure,
+		svc.ListImportRows,
+		connect.WithSchema(screeningImportServiceMethods.ByName("ListImportRows")),
+		connect.WithHandlerOptions(opts...),
+	)
+	screeningImportServiceGetJobHandler := connect.NewUnaryHandler(
+		ScreeningImportServiceGetJobProcedure,
+		svc.GetJob,
+		connect.WithSchema(screeningImportServiceMethods.ByName("GetJob")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/sellerops.screening.v1.ScreeningImportService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case ScreeningImportServiceListImportsProcedure:
 			screeningImportServiceListImportsHandler.ServeHTTP(w, r)
+		case ScreeningImportServiceGetImportProcedure:
+			screeningImportServiceGetImportHandler.ServeHTTP(w, r)
+		case ScreeningImportServiceListImportRowsProcedure:
+			screeningImportServiceListImportRowsHandler.ServeHTTP(w, r)
+		case ScreeningImportServiceGetJobProcedure:
+			screeningImportServiceGetJobHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -111,4 +188,16 @@ type UnimplementedScreeningImportServiceHandler struct{}
 
 func (UnimplementedScreeningImportServiceHandler) ListImports(context.Context, *connect.Request[v1.ListImportsRequest]) (*connect.Response[v1.ListImportsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sellerops.screening.v1.ScreeningImportService.ListImports is not implemented"))
+}
+
+func (UnimplementedScreeningImportServiceHandler) GetImport(context.Context, *connect.Request[v1.GetImportRequest]) (*connect.Response[v1.GetImportResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sellerops.screening.v1.ScreeningImportService.GetImport is not implemented"))
+}
+
+func (UnimplementedScreeningImportServiceHandler) ListImportRows(context.Context, *connect.Request[v1.ListImportRowsRequest]) (*connect.Response[v1.ListImportRowsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sellerops.screening.v1.ScreeningImportService.ListImportRows is not implemented"))
+}
+
+func (UnimplementedScreeningImportServiceHandler) GetJob(context.Context, *connect.Request[v1.GetJobRequest]) (*connect.Response[v1.GetJobResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sellerops.screening.v1.ScreeningImportService.GetJob is not implemented"))
 }

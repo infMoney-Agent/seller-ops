@@ -18,3 +18,27 @@ test('every real import state maps to its legacy string',()=>{
  for(const [state,name] of [[ImportState.UPLOADED,'uploaded'],[ImportState.PARSING,'parsing'],[ImportState.PREVIEW,'preview'],[ImportState.IMPORTING,'importing'],[ImportState.COMPLETED,'completed'],[ImportState.PARTIAL,'partial'],[ImportState.FAILED,'failed']])expect(legacyImport(create(ImportRecordSchema,{state})).state).toBe(name);
  expect(()=>legacyImport(create(ImportRecordSchema))).toThrow();
 });
+
+import { GetImportResponseSchema, ImportPreviewRowSchema, ListImportRowsResponseSchema, JobRecordSchema, GetJobResponseSchema, ImportRowState, JobState } from '../src/gen/sellerops/screening/v1/import_pb';
+import { legacyImportDetail, legacyImportRow, legacyJob } from '../src/features/screening/import-list-compat';
+test('detail keeps latest task null or id and rejects a missing record',()=>{
+ const item=create(ImportRecordSchema,{id:'import',state:ImportState.PREVIEW});
+ expect(legacyImportDetail(create(GetImportResponseSchema,{item})).latest_job_id).toBeNull();
+ expect(legacyImportDetail(create(GetImportResponseSchema,{item,latestJobId:'job'})).latest_job_id).toBe('job');
+ expect(()=>legacyImportDetail(create(GetImportResponseSchema))).toThrow();
+});
+test('preview preserves original values, normalized nulls, errors and empty pages',()=>{
+ const row=create(ImportPreviewRowSchema,{id:'row',importId:'import',rowNo:2,state:ImportRowState.INVALID,rawData:{'价格':'19.990000','空白':null,'zero':0},legacyFields:{normalized_data:null,errors:[{column:'ASIN',message:'无效'}],tenant_id:501}});
+ expect(legacyImportRow(row)).toEqual({id:'row',import_id:'import',row_no:2,state:'invalid',member_path:'',sheet_name:'',product_id:null,raw_data:{'价格':'19.990000','空白':null,'zero':0},normalized_data:null,errors:[{column:'ASIN',message:'无效'}],tenant_id:501});
+ expect(legacyImportList(create(ListImportRowsResponseSchema,{items:[],pagination:{page:99,pageSize:100,total:3n}}))).toEqual({items:[],page:99,page_size:100,total:3});
+ for(const [state,text] of [[ImportRowState.VALID,'valid'],[ImportRowState.INVALID,'invalid'],[ImportRowState.COMMITTED,'committed']])expect(legacyImportRow(create(ImportPreviewRowSchema,{state})).state).toBe(text);
+ expect(()=>legacyImportRow(create(ImportPreviewRowSchema))).toThrow();
+});
+test('task status preserves zero progress and all terminal and review states',()=>{
+ for(const [state,text] of [[JobState.QUEUED,'queued'],[JobState.RUNNING,'running'],[JobState.SUCCEEDED,'succeeded'],[JobState.PARTIAL,'partial'],[JobState.FAILED,'failed'],[JobState.PREVIEW,'preview'],[JobState.APPLIED,'applied'],[JobState.UNDONE,'undone']]){
+ const job=legacyJob(create(GetJobResponseSchema,{item:create(JobRecordSchema,{id:'job',kind:'parse',state,legacyFields:{result:null,error:{message:'解析错误'},created_at:'2026-08-01T00:00:00+00:00'}})}));
+ expect(job).toEqual({id:'job',kind:'parse',state:text,progress:0,attempts:0,result:null,error:{message:'解析错误'},created_at:'2026-08-01T00:00:00+00:00'});
+ }
+ expect(()=>legacyJob(create(GetJobResponseSchema))).toThrow();
+ expect(()=>legacyJob(create(GetJobResponseSchema,{item:create(JobRecordSchema)}))).toThrow();
+});
