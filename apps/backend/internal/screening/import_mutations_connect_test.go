@@ -12,6 +12,7 @@ import (
 	"reflect"
 	screeningv1 "seller-ops/contracts/sellerops/screening/v1"
 	"seller-ops/contracts/sellerops/screening/v1/screeningv1connect"
+	"strings"
 	"testing"
 	"time"
 )
@@ -145,5 +146,33 @@ func testImportMutationRPC(t *testing.T, svc *service, server *httptest.Server, 
 				}
 			}
 		})
+	}
+}
+
+func TestImportMutationGuards(t *testing.T) {
+	id := uuid()
+	ctx := context.WithValue(context.Background(), identityKey{}, identity{Tenant: 601, User: 7, Role: "member"})
+	for _, tc := range []struct {
+		name, id string
+		meta     *screeningv1.ImportMutationMetadata
+		body     Object
+		status   int
+	}{
+		{"missing-key", id, nil, Object{}, 422},
+		{"wrong-id", "bad", &screeningv1.ImportMutationMetadata{IdempotencyKey: "key"}, Object{}, 422},
+		{"bad-query", id, &screeningv1.ImportMutationMetadata{IdempotencyKey: "key", OriginalQuery: "?a=1\n"}, Object{}, 422},
+		{"negative-revision", id, &screeningv1.ImportMutationMetadata{IdempotencyKey: "key"}, Object{"expected_review_revision": json.Number("-1")}, 422},
+		{"oversize", id, &screeningv1.ImportMutationMetadata{IdempotencyKey: "key"}, Object{"text": strings.Repeat("x", 256*1024)}, 413},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := prepareImportMutation(ctx, tc.id, "POST", "imports/"+id+"/commit", tc.meta, tc.body)
+			h, ok := err.(apiError)
+			if !ok || h.status != tc.status {
+				t.Fatal(err)
+			}
+		})
+	}
+	if _, err := prepareImportMutation(context.Background(), id, "POST", "imports/"+id+"/commit", &screeningv1.ImportMutationMetadata{IdempotencyKey: "key"}, Object{}); err == nil {
+		t.Fatal("missing identity accepted")
 	}
 }

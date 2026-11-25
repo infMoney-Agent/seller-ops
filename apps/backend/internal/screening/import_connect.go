@@ -131,7 +131,7 @@ func (s *service) ListImports(ctx context.Context, req *connect.Request[screenin
 	return response, nil
 }
 func (s *service) registerImportsRPC(mux *http.ServeMux) {
-	path, handler := screeningv1connect.NewScreeningImportServiceHandler(s, connect.WithReadMaxBytes(256*1024))
+	path, handler := screeningv1connect.NewScreeningImportServiceHandler(s, connect.WithReadMaxBytes(512*1024))
 	writer := connect.NewErrorWriter()
 	mux.Handle(path, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")

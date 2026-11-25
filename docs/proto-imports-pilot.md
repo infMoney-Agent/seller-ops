@@ -63,3 +63,7 @@ SCREENING_IMPORT_READS_TRANSPORT=legacy|connect 单独控制这三个只读接�
 ## 第三阶段：导入写操作
 
 CommitImport、UpdateImportSettings、GetImportRemovalPreview、DeleteImport、RetryImportJob 直接调用共享 Go 事务用例；新增 SCREENING_IMPORT_WRITES_TRANSPORT，默认 legacy。浏览器仍保留原路径、幂等键及 200/202 状态码，文件上传下载不经过 RPC。写 RPC 统一还原原方法、资源路径、查询串和业务体以保持跨协议幂等指纹；版本与引用ID使用原校验。重试接口补齐原有缺失的事务回执，并锁定失败任务以避免重复处理。跨 HTTP/RPC 重放、变更请求内容冲突、任务不重复创建测试已通过。
+
+总体剩余范围与保留 HTTP 的边界见 [迁移进度](proto-migration-status.md)。第三阶段增加 RPC 信封空间至 512KB，但恢复后的业务 JSON 仍限制 256KB，避免信封开销使原本合法的请求被拒绝。
+
+第三阶段验收通过：完整 Go race 回归、go vet、写接口边界测试、8 项 TS 单测（43 断言）、类型检查、lint、生产构建、Proto 生成漂移与相对上一阶段的 breaking 检查；三个 Connect 开关下完整浏览器流程通过（31.03 秒）。

@@ -24,6 +24,9 @@ func prepareImportMutation(ctx context.Context, id, method, suffix string, meta 
 		return a, err
 	}
 	if method != "DELETE" {
+		if len(encoded(body)) > 256*1024 {
+			return a, fail(413, "JSON 请求超过256KB")
+		}
 		if err = validateMutationBody(body); err != nil {
 			return a, err
 		}
