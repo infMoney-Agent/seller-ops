@@ -1493,12 +1493,7 @@ function ProductIdentityCell({
   const expanded = Boolean(familyRows[product.id]);
   const hasFamily = !childCtx.isChild && (product.family_count || 1) > 1;
   return (
-    <div
-      className={cn(
-        'flex min-w-0 items-start gap-2.5',
-        childCtx.isChild && 'border-primary/30 border-l-2 pl-2.5'
-      )}
-    >
+    <div className='flex min-w-0 items-start gap-2.5'>
       {product.image_url ? (
         <Image
           unoptimized
