@@ -95,11 +95,11 @@ func TestBatchDataRemoval(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = s.mutateProduct(ctx, a, pid, "parameters", Object{"expected_data_revision": p["data_revision"], "package_length_cm": "99"}); err != nil {
+	if _, err = s.updateProductParameters(ctx, a, pid, parseParametersCommand(Object{"expected_data_revision": p["data_revision"], "package_length_cm": "99"})); err != nil {
 		t.Fatal(err)
 	}
 	p, _ = s.product(ctx, a, pid)
-	if _, err = s.mutateProduct(ctx, a, pid, "review", Object{"expected_data_revision": p["data_revision"], "expected_review_revision": p["review_revision"], "status": "kept", "reason": "人工核对", "note": "必须保留"}); err != nil {
+	if _, err = s.reviewProduct(ctx, a, pid, parseReviewCommand(Object{"expected_data_revision": p["data_revision"], "expected_review_revision": p["review_revision"], "status": "kept", "reason": "人工核对", "note": "必须保留"})); err != nil {
 		t.Fatal(err)
 	}
 	var monthly string

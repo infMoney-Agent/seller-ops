@@ -21,22 +21,25 @@ var importStates = map[string]screeningv1.ImportState{"uploaded": screeningv1.Im
 
 func rpcError(err error) *connect.Error {
 	code, message, reason := connect.CodeInternal, "初筛服务处理失败", "INTERNAL"
-	var a apiError
-	if errors.As(err, &a) {
-		message = a.message
-		switch a.status {
-		case 401:
-			code, reason = connect.CodeUnauthenticated, "UNAUTHENTICATED"
-		case 403:
-			code, reason = connect.CodePermissionDenied, "PERMISSION_DENIED"
-		case 404:
-			code, reason = connect.CodeNotFound, "NOT_FOUND"
-		case 409:
-			code, reason = connect.CodeAborted, "CONFLICT"
-		case 413:
-			code, reason = connect.CodeResourceExhausted, "PAYLOAD_TOO_LARGE"
-		case 422:
-			code, reason = connect.CodeInvalidArgument, "INVALID_ARGUMENT"
+	var d domainError
+	if errors.As(err, &d) {
+		message = d.message
+		reason = string(d.kind)
+		switch d.kind {
+		case errUnauthenticated:
+			code = connect.CodeUnauthenticated
+		case errForbidden:
+			code = connect.CodePermissionDenied
+		case errNotFound:
+			code = connect.CodeNotFound
+		case errConflict:
+			code = connect.CodeAborted
+		case errPayloadTooLarge:
+			code = connect.CodeResourceExhausted
+		case errValidation:
+			code = connect.CodeInvalidArgument
+		default:
+			code, reason = connect.CodeInternal, "INTERNAL"
 		}
 	}
 	var pg *pgconn.PgError
@@ -111,7 +114,7 @@ func rpcImport(row ImportListRecord) (*screeningv1.ImportRecord, error) {
 func (s *service) ListImports(ctx context.Context, req *connect.Request[screeningv1.ListImportsRequest]) (*connect.Response[screeningv1.ListImportsResponse], error) {
 	a, ok := ctx.Value(identityKey{}).(identity)
 	if !ok {
-		return nil, rpcError(fail(401, "身份签名无效"))
+		return nil, rpcError(unauthenticated("身份签名无效"))
 	}
 	p, n := req.Msg.GetPagination().GetPage(), req.Msg.GetPagination().GetPageSize()
 	result, err := s.listImports(ctx, a, int(p), int(n))
@@ -151,7 +154,7 @@ func (s *service) authenticatedRPC(handler http.Handler) http.Handler {
 func rpcActor(ctx context.Context) (identity, error) {
 	a, ok := ctx.Value(identityKey{}).(identity)
 	if !ok {
-		return a, fail(401, "身份签名无效")
+		return a, unauthenticated("身份签名无效")
 	}
 	return a, nil
 }

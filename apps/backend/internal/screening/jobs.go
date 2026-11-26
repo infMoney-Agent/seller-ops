@@ -60,22 +60,22 @@ func (s *service) enqueueScreenTx(ctx context.Context, tx pgx.Tx, a identity, b 
 	cfg := decodeObject(policy)
 	config, ok := cfg["config"].(map[string]any)
 	if !ok {
-		return nil, fail(422, "规则配置无效")
+		return nil, invalid("规则配置无效")
 	}
 	if e = validatePolicy(config); e != nil {
-		return nil, fail(422, e.Error())
+		return nil, invalid(e.Error())
 	}
 	ids := []string{}
 	if raw, ok := b["product_ids"].([]any); ok {
 		if len(raw) > 100000 {
-			return nil, fail(422, "商品数量超限")
+			return nil, invalid("商品数量超限")
 		}
 		for _, v := range raw {
 			ids = append(ids, str(v))
 		}
 	} else if len(b) > 0 {
 		if filters, ok := b["filters"].(map[string]any); ok && len(filters) > 0 {
-			return nil, fail(422, "Go 重筛暂只接受明确商品集合或全工作区")
+			return nil, invalid("Go 重筛暂只接受明确商品集合或全工作区")
 		}
 	}
 	var rows pgx.Rows
@@ -280,10 +280,10 @@ func workError(err error) Object {
 			out["message"] = "服务器磁盘空间不足，请清理空间后重试"
 		}
 	}
-	var api apiError
-	if errors.As(err, &api) {
+	var d domainError
+	if errors.As(err, &d) {
 		out["code"] = "validation_failed"
-		out["message"] = api.message
+		out["message"] = d.message
 	}
 	return out
 }

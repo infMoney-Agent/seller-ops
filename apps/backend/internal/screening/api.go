@@ -60,7 +60,7 @@ func (s *service) route(w http.ResponseWriter, r *http.Request) (any, error) {
 		}
 		return s.exportDownload(w, r, parts[1])
 	}
-	return nil, fail(404, "初筛接口不存在")
+	return nil, notFound("初筛接口不存在")
 }
 
 func (s *service) getProductUsecase(ctx context.Context, a identity, id string) (any, error) {
@@ -167,16 +167,16 @@ func validateMutationBody(body Object) error {
 			}
 			number, ok := raw.(json.Number)
 			if !ok {
-				return fail(422, "版本必须是非负整数")
+				return invalid("版本必须是非负整数")
 			}
 			if n, e := strconv.ParseInt(string(number), 10, 64); e != nil || n < 0 {
-				return fail(422, "版本必须是非负整数")
+				return invalid("版本必须是非负整数")
 			}
 		}
 	}
 	for _, key := range []string{"product_id", "monthly_id", "template_id", "reference_product_id"} {
 		if raw := body[key]; raw != nil && !uuidPattern.MatchString(str(raw)) {
-			return fail(422, "商品或引用ID无效")
+			return invalid("商品或引用ID无效")
 		}
 	}
 	return nil

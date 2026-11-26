@@ -1,13 +1,15 @@
 package screening
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"github.com/jackc/pgx/v5"
 )
 
 // Receipts and business mutations commit in the same transaction. Advisory
 // locking covers the first request too, before a receipt row exists.
-func receipt(ctx context.Context, tx pgx.Tx, a identity) (Object, error) {
+func rawReceipt(ctx context.Context, tx pgx.Tx, a identity) ([]byte, error) {
 	if a.RequestKey == "" {
 		return nil, nil
 	}
@@ -25,11 +27,34 @@ func receipt(ctx context.Context, tx pgx.Tx, a identity) (Object, error) {
 		return nil, e
 	}
 	if hash != a.RequestHash || user != a.User {
-		return nil, fail(409, "幂等键已用于其他请求")
+		return nil, conflict("幂等键已用于其他请求")
+	}
+	return raw, nil
+}
+
+func receipt(ctx context.Context, tx pgx.Tx, a identity) (Object, error) {
+	raw, err := rawReceipt(ctx, tx, a)
+	if err != nil || raw == nil {
+		return nil, err
 	}
 	return decodeObject(raw), nil
 }
-func saveReceipt(ctx context.Context, tx pgx.Tx, a identity, out Object) error {
+
+func typedReceipt[T any](ctx context.Context, tx pgx.Tx, a identity) (*T, error) {
+	raw, err := rawReceipt(ctx, tx, a)
+	if err != nil || raw == nil {
+		return nil, err
+	}
+	var out T
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.UseNumber()
+	if err = dec.Decode(&out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+func saveReceipt(ctx context.Context, tx pgx.Tx, a identity, out any) error {
 	if a.RequestKey == "" {
 		return nil
 	}

@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"net/http/httptest"
 	"net/url"
 	"os"
 	"strings"
@@ -111,18 +110,18 @@ func TestProfitTableQueries(t *testing.T) {
 	pending := add(actor.Tenant, "pending")
 	add(actor.Tenant, "excluded")
 	other := add(9822, "kept")
-	save := func(id, purchase string) Object {
+	save := func(id, purchase string) *SavedProfitScenario {
 		t.Helper()
 		in := profitTableFixture()
 		in["purchase_cny"] = purchase
 		a := actor
 		a.RequestKey = uuid()
 		a.RequestHash = shaDigest(encoded(in))
-		v, e := svc.saveProfit(ctx, a, id, Object{"expected_data_revision": 1, "inputs": in})
+		v, e := svc.saveProfit(ctx, a, id, parseSaveProfitCommand(Object{"expected_data_revision": 1, "inputs": in}))
 		if e != nil {
 			t.Fatal(e)
 		}
-		return v.(Object)
+		return v
 	}
 	if _, err := pool.Exec(ctx, "UPDATE ps_products SET specs=$1 WHERE tenant_id=$2 AND id=$3::uuid", encoded(Object{"material": "steel", "legacy_site_snapshot": Object{"raw": "must stay in database"}}), actor.Tenant, first); err != nil {
 		t.Fatal(err)
@@ -131,8 +130,11 @@ func TestProfitTableQueries(t *testing.T) {
 	save(second, "7")
 	list := func(query string) Object {
 		t.Helper()
-		r := httptest.NewRequest("GET", "http://screening/api/v1/screening/profit/products?"+query, nil).WithContext(context.WithValue(ctx, identityKey{}, actor))
-		v, e := svc.profitProducts(r)
+		vals, e := url.ParseQuery(query)
+		if e != nil {
+			t.Fatal(e)
+		}
+		v, e := svc.profitProductsUsecase(ctx, actor, vals)
 		if e != nil {
 			t.Fatal(e)
 		}
@@ -194,7 +196,7 @@ func TestProfitTableQueries(t *testing.T) {
 		t.Fatal("snapshot history or supplier missing", count, supplier, err)
 	}
 	v := list("product_id=" + first)["items"].([]Object)[0]
-	if v["scenario"].(map[string]any)["id"] != latest["id"] || latest["id"] == old["id"] {
+	if str(v["scenario"].(map[string]any)["id"]) != latest.ID || latest.ID == old.ID {
 		t.Fatal("latest saved scenario not selected", v)
 	}
 }

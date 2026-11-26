@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"log"
 	"net/http"
 	"net/url"
@@ -344,21 +343,4 @@ func (s *Service) logout(w http.ResponseWriter, r *http.Request) {
 	}
 	s.cookie(w, SessionCookie, "", -1)
 	w.WriteHeader(http.StatusNoContent)
-}
-
-func (s *Service) Authenticate(w http.ResponseWriter, r *http.Request) (Principal, bool) {
-	a, err := s.AuthenticateToken(r.Context(), s.SessionToken(r))
-	if err == nil {
-		return a, true
-	}
-	var e APIError
-	if errors.As(err, &e) {
-		if e.ClearSession {
-			s.cookie(w, SessionCookie, "", -1)
-		}
-		httpresponse.Fail(w, e.Status, e.Message)
-	} else {
-		httpresponse.Internal(w, err)
-	}
-	return a, false
 }

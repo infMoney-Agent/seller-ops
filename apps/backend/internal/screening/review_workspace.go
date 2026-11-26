@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
@@ -16,12 +15,9 @@ func workspacePage(raw string) (int, error) {
 	}
 	n, e := strconv.Atoi(raw)
 	if e != nil || n < 1 || n > 100000 {
-		return 0, fail(422, "分页参数无效")
+		return 0, invalid("分页参数无效")
 	}
 	return n, nil
-}
-func (s *service) reviewWorkspace(r *http.Request) (any, error) {
-	return s.reviewWorkspaceUsecase(r.Context(), actor(r), r.URL.Query())
 }
 func (s *service) reviewWorkspaceUsecase(ctx context.Context, a identity, params url.Values) (any, error) {
 	v := params
@@ -43,7 +39,7 @@ func (s *service) reviewWorkspaceUsecase(ctx context.Context, a identity, params
 	if expanded {
 		id := v.Get("family_product_id")
 		if !uuidPattern.MatchString(id) {
-			return nil, fail(422, "商品ID无效")
+			return nil, invalid("商品ID无效")
 		}
 		anchor, err := s.product(ctx, a, id)
 		if err != nil {
@@ -70,7 +66,7 @@ func (s *service) reviewWorkspaceUsecase(ctx context.Context, a identity, params
 	var path []string
 	if v.Get("category_path") != "" {
 		if e = json.Unmarshal([]byte(v.Get("category_path")), &path); e != nil {
-			return nil, fail(422, "类目路径无效")
+			return nil, invalid("类目路径无效")
 		}
 		title = strings.Join(categoryDisplayPath(path), " / ")
 	}

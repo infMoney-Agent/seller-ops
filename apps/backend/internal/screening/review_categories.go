@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"net/url"
 	"sort"
 	"strings"
@@ -22,9 +21,6 @@ type reviewCategoryNode struct {
 	Children []*reviewCategoryNode `json:"children"`
 }
 
-func reviewCandidateQuery(r *http.Request, ignoreCategory bool) (productQuery, error) {
-	return reviewCandidateValues(actor(r), r.URL.Query(), ignoreCategory)
-}
 func reviewCandidateValues(a identity, params url.Values, ignoreCategory bool) (productQuery, error) {
 	v := cloneQuery(params)
 	selected, category := v.Get("selected_ids"), v.Get("category_path")
@@ -38,11 +34,11 @@ func reviewCandidateValues(a identity, params url.Values, ignoreCategory bool) (
 	if selected != "" {
 		ids := strings.Split(selected, ",")
 		if len(ids) > 100 {
-			return q, fail(422, "最多选择100个商品")
+			return q, invalid("最多选择100个商品")
 		}
 		for _, id := range ids {
 			if !uuidPattern.MatchString(id) {
-				return q, fail(422, "商品ID无效")
+				return q, invalid("商品ID无效")
 			}
 		}
 		q.args = append(q.args, ids)
@@ -51,20 +47,17 @@ func reviewCandidateValues(a identity, params url.Values, ignoreCategory bool) (
 	if category != "" && !ignoreCategory {
 		var parts []string
 		if len(category) > 4000 || json.Unmarshal([]byte(category), &parts) != nil || len(parts) < 1 || len(parts) > 20 {
-			return q, fail(422, "类目路径无效")
+			return q, invalid("类目路径无效")
 		}
 		for _, part := range parts {
 			if strings.TrimSpace(part) == "" || len(part) > 500 {
-				return q, fail(422, "类目路径无效")
+				return q, invalid("类目路径无效")
 			}
 		}
 		q.args = append(q.args, parts)
 		q.where += fmt.Sprintf(" AND ("+reviewCategoryPathSQL+")[1:%d]=$%d::text[]", len(parts), len(q.args))
 	}
 	return q, nil
-}
-func (s *service) reviewCategories(r *http.Request) (any, error) {
-	return s.reviewCategoriesUsecase(r.Context(), actor(r), r.URL.Query())
 }
 func (s *service) reviewCategoriesUsecase(ctx context.Context, a identity, params url.Values) (any, error) {
 	q, e := reviewCandidateValues(a, params, true)

@@ -20,11 +20,11 @@ func (s *service) selection(ctx context.Context, a identity, b Object) ([]string
 	ids := []string{}
 	if raw, ok := b["product_ids"].([]any); ok {
 		if len(raw) == 0 || len(raw) > 100000 {
-			return nil, fail(422, "商品集合须在1到10万之间")
+			return nil, invalid("商品集合须在1到10万之间")
 		}
 		for _, v := range raw {
 			if !uuidPattern.MatchString(str(v)) {
-				return nil, fail(422, "商品ID无效")
+				return nil, invalid("商品ID无效")
 			}
 			ids = append(ids, str(v))
 		}
@@ -33,7 +33,7 @@ func (s *service) selection(ctx context.Context, a identity, b Object) ([]string
 			return nil, e
 		}
 		if total != len(ids) {
-			return nil, fail(404, "部分商品不存在或不属于当前工作区")
+			return nil, notFound("部分商品不存在或不属于当前工作区")
 		}
 		sort.Strings(ids)
 		return ids, nil
@@ -61,7 +61,7 @@ func (s *service) selection(ctx context.Context, a identity, b Object) ([]string
 		ids = append(ids, id)
 	}
 	if len(ids) > 100000 {
-		return nil, fail(422, "一次最多处理10万商品")
+		return nil, invalid("一次最多处理10万商品")
 	}
 	return ids, rows.Err()
 }
@@ -79,10 +79,10 @@ func (s *service) queueProfit(ctx context.Context, a identity, b Object) (any, e
 	}
 	input, ok := b["inputs"].(map[string]any)
 	if !ok {
-		return nil, fail(422, "缺少测算输入")
+		return nil, invalid("缺少测算输入")
 	}
 	if _, e = calculate(input); e != nil {
-		return nil, fail(422, e.Error())
+		return nil, invalid(e.Error())
 	}
 	if id := str(b["template_id"]); id != "" {
 		if _, e = s.one(ctx, "SELECT to_jsonb(c) FROM ps_configs c WHERE tenant_id=$1 AND id=$2::uuid AND kind='profit_template'", a.Tenant, id); e != nil {
@@ -294,7 +294,7 @@ func (s *service) runProfitBatch(ctx context.Context, job Object, token string) 
 		body := Object{"expected_data_revision": target["data_revision"], "inputs": input, "template_id": payload["template_id"], "monthly_id": target["monthly_id"], "expected_monthly_revision": target["monthly_revision"]}
 		a.RequestKey = "profit-job:" + str(job["id"]) + ":" + id
 		a.RequestHash = shaDigest(encoded(body))
-		out, e := s.saveProfit(ctx, a, id, body)
+		out, e := s.saveProfit(ctx, a, id, parseSaveProfitCommand(body))
 		if e != nil {
 			item["reason"] = "商品或月份已变化，或测算输入无效"
 		} else {
@@ -321,11 +321,11 @@ func (s *service) serveStored(w http.ResponseWriter, r *http.Request, key, name 
 	target := filepath.Join(root, filepath.FromSlash(key))
 	relative, e := filepath.Rel(root, target)
 	if e != nil || strings.HasPrefix(relative, "..") || filepath.IsAbs(relative) {
-		return fail(404, "文件不存在")
+		return notFound("文件不存在")
 	}
 	file, e := os.Open(target)
 	if e != nil {
-		return fail(404, "文件不存在")
+		return notFound("文件不存在")
 	}
 	defer file.Close()
 	info, e := file.Stat()
@@ -347,7 +347,7 @@ func (s *service) importDownload(w http.ResponseWriter, r *http.Request, id, kin
 		return nil, s.serveStored(w, r, str(batch["storage_key"]), str(batch["file_name"]))
 	}
 	if kind != "errors" {
-		return nil, fail(404, "下载不存在")
+		return nil, notFound("下载不存在")
 	}
 	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
 	w.Header().Set("Content-Disposition", "attachment; filename=import-errors.csv")
@@ -376,7 +376,7 @@ func (s *service) exportDownload(w http.ResponseWriter, r *http.Request, id stri
 		return nil, e
 	}
 	if job["state"] != "succeeded" {
-		return nil, fail(409, "导出尚未完成")
+		return nil, conflict("导出尚未完成")
 	}
 	result := job["result"].(map[string]any)
 	return nil, s.serveStored(w, r, str(result["storage_key"]), "产品初筛.xlsx")

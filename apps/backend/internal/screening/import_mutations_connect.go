@@ -25,18 +25,18 @@ func prepareImportMutation(ctx context.Context, id, method, suffix string, meta 
 	}
 	if method != "DELETE" {
 		if len(encoded(body)) > 256*1024 {
-			return a, fail(413, "JSON 请求超过256KB")
+			return a, payloadTooLarge("JSON 请求超过256KB")
 		}
 		if err = validateMutationBody(body); err != nil {
 			return a, err
 		}
 	}
 	if meta == nil || meta.IdempotencyKey == "" || len(meta.IdempotencyKey) > 200 {
-		return a, fail(422, "修改请求需要Idempotency-Key")
+		return a, invalid("修改请求需要Idempotency-Key")
 	}
 	query := meta.OriginalQuery
 	if len(query) > 8192 || (query != "" && !strings.HasPrefix(query, "?")) || strings.ContainsAny(query, "\r\n#") {
-		return a, fail(422, "请求参数无效")
+		return a, invalid("请求参数无效")
 	}
 	a.RequestKey = meta.IdempotencyKey
 	a.RequestHash = buildIdempotencyHash(method, suffix, query, body)
@@ -58,7 +58,7 @@ func settingsBody(settings *screeningv1.ImportSettings) (Object, error) {
 	}
 	for _, key := range settings.ClearFields {
 		if _, ok := fields[key]; !ok && key != "mapping" {
-			return nil, fail(422, "清空字段无效")
+			return nil, invalid("清空字段无效")
 		}
 		b[key] = nil
 	}
@@ -67,7 +67,7 @@ func settingsBody(settings *screeningv1.ImportSettings) (Object, error) {
 func rpcImportSubmission(value any) (*screeningv1.ImportJobSubmission, error) {
 	row, ok := value.(map[string]any)
 	if !ok {
-		return nil, fail(500, "任务结果无效")
+		return nil, internalFailure("任务结果无效")
 	}
 	extra := Object{}
 	for k, v := range row {
