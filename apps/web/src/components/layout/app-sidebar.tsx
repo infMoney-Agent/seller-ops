@@ -26,11 +26,30 @@ import {
 } from '@/components/ui/sidebar';
 import { UserAvatarProfile } from '@/components/user-avatar-profile';
 import { navGroups } from '@/config/nav-config';
-import { signOut, useSellerUser } from '@/features/auth/session';
+import { signOut, useSellerSession, useSellerUser } from '@/features/auth/session';
+import { useScreeningQuery } from '@/features/screening/queries';
 import { useFilteredNavGroups } from '@/hooks/use-nav';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { Icons } from '../icons';
+
+function ScreeningPendingIndicator() {
+  const session = useSellerSession();
+  const counts = useScreeningQuery<Record<string, number>>(
+    session.workspaceId > 0 ? '/summary?' : null
+  );
+  const pending = counts.data?.pending_displayed ?? 0;
+  if (pending <= 0) return null;
+  return (
+    <span
+      title={`有 ${pending.toLocaleString('zh-CN')} 项待人工复核`}
+      className='ml-auto inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-1.5 py-0.5 font-mono text-[11px] font-medium tabular-nums text-amber-700 group-data-[collapsible=icon]:hidden dark:text-amber-300'
+    >
+      <span aria-hidden='true' className='size-1.5 rounded-full bg-amber-500' />
+      <span>{pending > 999 ? '999+' : pending.toLocaleString('zh-CN')}</span>
+    </span>
+  );
+}
 
 export default function AppSidebar() {
   const pathname = usePathname();
@@ -109,6 +128,7 @@ export default function AppSidebar() {
                     >
                       <Icon />
                       <span>{item.title}</span>
+                      {item.url === '/dashboard/ecom/screening' && <ScreeningPendingIndicator />}
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 );

@@ -1,0 +1,3 @@
+services:
+  casdoor:
+    image: ${CASDOOR_IMAGE:-seller-ops-casdoor:v4.25.0-organization-policy-1}

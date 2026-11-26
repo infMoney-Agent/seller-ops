@@ -46,6 +46,36 @@
   }
 }
 
+/* Modern Web Guidance (customize-scrollbar-color-and-thickness):
+   Standard scrollbar properties with @supports fallback for legacy WebKit. */
+.screening-scroll {
+  --scrollbar-thumb: color-mix(in oklab, var(--muted-foreground) 45%, transparent);
+  --scrollbar-track: color-mix(in oklab, var(--muted-foreground) 10%, transparent);
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+
+@supports not (scrollbar-color: auto) {
+  .screening-scroll {
+    scrollbar-width: auto;
+  }
+
+  .screening-scroll::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  .screening-scroll::-webkit-scrollbar-thumb {
+    background: var(--scrollbar-thumb);
+    border-radius: 4px;
+  }
+
+  .screening-scroll::-webkit-scrollbar-track {
+    background: var(--scrollbar-track);
+    border-radius: 4px;
+  }
+}
+
 /* View Transition Wave Effect */
 ::view-transition-old(root),
 ::view-transition-new(root) {

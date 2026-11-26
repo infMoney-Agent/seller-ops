@@ -220,6 +220,53 @@ func TestBrowserScreening(t *testing.T) {
 	if e := chromedp.Run(ctx, chromedp.Evaluate(`(()=>{if(!document.querySelector('button[aria-label="复制 ASIN BROWSER001"]'))throw Error('ASIN copy action missing');const t=document.querySelector('[data-screening-table]');if(!t||getComputedStyle(t.querySelector('thead')).position!=='sticky')throw Error('Product header must remain sticky');if(document.body.innerText.includes('Vercel'))throw Error('Template entry remains')})()`, nil)); e != nil {
 		t.Fatal(e)
 	}
+	// Verify capability failures without changing the real system clipboard.
+	// The preceding source-data checks intentionally leave two modal dialogs open.
+	if e := chromedp.Run(ctx,
+		chromedp.Click(`button[aria-label="关闭来源原始数据"]`, chromedp.ByQuery),
+		chromedp.Poll(`document.querySelectorAll('[data-slot="dialog-content"][data-open]').length===1`, nil),
+		chromedp.KeyEvent("\u001b"),
+		chromedp.Poll(`document.querySelectorAll('[data-slot="dialog-content"]').length===0`, nil),
+	); e != nil {
+		t.Fatal("close data dialogs before exercising the table copy action", e)
+	}
+	clipboardScript := `(async()=>{
+		const button=document.querySelector('button[aria-label="复制 ASIN BROWSER001"]');
+		const descriptor=Object.getOwnPropertyDescriptor(navigator,'clipboard'), originalExec=document.execCommand;
+		let copied='', fallbackCalls=0;
+		try {
+			for(const mode of ['modern','missing','rejected','failed']) {
+				copied='';fallbackCalls=0;
+				Object.defineProperty(navigator,'clipboard',{configurable:true,value:mode==='modern'
+					? {writeText:async text=>{copied=text}}
+					: mode==='rejected' ? {writeText:async()=>{throw Error('denied')}} : undefined});
+				document.execCommand=function(command) {
+					if(command!=='copy')throw Error('Unexpected legacy command');
+					fallbackCalls++;
+					copied=document.querySelector('textarea[readonly]')?.value;
+					return mode!=='failed';
+				};
+				button.focus();button.click();
+				await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+				if(copied!=='BROWSER001')throw Error(mode+': wrong copied ASIN');
+				if(fallbackCalls!==(mode==='modern'?0:1))throw Error(mode+': incorrect fallback path');
+				if(!button.hasAttribute(mode==='failed'?'data-failed':'data-copied'))throw Error(mode+': feedback missing');
+				if(document.activeElement!==button)throw Error(mode+': keyboard focus lost');
+				if(mode==='failed'&&!button.parentElement.textContent.includes('复制失败'))throw Error('Visible copy failure missing');
+			}
+		} finally {
+			document.execCommand=originalExec;
+			if(descriptor)Object.defineProperty(navigator,'clipboard',descriptor);else delete navigator.clipboard;
+		}
+		return 'ok';
+	})()`
+	var clipboardResult string
+	if e := chromedp.Run(ctx, chromedp.Evaluate(clipboardScript, &clipboardResult, func(p *runtime.EvaluateParams) *runtime.EvaluateParams { return p.WithAwaitPromise(true) })); e != nil {
+		t.Fatal("ASIN clipboard capabilities, fallback feedback or focus regression", e)
+	}
+	if clipboardResult != "ok" {
+		t.Fatal("ASIN clipboard regression did not complete", clipboardResult)
+	}
 	var screenshot []byte
 	if e := chromedp.Run(ctx, chromedp.FullScreenshot(&screenshot, 80)); e != nil {
 		t.Fatal(e)

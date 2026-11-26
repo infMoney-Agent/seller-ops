@@ -107,7 +107,7 @@ services:
     volumes: ["./apps/backend/scripts/init-db.sh:/init-screening-db.sh:ro"]
     entrypoint: [sh, /init-screening-db.sh]
   casdoor:
-    image: casbin/casdoor:v4.25.0
+    image: ${CASDOOR_IMAGE:-casbin/casdoor:v4.25.0}
     depends_on:
       db:
         condition: service_healthy
