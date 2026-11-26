@@ -95,7 +95,7 @@ func (s *service) editImport(ctx context.Context, a identity, id string, b Objec
 	}
 	batch := decodeObject(raw)
 	if counts, ok := batch["counts"].(map[string]any); ok && counts["data_deleted_at"] != nil {
-		return nil, fail(404, "导入记录已删除，请重新上传后操作")
+		return nil, notFound("导入记录已删除，请重新上传后操作")
 	}
 	if commit {
 		state := str(batch["state"])
@@ -107,7 +107,7 @@ func (s *service) editImport(ctx context.Context, a identity, id string, b Objec
 			return decodeObject(jobRaw), nil
 		}
 		if state != "preview" {
-			return nil, fail(409, "请等待解析完成")
+			return nil, conflict("请等待解析完成")
 		}
 		if _, e = period(batch, true); e != nil {
 			return nil, e
@@ -129,14 +129,14 @@ func (s *service) editImport(ctx context.Context, a identity, id string, b Objec
 		return result, nil
 	}
 	if str(batch["state"]) != "preview" && str(batch["state"]) != "failed" {
-		return nil, fail(409, "当前状态不能调整映射")
+		return nil, conflict("当前状态不能调整映射")
 	}
 	var committed bool
 	if e = tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM ps_import_rows WHERE tenant_id=$1 AND import_id=$2::uuid AND state='committed')", a.Tenant, id).Scan(&committed); e != nil {
 		return nil, e
 	}
 	if committed {
-		return nil, fail(409, "该批次已有入库数据，请重试原导入任务；调整映射请新建导入")
+		return nil, conflict("该批次已有入库数据，请重试原导入任务；调整映射请新建导入")
 	}
 	for key, value := range b {
 		batch[key] = value
@@ -151,7 +151,7 @@ func (s *service) editImport(ctx context.Context, a identity, id string, b Objec
 	}
 	mapping, ok := batch["mapping"].(map[string]any)
 	if !ok || len(mapping) > len(normalConfig.Aliases) {
-		return nil, fail(422, "映射无效")
+		return nil, invalid("映射无效")
 	}
 	var aliases struct {
 		Aliases map[string][]string `json:"ALIASES"`
@@ -159,7 +159,7 @@ func (s *service) editImport(ctx context.Context, a identity, id string, b Objec
 	unmarshal(normalizationData, &aliases)
 	for key, value := range mapping {
 		if aliases.Aliases[key] == nil || len(str(value)) > 200 {
-			return nil, fail(422, "映射字段无效")
+			return nil, invalid("映射字段无效")
 		}
 	}
 	_, e = tx.Exec(ctx, "UPDATE ps_imports SET mapping=$3,mapping_hash=$4,source_period=$5,observed_on=$6,source_type=$7,period_type=$8,period_start=$9,period_end=$10,default_sales_scope=$11,parse_generation=parse_generation+1,state='parsing' WHERE tenant_id=$1 AND id=$2::uuid", a.Tenant, id, encoded(mapping), shaDigest(encoded(mapping)), str(batch["source_period"]), batch["observed_on"], batch["source_type"], batch["period_type"], batch["period_start"], batch["period_end"], batch["default_sales_scope"])
@@ -314,7 +314,7 @@ func importObservation(ctx context.Context, tx pgx.Tx, a identity, batch, meta, 
 	}
 	parent := str(n["parent_asin"])
 	if scope == "parent" && parent == "" {
-		return "", fail(422, "父体销量必须有父ASIN")
+		return "", invalid("父体销量必须有父ASIN")
 	}
 	var parentSales, parentRevenue any
 	if scope == "parent" {

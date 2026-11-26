@@ -42,11 +42,11 @@ func decodeScreeningBody(body proto.Message) (Object, error) {
 		var err error
 		b, err = rpccompat.Legacy(body)
 		if err != nil {
-			return nil, fail(422, "请求结构无效")
+			return nil, invalid("请求结构无效")
 		}
 	}
 	if len(encoded(b)) > 256*1024 {
-		return nil, fail(413, "JSON 请求超过256KB")
+		return nil, payloadTooLarge("JSON 请求超过256KB")
 	}
 	return b, nil
 }
@@ -75,12 +75,12 @@ func prepareScreeningMutation(ctx context.Context, method, canonicalPath string,
 		key = meta.IdempotencyKey
 		original := meta.OriginalQuery
 		if len(original) > 8192 || (original != "" && !strings.HasPrefix(original, "?")) || strings.ContainsAny(original, "\r\n#") {
-			return a, nil, fail(422, "请求参数无效")
+			return a, nil, invalid("请求参数无效")
 		}
 		raw = strings.TrimPrefix(original, "?")
 	}
 	if key == "" || len(key) > 200 {
-		return a, nil, fail(422, "修改请求需要Idempotency-Key")
+		return a, nil, invalid("修改请求需要Idempotency-Key")
 	}
 	a.RequestKey = key
 	a.RequestHash = buildIdempotencyHash(method, canonicalPath, raw, b)
@@ -270,7 +270,7 @@ func (s *service) ListPolicies(ctx context.Context, req *connect.Request[screeni
 	if err != nil {
 		return nil, rpcError(err)
 	}
-	value, err := s.listConfigsUsecase(ctx, a, "screening")
+	value, err := s.listConfigsUsecase(ctx, a, string(ConfigScreening))
 	return screeningRPCResponse(&screeningv1.ListPoliciesResponse{}, value, err)
 }
 
@@ -279,7 +279,7 @@ func (s *service) ListProfitTemplates(ctx context.Context, req *connect.Request[
 	if err != nil {
 		return nil, rpcError(err)
 	}
-	value, err := s.listConfigsUsecase(ctx, a, "profit_template")
+	value, err := s.listConfigsUsecase(ctx, a, string(ConfigProfitTemplate))
 	return screeningRPCResponse(&screeningv1.ListProfitTemplatesResponse{}, value, err)
 }
 
@@ -310,7 +310,7 @@ func (s *service) ReviewProduct(ctx context.Context, req *connect.Request[screen
 	if err != nil {
 		return nil, rpcError(err)
 	}
-	value, err := s.mutateProduct(ctx, a, id, "review", body)
+	value, err := s.reviewProduct(ctx, a, id, parseReviewCommand(body))
 	return screeningRPCResponse(&screeningv1.ReviewProductResponse{}, value, err)
 }
 
@@ -323,7 +323,7 @@ func (s *service) UpdateProductCategory(ctx context.Context, req *connect.Reques
 	if err != nil {
 		return nil, rpcError(err)
 	}
-	value, err := s.mutateProduct(ctx, a, id, "category", body)
+	value, err := s.updateProductCategory(ctx, a, id, parseCategoryCommand(body))
 	return screeningRPCResponse(&screeningv1.UpdateProductCategoryResponse{}, value, err)
 }
 
@@ -336,7 +336,7 @@ func (s *service) UpdateProductParameters(ctx context.Context, req *connect.Requ
 	if err != nil {
 		return nil, rpcError(err)
 	}
-	value, err := s.mutateProduct(ctx, a, id, "parameters", body)
+	value, err := s.updateProductParameters(ctx, a, id, parseParametersCommand(body))
 	return screeningRPCResponse(&screeningv1.UpdateProductParametersResponse{}, value, err)
 }
 
@@ -349,7 +349,7 @@ func (s *service) SaveProfitScenario(ctx context.Context, req *connect.Request[s
 	if err != nil {
 		return nil, rpcError(err)
 	}
-	value, err := s.saveProfit(ctx, a, id, body)
+	value, err := s.saveProfit(ctx, a, id, parseSaveProfitCommand(body))
 	return screeningRPCResponse(&screeningv1.SaveProfitScenarioResponse{}, value, err)
 }
 
@@ -358,7 +358,7 @@ func (s *service) CalculateProfit(ctx context.Context, req *connect.Request[scre
 	if err != nil {
 		return nil, rpcError(err)
 	}
-	value, err := s.calculateRequest(ctx, a, body)
+	value, err := s.calculateProfit(ctx, a, parseCalculateProfitCommand(body))
 	return screeningRPCResponse(&screeningv1.CalculateProfitResponse{}, value, err)
 }
 
@@ -367,7 +367,7 @@ func (s *service) CreateReviewPreview(ctx context.Context, req *connect.Request[
 	if err != nil {
 		return nil, rpcError(err)
 	}
-	value, err := s.previewBatch(ctx, a, body)
+	value, err := s.previewBatch(ctx, a, parsePreviewBatchCommand(body))
 	return screeningRPCResponse(&screeningv1.CreateReviewPreviewResponse{}, value, err)
 }
 
@@ -402,7 +402,7 @@ func (s *service) CreatePolicy(ctx context.Context, req *connect.Request[screeni
 	if err != nil {
 		return nil, rpcError(err)
 	}
-	value, err := s.createConfig(ctx, a, "policies", body)
+	value, err := s.createConfig(ctx, a, parseCreateConfigCommand(ConfigScreening, body))
 	return screeningRPCResponse(&screeningv1.CreatePolicyResponse{}, value, err)
 }
 
@@ -411,7 +411,7 @@ func (s *service) CreateProfitTemplate(ctx context.Context, req *connect.Request
 	if err != nil {
 		return nil, rpcError(err)
 	}
-	value, err := s.createConfig(ctx, a, "profit/templates", body)
+	value, err := s.createConfig(ctx, a, parseCreateConfigCommand(ConfigProfitTemplate, body))
 	return screeningRPCResponse(&screeningv1.CreateProfitTemplateResponse{}, value, err)
 }
 
@@ -424,7 +424,7 @@ func (s *service) TestPolicy(ctx context.Context, req *connect.Request[screening
 	if err != nil {
 		return nil, rpcError(err)
 	}
-	value, err := s.policyAction(ctx, a, id, "test", body)
+	value, err := s.testPolicy(ctx, a, id, parseTestPolicyCommand(body))
 	return screeningRPCResponse(&screeningv1.TestPolicyResponse{}, value, err)
 }
 
@@ -433,11 +433,11 @@ func (s *service) ActivatePolicy(ctx context.Context, req *connect.Request[scree
 	if _, err := validateScreeningResourceArgs(ctx, id); err != nil {
 		return nil, rpcError(err)
 	}
-	a, body, err := prepareScreeningMutation(ctx, "POST", "policies/"+id+"/activate", req.Msg.Query, req.Msg.Mutation, req.Msg.Body)
+	a, _, err := prepareScreeningMutation(ctx, "POST", "policies/"+id+"/activate", req.Msg.Query, req.Msg.Mutation, req.Msg.Body)
 	if err != nil {
 		return nil, rpcError(err)
 	}
-	value, err := s.policyAction(ctx, a, id, "activate", body)
+	value, err := s.activatePolicy(ctx, a, id)
 	return screeningRPCResponse(&screeningv1.ActivatePolicyResponse{}, value, err)
 }
 
@@ -486,11 +486,11 @@ func validateScreeningGroup(ctx context.Context, key string) (identity, error) {
 		return a, err
 	}
 	if len(key) != 64 {
-		return a, fail(422, "分组ID无效")
+		return a, invalid("分组ID无效")
 	}
 	for _, c := range key {
 		if !(c >= 'a' && c <= 'f' || c >= '0' && c <= '9') {
-			return a, fail(422, "分组ID无效")
+			return a, invalid("分组ID无效")
 		}
 	}
 	return a, nil

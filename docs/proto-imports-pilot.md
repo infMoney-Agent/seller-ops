@@ -1,6 +1,6 @@
 # Proto 迁移实施记录
 
-本文保留导入试点的历史过程；当前完整范围和发布约束以 [Proto 接口迁移状态](proto-migration-status.md) 为准。
+> 历史记录说明：本文保留早期导入试点与分批切换阶段的过程档案。文中提及的 `*_TRANSPORT` 环境变量开关及旧元数据 HTTP 双轨回退已在全量切换与后端收口完成后全部移除；当前唯一有效的生产拓扑与协议边界以 [Proto 接口迁移状态](proto-migration-status.md) 和 [Connect RPC 全量切换收口方案](proto-connect-cutover-plan.md) 为准。
 
 ## 边界与结构
 

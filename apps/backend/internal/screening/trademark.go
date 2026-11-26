@@ -2,7 +2,6 @@ package screening
 
 import (
 	"context"
-	"net/http"
 	"net/url"
 	"regexp"
 	"sort"
@@ -49,11 +48,8 @@ func trademarkFacets(rows []Object) []Object {
 	return items
 }
 
-func (s *service) trademarkOptions(r *http.Request) (any, error) {
-	return s.trademarkOptionsUsecase(r.Context(), actor(r), r.URL.Query())
-}
 func (s *service) trademarkOptionsUsecase(ctx context.Context, a identity, params url.Values) (any, error) {
-	values := params
+	values := cloneQuery(params)
 	values.Del("trademark")
 	values.Del("sort")
 	if e := validateFilters(values); e != nil {

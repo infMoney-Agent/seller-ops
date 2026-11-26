@@ -146,7 +146,7 @@ func matches(pattern, text string) bool {
 	}
 	matched, e := item.full.MatchString(text)
 	if e != nil {
-		panic(apiError{422, "规则匹配超过执行时限"})
+		panic(domainError{errValidation, "规则匹配超过执行时限"})
 	}
 	return matched
 }

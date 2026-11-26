@@ -3,7 +3,6 @@ package screening
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"net/url"
 	"regexp"
 	"strings"
@@ -100,14 +99,6 @@ func newProductQuery(a identity, values url.Values) productQuery {
 	}
 	return q
 }
-func (s *service) products(r *http.Request) (any, error) {
-	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
-	groupKey := ""
-	if len(parts) >= 3 && parts[len(parts)-3] == "groups" {
-		groupKey = parts[len(parts)-2]
-	}
-	return s.productsUsecase(r.Context(), actor(r), r.URL.Query(), groupKey)
-}
 func (s *service) productsUsecase(ctx context.Context, a identity, params url.Values, groupKey string) (any, error) {
 	if e := validateFilters(params); e != nil {
 		return nil, e
@@ -141,7 +132,7 @@ func (s *service) productsUsecase(ctx context.Context, a identity, params url.Va
 	}
 	column := map[string]string{"price_usd": "m.price_usd", "monthly_sales": displayChildSalesSQL, "rating": "m.rating", "updated_at": "p.updated_at", "asin": "p.asin", "profit_usd": "(q.output->>'profit_usd')::numeric", "margin": "(q.output->>'margin')::numeric"}[field]
 	if column == "" {
-		return nil, fail(422, "不支持的排序字段")
+		return nil, invalid("不支持的排序字段")
 	}
 	candidateJoins := filterJoins(q, true)
 	if field == "profit_usd" || field == "margin" {
@@ -167,9 +158,6 @@ func (s *service) productsUsecase(ctx context.Context, a identity, params url.Va
 	}
 	return Object{"items": items, "page": p, "page_size": n, "total": total}, e
 }
-func (s *service) summary(r *http.Request) (any, error) {
-	return s.summaryUsecase(r.Context(), actor(r), r.URL.Query())
-}
 func (s *service) summaryUsecase(ctx context.Context, a identity, params url.Values) (any, error) {
 	if e := validateFilters(params); e != nil {
 		return nil, e
@@ -177,13 +165,10 @@ func (s *service) summaryUsecase(ctx context.Context, a identity, params url.Val
 	q := newProductQuery(a, params)
 	return s.one(ctx, "SELECT jsonb_build_object('products',count(*),'displayed',count(DISTINCT COALESCE('parent:'||p.marketplace||':'||NULLIF(p.parent_asin,''),'product:'||p.id::text)),'pending_displayed',count(DISTINCT "+parentFamilySQL+") FILTER(WHERE p.review_status='pending'),'pending',count(*) FILTER(WHERE p.review_status='pending'),'kept',count(*) FILTER(WHERE p.review_status='kept'),'excluded',count(*) FILTER(WHERE p.review_status='excluded'),'source_rows',COALESCE(sum((SELECT count(*) FROM ps_import_rows ir JOIN ps_imports ii ON ii.tenant_id=ir.tenant_id AND ii.id=ir.import_id WHERE ir.tenant_id=p.tenant_id AND ir.product_id=p.id AND NOT(ii.counts ? 'data_deleted_at'))),0)) FROM ps_products p "+filterJoins(q, false)+" WHERE "+q.where, q.args...)
 }
-func (s *service) monthlyList(r *http.Request, id string) (any, error) {
-	return s.monthlyListUsecase(r.Context(), actor(r), r.URL.Query(), id)
-}
 func (s *service) monthlyListUsecase(ctx context.Context, a identity, params url.Values, id string) (any, error) {
 	window := params.Get("recent_months")
 	if window != "" && window != "12" {
-		return nil, fail(422, "recent_months 只支持 12")
+		return nil, invalid("recent_months 只支持 12")
 	}
 	extra := ""
 	if window == "12" {
@@ -198,9 +183,6 @@ func (s *service) monthlyListUsecase(ctx context.Context, a identity, params url
 	items, e := s.query(ctx, "SELECT to_jsonb(m)||jsonb_build_object('display_child_sales',"+displayChildSalesSQL+",'file_name',i.file_name,'member_path',r.member_path,'sheet_name',r.sheet_name,'row_no',r.row_no,'price_usd',m.price_usd::text) FROM ps_product_monthly m JOIN ps_products p ON p.tenant_id=m.tenant_id AND p.id=m.product_id JOIN ps_import_rows r ON r.tenant_id=m.tenant_id AND r.id=m.source_row_id JOIN ps_imports i ON i.tenant_id=r.tenant_id AND i.id=r.import_id WHERE m.tenant_id=$1 AND m.product_id=$2::uuid"+extra+" ORDER BY m.stat_month DESC,m.period_end DESC,m.observed_on DESC,m.id LIMIT $3 OFFSET $4", a.Tenant, id, n, (p-1)*n)
 	return Object{"items": items, "total": count, "page": p, "page_size": n}, e
 }
-func (s *service) profitScenarios(r *http.Request, id string) (any, error) {
-	return s.profitScenariosUsecase(r.Context(), actor(r), r.URL.Query(), id)
-}
 func (s *service) profitScenariosUsecase(ctx context.Context, a identity, params url.Values, id string) (any, error) {
 	p, n := queryPage(params)
 	var count int
@@ -209,9 +191,6 @@ func (s *service) profitScenariosUsecase(ctx context.Context, a identity, params
 	}
 	items, e := s.query(ctx, "SELECT to_jsonb(q)||jsonb_build_object('stale',q.record_kind='calculated' AND (q.product_data_revision<>p.data_revision OR q.monthly_revision IS DISTINCT FROM m.revision OR EXISTS(SELECT 1 FROM ps_configs newer JOIN ps_configs old ON old.tenant_id=newer.tenant_id AND old.id=q.template_id WHERE newer.tenant_id=q.tenant_id AND newer.kind='profit_template' AND newer.name=old.name AND newer.version>old.version))) FROM ps_profit_scenarios q JOIN ps_products p ON p.tenant_id=q.tenant_id AND p.id=q.product_id LEFT JOIN ps_product_monthly m ON m.tenant_id=q.tenant_id AND m.id=q.monthly_id WHERE q.tenant_id=$1 AND q.product_id=$2::uuid ORDER BY q.created_at DESC,q.id LIMIT $3 OFFSET $4", a.Tenant, id, n, (p-1)*n)
 	return Object{"items": items, "total": count, "page": p, "page_size": n}, e
-}
-func (s *service) family(r *http.Request, id string) (any, error) {
-	return s.familyUsecase(r.Context(), actor(r), r.URL.Query(), id)
 }
 func (s *service) familyUsecase(ctx context.Context, a identity, params url.Values, id string) (any, error) {
 	p, e := s.product(ctx, a, id)

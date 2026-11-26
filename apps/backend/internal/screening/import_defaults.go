@@ -44,14 +44,14 @@ func pendingImportPeriod(b Object, kind, observed string) (Object, error) {
 		source = "sellersprite"
 	}
 	if !regexp.MustCompile(`^[A-Za-z0-9_-]{1,50}$`).MatchString(source) {
-		return nil, fail(422, "来源标识无效")
+		return nil, invalid("来源标识无效")
 	}
 	scope := str(b["default_sales_scope"])
 	if scope == "" {
 		scope = "unknown"
 	}
 	if scope != "unknown" && scope != "child" && scope != "parent" {
-		return nil, fail(422, "销量口径无效")
+		return nil, invalid("销量口径无效")
 	}
 	return Object{"period_type": kind, "observed_on": nullableString(observed), "source_period": "", "period_start": nil, "period_end": nil, "source_type": source, "default_sales_scope": scope}, nil
 }

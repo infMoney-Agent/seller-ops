@@ -43,17 +43,21 @@ func (s *service) loadReviewFamilies(ctx context.Context, q productQuery, items 
 
 // Expansion happens at preview time and is frozen in the batch. Apply/undo
 // keep the existing revision checks and audit events for each actual child.
-func expandExcludedFamilies(ctx context.Context, tx pgx.Tx, a identity, selected []string, overwrite bool) ([]string, []Object, error) {
-	anchors := []Object{}
+func expandExcludedFamilies(ctx context.Context, tx pgx.Tx, a identity, selected []string, overwrite bool) ([]string, []BatchAnchorSnapshot, error) {
+	anchors := make([]BatchAnchorSnapshot, 0, len(selected))
 	for _, id := range selected {
 		p, err := txProduct(ctx, tx, a, id, false)
 		if err != nil {
 			return nil, nil, err
 		}
 		if p["archived_at"] != nil {
-			return nil, nil, fail(404, "商品不存在")
+			return nil, nil, notFound("商品不存在")
 		}
-		anchors = append(anchors, Object{"id": id, "parent_asin": p["parent_asin"], "data_revision": p["data_revision"]})
+		anchors = append(anchors, BatchAnchorSnapshot{
+			ID:           id,
+			ParentASIN:   optionalImportString(p["parent_asin"]),
+			DataRevision: integer(p["data_revision"]),
+		})
 	}
 	rows, err := tx.Query(ctx, `SELECT p.id::text FROM ps_products p WHERE p.tenant_id=$1 AND p.archived_at IS NULL AND
  (p.id=ANY($2::uuid[]) OR (($3::boolean OR p.review_status='pending') AND EXISTS(
@@ -76,7 +80,7 @@ func expandExcludedFamilies(ctx context.Context, tx pgx.Tx, a identity, selected
 		return nil, nil, err
 	}
 	if len(ids) > 100 {
-		return nil, nil, fail(422, "包含同父体待复核子体后超过100项，请减少选择；超大父体请在商品库分批复核")
+		return nil, nil, invalid("包含同父体待复核子体后超过100项，请减少选择；超大父体请在商品库分批复核")
 	}
 	return ids, anchors, nil
 }

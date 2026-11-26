@@ -41,14 +41,14 @@ func (s *service) removeImportHistory(ctx context.Context, a identity, id string
 		return out, nil
 	}
 	if state == "uploaded" || state == "parsing" || state == "importing" {
-		return nil, fail(409, "文件正在处理中，完成后才能删除")
+		return nil, conflict("文件正在处理中，完成后才能删除")
 	}
 	var running bool
 	if err = tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM ps_jobs WHERE tenant_id=$1 AND kind IN ('parse','import') AND payload->>'import_id'=$2 AND state IN ('queued','running'))", a.Tenant, id).Scan(&running); err != nil {
 		return nil, err
 	}
 	if running {
-		return nil, fail(409, "文件正在处理中，完成后才能删除")
+		return nil, conflict("文件正在处理中，完成后才能删除")
 	}
 	ids := []string{}
 	rows, err := tx.Query(ctx, "SELECT DISTINCT product_id::text FROM ps_import_rows WHERE tenant_id=$1 AND import_id=$2::uuid AND product_id IS NOT NULL ORDER BY product_id::text", a.Tenant, id)
@@ -150,7 +150,7 @@ func (s *service) removeImportHistory(ctx context.Context, a identity, id string
 		mapping, _ := ob.batch["mapping"].(map[string]any)
 		n, errors := normalizeRow(raw, mapping)
 		if len(errors) > 0 {
-			return nil, fail(409, "剩余来源存在无法解析的数据，删除已取消，请先核查来源")
+			return nil, conflict("剩余来源存在无法解析的数据，删除已取消，请先核查来源")
 		}
 		meta, e := period(ob.batch, true)
 		if e != nil {

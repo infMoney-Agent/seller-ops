@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"net/http/httptest"
 	"net/url"
 	"os"
 	"strings"
@@ -67,10 +66,10 @@ func TestReviewWorkspace(t *testing.T) {
 	otherTenant := add(802, "工具 / 金属 / 同类型", "excluded")
 	add(801, "其他独立样本", "excluded")
 	svc := &service{db: db}
+	actor := identity{Tenant: 801, User: 1, Role: "member"}
 	call := func(values url.Values) Object {
 		t.Helper()
-		r := httptest.NewRequest("GET", "http://screening/api/v1/screening/review-workspace?"+values.Encode(), nil).WithContext(context.WithValue(ctx, identityKey{}, identity{Tenant: 801, User: 1, Role: "member"}))
-		v, e := svc.reviewWorkspace(r)
+		v, e := svc.reviewWorkspaceUsecase(ctx, actor, values)
 		if e != nil {
 			t.Fatal(e)
 		}
@@ -118,8 +117,7 @@ func TestReviewWorkspace(t *testing.T) {
 	if _, e = db.Exec(ctx, "UPDATE ps_products SET category_path='Home & Kitchen:Bath:Hooks' WHERE tenant_id=801 AND id=$1", ids[2]); e != nil {
 		t.Fatal(e)
 	}
-	req := httptest.NewRequest("GET", "http://screening/api/v1/screening/review-categories", nil).WithContext(context.WithValue(ctx, identityKey{}, identity{Tenant: 801, User: 1, Role: "member"}))
-	tree, e := svc.reviewCategories(req)
+	tree, e := svc.reviewCategoriesUsecase(ctx, actor, nil)
 	if e != nil {
 		t.Fatal(e)
 	}

@@ -32,34 +32,46 @@ func (s *service) ensurePolicy(ctx context.Context, a identity) error {
 	}
 	return tx.Commit(ctx)
 }
-func (s *service) policyAction(ctx context.Context, a identity, id, action string, b Object) (any, error) {
+
+func (s *service) loadValidatedPolicy(ctx context.Context, a identity, id string) (Object, error) {
 	policy, e := s.one(ctx, "SELECT to_jsonb(c) FROM ps_configs c WHERE tenant_id=$1 AND id=$2::uuid AND kind='screening'", a.Tenant, id)
 	if e != nil {
 		return nil, e
 	}
 	config := policy["config"].(map[string]any)
 	if e = validatePolicy(config); e != nil {
-		return nil, fail(422, e.Error())
+		return nil, invalid(e.Error())
 	}
-	if action == "test" {
-		raw, ok := b["product_ids"].([]any)
-		if !ok || len(raw) < 1 || len(raw) > 100 {
-			return nil, fail(422, "试运行需要1到100个明确商品")
+	return config, nil
+}
+
+func (s *service) testPolicy(ctx context.Context, a identity, id string, cmd TestPolicyCommand) (*PolicyTestResult, error) {
+	config, e := s.loadValidatedPolicy(ctx, a, id)
+	if e != nil {
+		return nil, e
+	}
+	if !cmd.ValidList || len(cmd.ProductIDs) < 1 || len(cmd.ProductIDs) > 100 {
+		return nil, invalid("试运行需要1到100个明确商品")
+	}
+	items := make([]Object, 0, len(cmd.ProductIDs))
+	for _, pid := range cmd.ProductIDs {
+		p, e := s.productView(ctx, a, pid)
+		if e != nil {
+			return nil, e
 		}
-		items := []Object{}
-		for _, v := range raw {
-			p, e := s.productView(ctx, a, str(v))
-			if e != nil {
-				return nil, e
-			}
-			out := classify(p, config)
-			out["id"] = v
-			items = append(items, out)
-		}
-		return Object{"items": items}, nil
+		out := classify(p, config)
+		out["id"] = pid
+		items = append(items, out)
+	}
+	return &PolicyTestResult{Items: items}, nil
+}
+
+func (s *service) activatePolicy(ctx context.Context, a identity, id string) (Object, error) {
+	if _, e := s.loadValidatedPolicy(ctx, a, id); e != nil {
+		return nil, e
 	}
 	if a.Role != "owner" {
-		return nil, fail(403, "只有所有者可启用规则")
+		return nil, forbidden("只有所有者可启用规则")
 	}
 	tx, e := s.db.Begin(ctx)
 	if e != nil {

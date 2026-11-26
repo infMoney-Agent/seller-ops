@@ -198,4 +198,4 @@
 2. **误删初筛文件流的签名与 30MB 限流逻辑**：清理 `apps/web/src/app/api/ecom/screening/[...path]/route.ts` 时，必须保留 `POST imports`（30MB + 64KB 限制、180s 超时）和 3 个下载端点的流式透传与 HMAC 签名。
 3. **性能回退风险**：`screening` 商品列表与分组查询在 Connect 模式下依赖 `screeningRPCResponse` 的 gzip 压缩逻辑，清理 `route.ts` 时不可误删。
 4. **跨协议幂等冲突**：Phase 3 拆掉 `executeScreening` 后，写接口的幂等 `RequestHash` 生成规则须保持一致（或在所有历史幂等记录过期后再简化）。
-5. **先切流稳态，再做领域模型改造**：完成本方案 Phase 1–3 后，后端将不存在双轨入口与字符串路由转发，届时再推进 **`screening` 核心写路径去 `map[string]any`（强类型领域结构/值对象）+ 业务错误与 HTTP 状态码解耦**，改动面最小、收益最高。
+5. **先切流稳态，再做领域模型改造**：完成本方案 Phase 1–3 后，后端已不存在双轨入口与字符串路由转发；后续领域层改造第一版（`screening` 领域错误与 HTTP 状态码解耦 + 核心写路径与复核批次强类型化）已落地，详见 [初筛领域错误解耦与核心写路径强类型化说明](screening-domain-typing.md)。

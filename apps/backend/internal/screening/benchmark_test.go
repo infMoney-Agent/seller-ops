@@ -4,7 +4,7 @@ import (
 	"context"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"math"
-	"net/http/httptest"
+	"net/url"
 	"os"
 	"sort"
 	"strings"
@@ -41,12 +41,14 @@ func TestLargeCatalogPagination(t *testing.T) {
 	}
 	s := &service{db: pool}
 	for _, query := range []string{"page=1", "page=20&category=Trays", "page=1&stat_month=2026-01-01&period_type=calendar_month"} {
+		vals, err := url.ParseQuery(query)
+		if err != nil {
+			t.Fatal(err)
+		}
 		samples := []time.Duration{}
 		for i := 0; i < 23; i++ {
-			r := httptest.NewRequest("GET", "http://screening/api/v1/screening/products?"+query, nil)
-			r = r.WithContext(context.WithValue(ctx, identityKey{}, a))
 			start := time.Now()
-			result, e := s.products(r)
+			result, e := s.productsUsecase(ctx, a, vals, "")
 			if e != nil {
 				t.Fatal(query, e)
 			}

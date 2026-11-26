@@ -421,10 +421,10 @@ func period(b Object, required bool) (Object, error) {
 	if observed != "" {
 		date, e = time.Parse("2006-01-02", observed)
 		if e != nil {
-			return nil, fail(422, "观察日期无效")
+			return nil, invalid("观察日期无效")
 		}
 	} else if required {
-		return nil, fail(422, "确认导入前必须填写观察日期")
+		return nil, invalid("确认导入前必须填写观察日期")
 	}
 	start, end := str(b["period_start"]), str(b["period_end"])
 	sourcePeriod := str(b["source_period"])
@@ -433,7 +433,7 @@ func period(b Object, required bool) (Object, error) {
 		month := sourcePeriod
 		if !sourceMonthPattern.MatchString(month) {
 			if sourcePeriod != "" || required {
-				return nil, fail(422, "无法识别来源期，请填写YYYY-MM")
+				return nil, invalid("无法识别来源期，请填写YYYY-MM")
 			}
 			return pendingImportPeriod(b, kind, observed)
 		}
@@ -443,7 +443,7 @@ func period(b Object, required bool) (Object, error) {
 	case "rolling_30d":
 		if date.IsZero() {
 			if required {
-				return nil, fail(422, "滚动30天必须提供观察日期")
+				return nil, invalid("滚动30天必须提供观察日期")
 			}
 			return Object{"period_type": kind}, nil
 		}
@@ -451,32 +451,32 @@ func period(b Object, required bool) (Object, error) {
 		start = date.AddDate(0, 0, -29).Format("2006-01-02")
 	case "custom":
 		if start == "" || end == "" {
-			return nil, fail(422, "自定义周期须提供起止日期")
+			return nil, invalid("自定义周期须提供起止日期")
 		}
 	default:
-		return nil, fail(422, "不支持的统计周期")
+		return nil, invalid("不支持的统计周期")
 	}
 	a, e := time.Parse("2006-01-02", start)
 	if e != nil {
-		return nil, fail(422, "开始日期无效")
+		return nil, invalid("开始日期无效")
 	}
 	z, e := time.Parse("2006-01-02", end)
 	if e != nil || a.After(z) {
-		return nil, fail(422, "统计日期无效")
+		return nil, invalid("统计日期无效")
 	}
 	source := str(b["source_type"])
 	if source == "" {
 		source = "sellersprite"
 	}
 	if !regexp.MustCompile(`^[A-Za-z0-9_-]{1,50}$`).MatchString(source) {
-		return nil, fail(422, "来源标识无效")
+		return nil, invalid("来源标识无效")
 	}
 	scope := str(b["default_sales_scope"])
 	if scope == "" {
 		scope = "unknown"
 	}
 	if scope != "child" && scope != "parent" && scope != "unknown" {
-		return nil, fail(422, "销量口径无效")
+		return nil, invalid("销量口径无效")
 	}
 	return Object{"period_type": kind, "period_start": start, "period_end": end, "stat_month": z.Format("2006-01") + "-01", "observed_on": nullableString(observed), "source_type": source, "source_period": sourcePeriod, "default_sales_scope": scope}, nil
 }
@@ -490,25 +490,25 @@ func (s *service) upload(w http.ResponseWriter, r *http.Request) (any, error) {
 	a := actor(r)
 	r.Body = http.MaxBytesReader(w, r.Body, maxUpload+64*1024)
 	if e := r.ParseMultipartForm(1024 * 1024); e != nil {
-		return nil, fail(413, "文件请求无效或超过30MB")
+		return nil, payloadTooLarge("文件请求无效或超过30MB")
 	}
 	defer r.MultipartForm.RemoveAll()
 	f, header, e := r.FormFile("file")
 	if e != nil {
-		return nil, fail(422, "请选择文件")
+		return nil, invalid("请选择文件")
 	}
 	defer f.Close()
 	name := filepath.Base(header.Filename)
 	ext := strings.ToLower(filepath.Ext(name))
 	if ext != ".zip" && ext != ".xlsx" && ext != ".csv" {
-		return nil, fail(422, "只支持XLSX、CSV和ZIP")
+		return nil, invalid("只支持XLSX、CSV和ZIP")
 	}
 	data, e := io.ReadAll(io.LimitReader(f, maxUpload+1))
 	if e != nil {
 		return nil, e
 	}
 	if len(data) > maxUpload {
-		return nil, fail(413, "文件超过30MB")
+		return nil, payloadTooLarge("文件超过30MB")
 	}
 	b := Object{}
 	for _, key := range []string{"source_period", "observed_on", "period_type", "period_start", "period_end", "source_type", "default_sales_scope"} {

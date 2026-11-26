@@ -30,13 +30,7 @@ type service struct {
 	db  *pgxpool.Pool
 	cfg Config
 }
-type apiError struct {
-	status  int
-	message string
-}
 
-func (e apiError) Error() string            { return e.message }
-func fail(status int, message string) error { return apiError{status, message} }
 func uuid() string {
 	var b [16]byte
 	if _, e := rand.Read(b[:]); e != nil {
@@ -61,11 +55,11 @@ func respond(w http.ResponseWriter, v any, e error) {
 	if e != nil {
 		status := 500
 		message := "初筛服务处理失败"
-		var a apiError
+		var d domainError
 		var pg *pgconn.PgError
-		if errors.As(e, &a) {
-			status = a.status
-			message = a.message
+		if errors.As(e, &d) {
+			status = httpStatusForKind(d.kind)
+			message = d.message
 		} else if errors.As(e, &pg) && (pg.Code == "23505" || pg.Code == "23514" || pg.Code == "23503") {
 			status = 409
 			message = str(workError(e)["message"])
@@ -87,27 +81,27 @@ func verifyIdentity(r *http.Request, secret string, now time.Time) (identity, er
 	var e error
 	a.User, e = strconv.ParseInt(r.Header.Get("x-seller-user"), 10, 64)
 	if e != nil || a.User <= 0 {
-		return a, fail(401, "身份签名无效")
+		return a, unauthenticated("身份签名无效")
 	}
 	a.Tenant, e = strconv.ParseInt(r.Header.Get("x-seller-workspace"), 10, 64)
 	if e != nil || a.Tenant <= 0 {
-		return a, fail(401, "身份签名无效")
+		return a, unauthenticated("身份签名无效")
 	}
 	a.Role = r.Header.Get("x-seller-role")
 	if a.Role != "owner" && a.Role != "member" {
-		return a, fail(403, "工作区角色无效")
+		return a, forbidden("工作区角色无效")
 	}
 	stamp := r.Header.Get("x-screening-time")
 	ts, e := strconv.ParseInt(stamp, 10, 64)
 	if e != nil || ts < now.Unix()-60 || ts > now.Unix()+60 {
-		return a, fail(401, "身份签名已过期")
+		return a, unauthenticated("身份签名已过期")
 	}
 	message := strings.Join([]string{stamp, r.Method, r.URL.RequestURI(), r.Header.Get("x-seller-user"), r.Header.Get("x-seller-workspace"), a.Role}, "\n")
 	mac := hmac.New(sha256.New, []byte(secret))
 	mac.Write([]byte(message))
 	signature, e := hex.DecodeString(r.Header.Get("x-screening-signature"))
 	if len(secret) < 32 || e != nil || !hmac.Equal(mac.Sum(nil), signature) {
-		return a, fail(401, "身份签名无效")
+		return a, unauthenticated("身份签名无效")
 	}
 	return a, nil
 }
@@ -139,7 +133,7 @@ func (s *service) handler() http.Handler {
 		defer func() {
 			if v := recover(); v != nil {
 				log.Printf("screening panic: %T", v)
-				respond(w, nil, fail(500, "服务处理失败"))
+				respond(w, nil, internalFailure("服务处理失败"))
 			}
 		}()
 		v, e := s.route(w, r)

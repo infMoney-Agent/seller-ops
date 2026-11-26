@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"net/http/httptest"
 	"net/url"
 	"os"
 	"strings"
@@ -58,8 +57,7 @@ func TestGroupedFamilyReview(t *testing.T) {
 	b2 := add(a.Tenant, "PARENT0002", "pending", false)
 	other := add(9912, "PARENT0001", "pending", false)
 	archived := add(a.Tenant, "PARENT0001", "pending", true)
-	req := httptest.NewRequest("GET", "http://screening/api/v1/screening/review-workspace", nil).WithContext(context.WithValue(ctx, identityKey{}, a))
-	catalog, err := svc.products(req)
+	catalog, err := svc.productsUsecase(ctx, a, nil, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -80,7 +78,7 @@ func TestGroupedFamilyReview(t *testing.T) {
 	if len(gotMembers) != len(wantMembers) {
 		t.Fatal("collapsed family selection omitted children", gotMembers)
 	}
-	workspace, err := svc.reviewWorkspace(req)
+	workspace, err := svc.reviewWorkspaceUsecase(ctx, a, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -98,7 +96,7 @@ func TestGroupedFamilyReview(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	categoryResult, err := svc.reviewCategories(req)
+	categoryResult, err := svc.reviewCategoriesUsecase(ctx, a, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -121,7 +119,7 @@ func TestGroupedFamilyReview(t *testing.T) {
 	if members != 5 {
 		t.Fatal("wrong visible family member count", members)
 	}
-	preview := func(ids []any, mode, ref string) (Object, error) {
+	preview := func(ids []any, mode, ref string) (*ReviewBatchPayload, error) {
 		body := Object{"product_ids": ids, "scope": "selected_families", "mode": mode, "status": "excluded", "reason": "same parent"}
 		if ref != "" {
 			body["reference_product_id"] = ref
@@ -129,21 +127,17 @@ func TestGroupedFamilyReview(t *testing.T) {
 		actor := a
 		actor.RequestKey = uuid()
 		actor.RequestHash = shaDigest(encoded(body))
-		v, e := svc.previewBatch(ctx, actor, body)
-		if e != nil {
-			return nil, e
-		}
-		return v.(Object), nil
+		return svc.previewBatch(ctx, actor, parsePreviewBatchCommand(body))
 	}
 	p, err := preview([]any{a1, b1}, "direct", "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(p["targets"].([]Object)) != 4 {
+	if len(p.Targets) != 4 {
 		t.Fatal("did not expand both selected families", p)
 	}
-	result, err := svc.applyBatch(ctx, a, str(p["id"]), false)
-	if err != nil || integer(result.(Object)["success"]) != 4 {
+	result, err := svc.applyBatch(ctx, a, p.ID, false)
+	if err != nil || result.Success != 4 {
 		t.Fatal(result, err)
 	}
 	for _, id := range []string{a1, a2, b1, b2} {
@@ -165,7 +159,7 @@ func TestGroupedFamilyReview(t *testing.T) {
 			t.Fatal("review/tenant/archive was overwritten", id, status)
 		}
 	}
-	afterWorkspace, e := svc.reviewWorkspace(req)
+	afterWorkspace, e := svc.reviewWorkspaceUsecase(ctx, a, nil)
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -186,27 +180,26 @@ func TestGroupedFamilyReview(t *testing.T) {
 	if integer(remaining["samples"].(Object)["total"]) != 5 {
 		t.Fatal("excluded reference samples were hidden")
 	}
-	expandedRequest := httptest.NewRequest("GET", "http://screening/api/v1/screening/review-workspace?family_product_id="+a1, nil).WithContext(context.WithValue(ctx, identityKey{}, a))
-	expandedResult, e := svc.reviewWorkspace(expandedRequest)
+	expandedResult, e := svc.reviewWorkspaceUsecase(ctx, a, url.Values{"family_product_id": {a1}})
 	if e != nil || integer(expandedResult.(Object)["counts"].(Object)["products"]) != 1 {
 		t.Fatal("expanded child pagination includes exclusions", expandedResult, e)
 	}
 
-	result, err = svc.applyBatch(ctx, a, str(p["id"]), true)
-	if err != nil || integer(result.(Object)["success"]) != 4 {
+	result, err = svc.applyBatch(ctx, a, p.ID, true)
+	if err != nil || result.Success != 4 {
 		t.Fatal("conditional undo failed", result, err)
 	}
 	if _, err = pool.Exec(ctx, "UPDATE ps_products SET review_status='excluded',review_reason='reference' WHERE id=$1", a1); err != nil {
 		t.Fatal(err)
 	}
 	p, err = preview([]any{b1}, "reference", a1)
-	if err != nil || len(p["targets"].([]Object)) != 2 {
+	if err != nil || len(p.Targets) != 2 {
 		t.Fatal("reference result must resolve before family expansion", p, err)
 	}
 	if _, err = pool.Exec(ctx, "UPDATE ps_products SET parent_asin='PARENT0003',data_revision=data_revision+1 WHERE id=$1", b1); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = svc.applyBatch(ctx, a, str(p["id"]), false); err == nil {
+	if _, err = svc.applyBatch(ctx, a, p.ID, false); err == nil {
 		t.Fatal("changed anchor must invalidate the preview")
 	}
 	if _, err = preview([]any{a2}, "reference", kept); err == nil {

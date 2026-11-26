@@ -4,22 +4,18 @@ import (
 	"context"
 	"fmt"
 	"math/big"
-	"net/http"
 	"net/url"
 	"sort"
 	"strings"
 )
 
 // Parent folding only changes browsing. Each child retains its own cost snapshot.
-func (s *service) profitProducts(r *http.Request) (any, error) {
-	return s.profitProductsUsecase(r.Context(), actor(r), r.URL.Query())
-}
 func (s *service) profitProductsUsecase(ctx context.Context, a identity, params url.Values) (any, error) {
-	values := params
+	values := cloneQuery(params)
 	sortBy := values.Get("sort")
 	grouped := values.Get("group_by_parent") == "true"
 	if v := values.Get("group_by_parent"); v != "" && v != "true" && v != "false" {
-		return nil, fail(422, "父体分组参数无效")
+		return nil, invalid("父体分组参数无效")
 	}
 	family := values.Get("family_product_id")
 	values.Del("group_by_parent")
@@ -27,7 +23,7 @@ func (s *service) profitProductsUsecase(ctx context.Context, a identity, params 
 	completion := values.Get("completion")
 	values.Del("completion")
 	if completion != "" && completion != "complete" && completion != "incomplete" {
-		return nil, fail(422, "不支持的填写状态")
+		return nil, invalid("不支持的填写状态")
 	}
 	focus := values.Get("product_id")
 	selected := values.Get("selected_ids")
@@ -45,7 +41,7 @@ func (s *service) profitProductsUsecase(ctx context.Context, a identity, params 
 	q := newProductQuery(a, values)
 	if focus != "" {
 		if !uuidPattern.MatchString(focus) {
-			return nil, fail(422, "商品ID无效")
+			return nil, invalid("商品ID无效")
 		}
 		q.args = append(q.args, focus)
 		q.where += fmt.Sprintf(" AND p.id=$%d::uuid", len(q.args))
@@ -53,11 +49,11 @@ func (s *service) profitProductsUsecase(ctx context.Context, a identity, params 
 	if selected != "" {
 		ids := strings.Split(selected, ",")
 		if len(ids) > 100 {
-			return nil, fail(422, "最多选择100个商品")
+			return nil, invalid("最多选择100个商品")
 		}
 		for _, id := range ids {
 			if !uuidPattern.MatchString(id) {
-				return nil, fail(422, "商品ID无效")
+				return nil, invalid("商品ID无效")
 			}
 		}
 		q.args = append(q.args, ids)
@@ -65,7 +61,7 @@ func (s *service) profitProductsUsecase(ctx context.Context, a identity, params 
 	}
 	if family != "" {
 		if !uuidPattern.MatchString(family) {
-			return nil, fail(422, "父体商品ID无效")
+			return nil, invalid("父体商品ID无效")
 		}
 		q.args = append(q.args, family)
 		q.where += fmt.Sprintf(" AND EXISTS(SELECT 1 FROM ps_products anchor WHERE anchor.tenant_id=p.tenant_id AND anchor.id=$%d::uuid AND anchor.archived_at IS NULL AND anchor.marketplace=p.marketplace AND (anchor.id=p.id OR (NULLIF(anchor.parent_asin,'') IS NOT NULL AND anchor.parent_asin=p.parent_asin)))", len(q.args))
@@ -96,7 +92,7 @@ func (s *service) profitProductsUsecase(ctx context.Context, a identity, params 
 	fields := map[string]string{"updated_at": "p.updated_at", "asin": "p.asin", "price_usd": "coalesce((q.inputs->>'sale_price_usd')::numeric,m.price_usd)", "monthly_sales": displayChildSalesSQL, "fba_fee_usd": "coalesce((q.inputs->>'fba_fee_usd')::numeric,fees.imported_fba_fee_usd)", "storage_usd": "(q.inputs->>'storage_usd')::numeric", "freight_cny": "(q.inputs->>'freight_cny')::numeric", "freight_rate_cny_per_kg": "(q.inputs->>'freight_rate_cny_per_kg')::numeric", "purchase_cny": "(q.inputs->>'purchase_cny')::numeric", "commission_rate": "(q.inputs->>'commission_rate')::numeric", "profit_cny": "CASE WHEN q.output->>'state'='complete' THEN coalesce((q.output->>'profit_cny')::numeric,(q.output->>'profit_usd')::numeric*(q.inputs->>'fx_cny_per_usd')::numeric) END", "margin": "(q.output->>'margin')::numeric", "volumetric_weight_kg": "(q.output->>'volumetric_weight_kg')::numeric", "billable_weight_kg": "(q.output->>'billable_weight_kg')::numeric", "commission_usd": "(q.output->>'commission_usd')::numeric"}
 	column := fields[sortBy]
 	if column == "" {
-		return nil, fail(422, "不支持的利润排序字段")
+		return nil, invalid("不支持的利润排序字段")
 	}
 	pageNo, size := queryPage(params)
 	computedSort := sortBy != "updated_at" && sortBy != "asin" && sortBy != "price_usd" && sortBy != "monthly_sales"

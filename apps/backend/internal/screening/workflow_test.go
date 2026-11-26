@@ -460,11 +460,11 @@ func TestImportHTTPWorkflow(t *testing.T) {
 	if e != nil || len(rows) != 3 {
 		t.Fatal(rows, e)
 	}
-	policy, e := s.createConfig(ctx, a, "policies", Object{"name": "新规则", "config": Object{"exclusion_patterns": Object{"电器或电池": "electric"}}})
+	policy, e := s.createConfig(ctx, a, parseCreateConfigCommand(ConfigScreening, Object{"name": "新规则", "config": Object{"exclusion_patterns": Object{"电器或电池": "electric"}}}))
 	if e != nil {
 		t.Fatal(e)
 	}
-	activation := call("POST", "policies/"+str(policy.(Object)["id"])+"/activate", "application/json", nil)
+	activation := call("POST", "policies/"+policy.ID+"/activate", "application/json", nil)
 	wait(str(activation["job_id"]))
 	summary := call("GET", "summary?stat_month=2026-10-01", "", nil)
 	if integer(summary["products"]) != 2 {

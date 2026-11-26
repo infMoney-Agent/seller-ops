@@ -35,7 +35,6 @@ func TestBrowserFixture(t *testing.T) {
 	s := &service{pool, cfg}
 	mux := http.NewServeMux()
 	session := Object{"id": 1, "name": "Go 初筛测试", "email": "go-screening@example.test", "workspaceId": 1800000001, "role": "owner", "workspaces": []Object{{"id": 1800000001, "name": "隔离测试工作区", "role": "owner"}}}
-	mux.HandleFunc("GET /api/auth/session", func(w http.ResponseWriter, r *http.Request) { respond(w, session, nil) })
 	path, authHandler := authv1connect.NewAuthServiceHandler(browserAuthRPC{session: session})
 	mux.Handle(path, authHandler)
 	mux.Handle("/", s.handler())

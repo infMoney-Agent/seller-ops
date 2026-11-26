@@ -87,26 +87,27 @@ func TestPostgresWorkflow(t *testing.T) {
 		t.Fatal(e)
 	}
 	review := Object{"expected_data_revision": before["data_revision"], "expected_review_revision": before["review_revision"], "status": "excluded", "reason": "人工排除", "note": "保留历史"}
+	reviewCmd := parseReviewCommand(review)
 	keyed := a
 	keyed.RequestKey = "review-request-1"
 	keyed.RequestHash = shaDigest(encoded(review))
-	if _, e = s.mutateProduct(ctx, keyed, id, "review", review); e != nil {
+	if _, e = s.reviewProduct(ctx, keyed, id, reviewCmd); e != nil {
 		t.Fatal(e)
 	}
-	if _, e = s.mutateProduct(ctx, keyed, id, "review", review); e != nil {
+	if _, e = s.reviewProduct(ctx, keyed, id, reviewCmd); e != nil {
 		t.Fatalf("idempotent replay: %v", e)
 	}
 	keyed.RequestHash = shaDigest([]byte("different request"))
-	if _, e = s.mutateProduct(ctx, keyed, id, "review", review); e == nil {
+	if _, e = s.reviewProduct(ctx, keyed, id, reviewCmd); e == nil {
 		t.Fatal("conflicting receipt succeeded")
 	}
-	if _, e = s.mutateProduct(ctx, a, id, "review", review); e == nil {
+	if _, e = s.reviewProduct(ctx, a, id, reviewCmd); e == nil {
 		t.Fatal("stale review succeeded")
 	}
-	if _, e = s.mutateProduct(ctx, a, id, "parameters", Object{"expected_data_revision": 0, "parent_asin": "PARENT0001", "package_weight_g": "100.123456", "units_per_pack": 2}); e != nil {
+	if _, e = s.updateProductParameters(ctx, a, id, parseParametersCommand(Object{"expected_data_revision": 0, "parent_asin": "PARENT0001", "package_weight_g": "100.123456", "units_per_pack": 2})); e != nil {
 		t.Fatal(e)
 	}
-	if _, e = s.saveProfit(ctx, a, id, Object{"expected_data_revision": 1, "inputs": baseInputs()}); e != nil {
+	if _, e = s.saveProfit(ctx, a, id, parseSaveProfitCommand(Object{"expected_data_revision": 1, "inputs": baseInputs()})); e != nil {
 		t.Fatal(e)
 	}
 	var snapshot []byte
@@ -116,14 +117,14 @@ func TestPostgresWorkflow(t *testing.T) {
 	if str(decodeObject(snapshot)["parent_asin"]) != "PARENT0001" {
 		t.Fatal("missing parameter snapshot")
 	}
-	if _, e = s.createConfig(ctx, identity{Tenant: a.Tenant, User: 2, Role: "member"}, "profit/templates", Object{"name": "禁止", "params": baseInputs()}); e == nil {
+	if _, e = s.createConfig(ctx, identity{Tenant: a.Tenant, User: 2, Role: "member"}, parseCreateConfigCommand(ConfigProfitTemplate, Object{"name": "禁止", "params": baseInputs()})); e == nil {
 		t.Fatal("member wrote public template")
 	}
-	policy, e := s.createConfig(ctx, a, "policies", Object{"name": "基础规则", "config": Object{"exclusion_patterns": Object{"电器或电池": `\belectric\b|battery`}}})
+	policy, e := s.createConfig(ctx, a, parseCreateConfigCommand(ConfigScreening, Object{"name": "基础规则", "config": Object{"exclusion_patterns": Object{"电器或电池": `\belectric\b|battery`}}}))
 	if e != nil {
 		t.Fatal(e)
 	}
-	pid := policy.(Object)["id"]
+	pid := policy.ID
 	if _, e = pool.Exec(ctx, "UPDATE ps_configs SET active=true WHERE tenant_id=$1 AND id=$2", a.Tenant, pid); e != nil {
 		t.Fatal(e)
 	}

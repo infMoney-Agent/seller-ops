@@ -162,18 +162,18 @@ func TestImportMutationGuards(t *testing.T) {
 		name, id string
 		meta     *screeningv1.ImportMutationMetadata
 		body     Object
-		status   int
+		kind     errorKind
 	}{
-		{"missing-key", id, nil, Object{}, 422},
-		{"wrong-id", "bad", &screeningv1.ImportMutationMetadata{IdempotencyKey: "key"}, Object{}, 422},
-		{"bad-query", id, &screeningv1.ImportMutationMetadata{IdempotencyKey: "key", OriginalQuery: "?a=1\n"}, Object{}, 422},
-		{"negative-revision", id, &screeningv1.ImportMutationMetadata{IdempotencyKey: "key"}, Object{"expected_review_revision": json.Number("-1")}, 422},
-		{"oversize", id, &screeningv1.ImportMutationMetadata{IdempotencyKey: "key"}, Object{"text": strings.Repeat("x", 256*1024)}, 413},
+		{"missing-key", id, nil, Object{}, errValidation},
+		{"wrong-id", "bad", &screeningv1.ImportMutationMetadata{IdempotencyKey: "key"}, Object{}, errValidation},
+		{"bad-query", id, &screeningv1.ImportMutationMetadata{IdempotencyKey: "key", OriginalQuery: "?a=1\n"}, Object{}, errValidation},
+		{"negative-revision", id, &screeningv1.ImportMutationMetadata{IdempotencyKey: "key"}, Object{"expected_review_revision": json.Number("-1")}, errValidation},
+		{"oversize", id, &screeningv1.ImportMutationMetadata{IdempotencyKey: "key"}, Object{"text": strings.Repeat("x", 256*1024)}, errPayloadTooLarge},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := prepareImportMutation(ctx, tc.id, "POST", "imports/"+id+"/commit", tc.meta, tc.body)
-			h, ok := err.(apiError)
-			if !ok || h.status != tc.status {
+			h, ok := err.(domainError)
+			if !ok || h.kind != tc.kind {
 				t.Fatal(err)
 			}
 		})

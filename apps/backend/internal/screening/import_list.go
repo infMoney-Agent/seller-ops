@@ -107,7 +107,7 @@ func importStructMap(value Object) (map[string]any, error) {
 
 func validImportResourceID(id string) error {
 	if !uuidPattern.MatchString(id) {
-		return fail(422, "资源ID无效")
+		return invalid("资源ID无效")
 	}
 	return nil
 }

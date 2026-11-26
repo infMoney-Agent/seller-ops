@@ -16,59 +16,44 @@ func txProduct(ctx context.Context, tx pgx.Tx, a identity, id string, lock bool)
 	e := tx.QueryRow(ctx, "SELECT to_jsonb(p) FROM ps_products p WHERE tenant_id=$1 AND id=$2::uuid"+suffix, a.Tenant, id).Scan(&raw)
 	return decodeObject(raw), e
 }
-func (s *service) previewBatch(ctx context.Context, a identity, b Object) (any, error) {
+
+func (s *service) previewBatch(ctx context.Context, a identity, cmd PreviewBatchCommand) (*ReviewBatchPayload, error) {
 	tx, e := s.db.Begin(ctx)
 	if e != nil {
 		return nil, e
 	}
 	defer tx.Rollback(ctx)
-	if previous, e := receipt(ctx, tx, a); e != nil || previous != nil {
+	if previous, e := typedReceipt[ReviewBatchPayload](ctx, tx, a); e != nil || previous != nil {
 		return previous, e
 	}
-	rawIDs, ok := b["product_ids"].([]any)
-	if !ok || len(rawIDs) < 1 || len(rawIDs) > 100 {
-		return nil, fail(422, "每批须选择1到100个商品")
+	ids, e := cmd.validateInitial()
+	if e != nil {
+		return nil, e
 	}
-	ids := []string{}
-	seen := map[string]bool{}
-	for _, raw := range rawIDs {
-		id := str(raw)
-		if seen[id] {
-			return nil, fail(422, "不能重复选择商品")
-		}
-		seen[id] = true
-		ids = append(ids, id)
+	payload := &ReviewBatchPayload{
+		Scope:     cmd.Scope,
+		Action:    cmd.Action,
+		Overwrite: cmd.Overwrite,
+		Status:    string(cmd.Status),
+		Reason:    cmd.Reason,
+		Note:      cmd.Note,
+		Category:  cmd.Category,
 	}
-	scope := str(b["scope"])
-	if scope == "" {
-		scope = "selected"
-	}
-	action := str(b["action"])
-	if action == "" {
-		action = "review"
-	}
-	if (scope != "selected" && scope != "family" && scope != "selected_families") || (action != "review" && action != "categorize") {
-		return nil, fail(422, "作用范围或动作无效")
-	}
-	overwrite := false
-	if raw, present := b["overwrite"]; present {
-		value, ok := raw.(bool)
-		if !ok {
-			return nil, fail(422, "覆盖选项无效")
-		}
-		overwrite = value
-	}
-	payload := Object{"scope": scope, "action": action, "overwrite": overwrite, "status": str(b["status"]), "reason": str(b["reason"]), "note": str(b["note"]), "category": b["category"]}
-	if scope == "family" {
+	if cmd.Scope == BatchScopeFamily {
 		anchor, e := txProduct(ctx, tx, a, ids[0], false)
 		if e != nil {
 			return nil, e
 		}
 		parent := str(anchor["parent_asin"])
 		if parent == "" {
-			return nil, fail(422, "商品没有已确认父体关系")
+			return nil, invalid("商品没有已确认父体关系")
 		}
-		payload["anchor"] = Object{"id": anchor["id"], "parent_asin": parent, "data_revision": anchor["data_revision"]}
+		parentCopy := parent
+		payload.Anchor = &BatchAnchorSnapshot{
+			ID:           str(anchor["id"]),
+			ParentASIN:   &parentCopy,
+			DataRevision: integer(anchor["data_revision"]),
+		}
 		rows, e := tx.Query(ctx, "SELECT id::text FROM ps_products WHERE tenant_id=$1 AND marketplace=$2 AND parent_asin=$3 AND archived_at IS NULL ORDER BY id LIMIT 101", a.Tenant, anchor["marketplace"], parent)
 		if e != nil {
 			return nil, e
@@ -89,69 +74,87 @@ func (s *service) previewBatch(ctx context.Context, a identity, b Object) (any, 
 			return nil, e
 		}
 		if len(ids) > 100 {
-			return nil, fail(422, "同父体超过100个子体，请明确勾选分批复核")
+			return nil, invalid("同父体超过100个子体，请明确勾选分批复核")
 		}
 	}
-	if str(b["mode"]) == "reference" {
-		reference, e := txProduct(ctx, tx, a, str(b["reference_product_id"]), false)
+	if cmd.Mode == BatchModeReference {
+		reference, e := txProduct(ctx, tx, a, cmd.ReferenceProductID, false)
 		if e != nil {
 			return nil, e
 		}
-		if action == "review" && reference["review_status"] == "pending" {
-			return nil, fail(422, "参考样本尚未人工复核")
+		if cmd.Action == BatchActionReview && reference["review_status"] == "pending" {
+			return nil, invalid("参考样本尚未人工复核")
 		}
-		payload["reference"] = Object{"id": reference["id"], "data_revision": reference["data_revision"], "review_revision": reference["review_revision"]}
-		payload["status"] = reference["review_status"]
-		payload["reason"] = reference["review_reason"]
-		payload["note"] = reference["review_note"]
-		payload["category"] = reference["manual_category"]
-	} else if mode := str(b["mode"]); mode != "" && mode != "direct" {
-		return nil, fail(422, "未知复核方式")
+		payload.Reference = &BatchReferenceSnapshot{
+			ID:             str(reference["id"]),
+			DataRevision:   integer(reference["data_revision"]),
+			ReviewRevision: integer(reference["review_revision"]),
+		}
+		payload.Status = str(reference["review_status"])
+		payload.Reason = str(reference["review_reason"])
+		payload.Note = str(reference["review_note"])
+		payload.Category = optionalImportString(reference["manual_category"])
+	} else if cmd.Mode != BatchModeDirect {
+		return nil, invalid("未知复核方式")
 	}
-	if action == "review" {
-		status := str(payload["status"])
-		if status != "kept" && status != "excluded" && status != "unsure" {
-			return nil, fail(422, "请选择人工结论")
+	if cmd.Action == BatchActionReview {
+		decision := ReviewDecision(payload.Status)
+		if !decision.valid() {
+			return nil, invalid("请选择人工结论")
 		}
-		if status != "kept" && strings.TrimSpace(str(payload["reason"])) == "" {
-			return nil, fail(422, "请填写排除或待确认原因")
+		if decision != ReviewKept && strings.TrimSpace(payload.Reason) == "" {
+			return nil, invalid("请填写排除或待确认原因")
 		}
 	} else {
-		category := strings.TrimSpace(str(payload["category"]))
+		category := strings.TrimSpace(stringValue(payload.Category))
 		if category == "" || len([]rune(category)) > 200 {
-			return nil, fail(422, "请填写有效人工分类")
+			return nil, invalid("请填写有效人工分类")
 		}
-		payload["category"] = category
+		payload.Category = &category
 	}
-	if scope == "selected_families" {
-		if action != "review" || str(payload["status"]) != "excluded" {
-			return nil, fail(422, "同父体同步仅用于排除")
+	if cmd.Scope == BatchScopeSelectedFamilies {
+		if cmd.Action != BatchActionReview || ReviewDecision(payload.Status) != ReviewExcluded {
+			return nil, invalid("同父体同步仅用于排除")
 		}
-		var anchors []Object
-		ids, anchors, e = expandExcludedFamilies(ctx, tx, a, ids, overwrite)
+		var anchors []BatchAnchorSnapshot
+		ids, anchors, e = expandExcludedFamilies(ctx, tx, a, ids, cmd.Overwrite)
 		if e != nil {
 			return nil, e
 		}
-		payload["anchors"] = anchors
+		payload.Anchors = anchors
 	}
-	targets := []Object{}
+	targets := make([]BatchTargetSnapshot, 0, len(ids))
 	for _, id := range ids {
 		p, e := txProduct(ctx, tx, a, id, false)
 		if e != nil {
 			return nil, e
 		}
-		eligible := action == "categorize" || overwrite || p["review_status"] == "pending"
+		eligible := cmd.Action == BatchActionCategorize || cmd.Overwrite || p["review_status"] == "pending"
 		skip := ""
 		if !eligible {
 			skip = "已有人工结论，请勾选覆盖后重试"
 		}
-		targets = append(targets, Object{"id": id, "asin": p["asin"], "title": p["title"], "eligible": eligible, "skip_reason": skip, "data_revision": p["data_revision"], "review_revision": p["review_revision"], "review_status": p["review_status"], "parent_asin": p["parent_asin"], "status": payload["status"], "reason": payload["reason"], "note": payload["note"], "category": payload["category"]})
+		targets = append(targets, BatchTargetSnapshot{
+			ID:             id,
+			ASIN:           str(p["asin"]),
+			Title:          str(p["title"]),
+			Eligible:       eligible,
+			SkipReason:     skip,
+			DataRevision:   integer(p["data_revision"]),
+			ReviewRevision: integer(p["review_revision"]),
+			ReviewStatus:   str(p["review_status"]),
+			ParentASIN:     optionalImportString(p["parent_asin"]),
+			Status:         payload.Status,
+			Reason:         payload.Reason,
+			Note:           payload.Note,
+			Category:       payload.Category,
+		})
 	}
 	id := uuid()
 	expires := time.Now().UTC().Add(15 * time.Minute)
-	payload["id"] = id
-	payload["expires_at"] = expires.Format(time.RFC3339)
-	payload["targets"] = targets
+	payload.ID = id
+	payload.ExpiresAt = expires.Format(time.RFC3339)
+	payload.Targets = targets
 	_, e = tx.Exec(ctx, "INSERT INTO ps_jobs(tenant_id,id,kind,state,idempotency_key,payload,expires_at,created_by) VALUES($1,$2::uuid,'review','preview',$2::text,$3,$4,$5)", a.Tenant, id, encoded(payload), expires, a.User)
 	if e != nil {
 		return nil, e
@@ -164,10 +167,20 @@ func (s *service) previewBatch(ctx context.Context, a identity, b Object) (any, 
 	}
 	return payload, nil
 }
-func sameRevision(p Object, version Object) bool {
-	return integer(p["data_revision"]) == integer(version["data_revision"]) && integer(p["review_revision"]) == integer(version["review_revision"])
+
+func sameProductRevision(p Object, dataRevision, reviewRevision int64) bool {
+	return integer(p["data_revision"]) == dataRevision && integer(p["review_revision"]) == reviewRevision
 }
-func (s *service) applyBatch(ctx context.Context, a identity, id string, undo bool) (any, error) {
+
+func decodeBatchResult(raw any) (*BatchApplyResult, error) {
+	var out BatchApplyResult
+	if err := unmarshal(encoded(raw), &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+func (s *service) applyBatch(ctx context.Context, a identity, id string, undo bool) (*BatchApplyResult, error) {
 	tx, e := s.db.Begin(ctx)
 	if e != nil {
 		return nil, e
@@ -179,70 +192,68 @@ func (s *service) applyBatch(ctx context.Context, a identity, id string, undo bo
 	}
 	job := decodeObject(raw)
 	if integer(job["created_by"]) != a.User {
-		return nil, fail(403, "只能执行或撤销自己创建的批次")
+		return nil, forbidden("只能执行或撤销自己创建的批次")
 	}
 	state := str(job["state"])
 	if undo && state == "undone" {
-		return job["undo_result"], nil
+		return decodeBatchResult(job["undo_result"])
 	}
 	if !undo && state == "applied" {
-		return job["result"], nil
+		return decodeBatchResult(job["result"])
 	}
 	if (!undo && state != "preview") || (undo && state != "applied") {
-		return nil, fail(409, "当前批次状态不允许该操作")
+		return nil, conflict("当前批次状态不允许该操作")
 	}
-	payload := job["payload"].(map[string]any)
-	result := Object{"id": id, "success": 0, "skipped": 0}
-	items := []Object{}
+	var payload ReviewBatchPayload
+	if e = unmarshal(encoded(job["payload"]), &payload); e != nil {
+		return nil, e
+	}
+	items := []BatchApplyItem{}
 	if !undo {
 		expires, e := time.Parse(time.RFC3339Nano, str(job["expires_at"]))
 		if e != nil || time.Now().After(expires) {
-			return nil, fail(409, "操作已过期，请重新提交")
+			return nil, conflict("操作已过期，请重新提交")
 		}
-		if ref, ok := payload["reference"].(map[string]any); ok {
-			p, e := txProduct(ctx, tx, a, str(ref["id"]), true)
+		if payload.Reference != nil {
+			p, e := txProduct(ctx, tx, a, payload.Reference.ID, true)
 			if e != nil {
 				return nil, e
 			}
-			if !sameRevision(p, ref) {
-				return nil, fail(409, "参考样本已变化，请重新提交")
+			if !sameProductRevision(p, payload.Reference.DataRevision, payload.Reference.ReviewRevision) {
+				return nil, conflict("参考样本已变化，请重新提交")
 			}
 		}
-		if anchor, ok := payload["anchor"].(map[string]any); ok {
-			p, e := txProduct(ctx, tx, a, str(anchor["id"]), true)
+		if payload.Anchor != nil {
+			p, e := txProduct(ctx, tx, a, payload.Anchor.ID, true)
 			if e != nil {
 				return nil, e
 			}
-			if p["parent_asin"] != anchor["parent_asin"] || integer(p["data_revision"]) != integer(anchor["data_revision"]) {
-				return nil, fail(409, "父体关系或锚点已变化，请重新提交")
+			if !sameOptionalString(optionalImportString(p["parent_asin"]), payload.Anchor.ParentASIN) || integer(p["data_revision"]) != payload.Anchor.DataRevision {
+				return nil, conflict("父体关系或锚点已变化，请重新提交")
 			}
 		}
-		if anchors, ok := payload["anchors"].([]any); ok {
-			for _, entry := range anchors {
-				anchor := entry.(map[string]any)
-				p, err := txProduct(ctx, tx, a, str(anchor["id"]), true)
-				if err != nil {
-					return nil, err
-				}
-				if str(p["parent_asin"]) != str(anchor["parent_asin"]) || integer(p["data_revision"]) != integer(anchor["data_revision"]) {
-					return nil, fail(409, "父体关系已变化，请重新提交")
-				}
+		for _, anchor := range payload.Anchors {
+			p, err := txProduct(ctx, tx, a, anchor.ID, true)
+			if err != nil {
+				return nil, err
+			}
+			if str(p["parent_asin"]) != stringValue(anchor.ParentASIN) || integer(p["data_revision"]) != anchor.DataRevision {
+				return nil, conflict("父体关系已变化，请重新提交")
 			}
 		}
-		for _, entry := range payload["targets"].([]any) {
-			target := entry.(map[string]any)
-			item := Object{"id": target["id"], "success": false}
-			if target["eligible"] != true {
-				item["reason"] = target["skip_reason"]
+		for _, target := range payload.Targets {
+			item := BatchApplyItem{ID: target.ID, Success: false}
+			if !target.Eligible {
+				item.Reason = target.SkipReason
 				items = append(items, item)
 				continue
 			}
-			p, e := txProduct(ctx, tx, a, str(target["id"]), true)
+			p, e := txProduct(ctx, tx, a, target.ID, true)
 			if e != nil {
 				return nil, e
 			}
-			if !sameRevision(p, target) || ((str(payload["scope"]) == "family" || str(payload["scope"]) == "selected_families") && p["parent_asin"] != target["parent_asin"]) {
-				item["reason"] = "商品数据或人工结论已变化"
+			if !sameProductRevision(p, target.DataRevision, target.ReviewRevision) || ((payload.Scope == BatchScopeFamily || payload.Scope == BatchScopeSelectedFamilies) && !sameOptionalString(optionalImportString(p["parent_asin"]), target.ParentASIN)) {
+				item.Reason = "商品数据或人工结论已变化"
 				items = append(items, item)
 				continue
 			}
@@ -250,17 +261,17 @@ func (s *service) applyBatch(ctx context.Context, a identity, id string, undo bo
 			for k, v := range p {
 				after[k] = v
 			}
-			if payload["action"] == "categorize" {
-				after["manual_category"] = payload["category"]
+			if payload.Action == BatchActionCategorize {
+				after["manual_category"] = nullableString(stringValue(payload.Category))
 			} else {
-				after["review_status"] = payload["status"]
-				after["review_reason"] = payload["reason"]
-				after["review_note"] = payload["note"]
+				after["review_status"] = payload.Status
+				after["review_reason"] = payload.Reason
+				after["review_note"] = payload.Note
 			}
 			if e = writeReviewEvent(ctx, tx, a, p, after, id, ""); e != nil {
 				return nil, e
 			}
-			item["success"] = true
+			item.Success = true
 			items = append(items, item)
 		}
 	} else {
@@ -288,9 +299,9 @@ func (s *service) applyBatch(ctx context.Context, a identity, id string, undo bo
 			if e != nil {
 				return nil, e
 			}
-			item := Object{"id": p["id"], "success": false}
+			item := BatchApplyItem{ID: str(p["id"]), Success: false}
 			if integer(p["review_revision"]) != integer(event["after_revision"]) {
-				item["reason"] = "之后已被再次修改"
+				item.Reason = "之后已被再次修改"
 			} else {
 				before := event["before_value"].(map[string]any)
 				after := Object{}
@@ -303,20 +314,23 @@ func (s *service) applyBatch(ctx context.Context, a identity, id string, undo bo
 				if e = writeReviewEvent(ctx, tx, a, p, after, id, str(event["id"])); e != nil {
 					return nil, e
 				}
-				item["success"] = true
+				item.Success = true
 			}
 			items = append(items, item)
 		}
 	}
 	success := 0
 	for _, item := range items {
-		if item["success"] == true {
+		if item.Success {
 			success++
 		}
 	}
-	result["items"] = items
-	result["success"] = success
-	result["skipped"] = len(items) - success
+	result := &BatchApplyResult{
+		ID:      id,
+		Success: success,
+		Skipped: len(items) - success,
+		Items:   items,
+	}
 	column := "result"
 	next := "applied"
 	if undo {
@@ -332,6 +346,7 @@ func (s *service) applyBatch(ctx context.Context, a identity, id string, undo bo
 	}
 	return result, nil
 }
+
 func writeReviewEvent(ctx context.Context, tx pgx.Tx, a identity, before, after Object, batchID, undoOf string) error {
 	revision := integer(before["review_revision"]) + 1
 	after["review_revision"] = revision
