@@ -176,6 +176,19 @@ export default function ScreeningPage() {
     });
   }
   const [familyRows, setFamilyRows] = useState<Record<string, boolean>>({});
+  const [expandAllMode, setExpandAllMode] = useState(false);
+  const isFamilyExpanded = useCallback(
+    (id: string) => (id in familyRows ? Boolean(familyRows[id]) : expandAllMode),
+    [expandAllMode, familyRows]
+  );
+  const toggleFamilyRow = useCallback(
+    (id: string) =>
+      setFamilyRows((old) => ({
+        ...old,
+        [id]: !(id in old ? Boolean(old[id]) : expandAllMode)
+      })),
+    [expandAllMode]
+  );
   const [focus, setFocus] = useState<Product | null>(null);
   const [reviewOpen, setReviewOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -324,29 +337,25 @@ export default function ScreeningPage() {
   const hiddenSelectedVariantCount = useMemo(() => {
     let total = 0;
     for (const product of products.data?.items ?? []) {
-      if (familyRows[product.id]) continue;
+      if (isFamilyExpanded(product.id)) continue;
       for (const memberId of product.family_member_ids ?? []) {
         if (memberId !== product.id && selected[memberId]) total += 1;
       }
     }
     return total;
-  }, [familyRows, products.data?.items, selected]);
+  }, [isFamilyExpanded, products.data?.items, selected]);
   const expandablePageIds = useMemo(
     () => (products.data?.items ?? []).filter((p) => (p.family_count || 1) > 1).map((p) => p.id),
     [products.data?.items]
   );
   const allFamiliesExpanded =
-    expandablePageIds.length > 0 && expandablePageIds.every((id) => Boolean(familyRows[id]));
+    expandablePageIds.length > 0
+      ? expandablePageIds.every((id) => isFamilyExpanded(id))
+      : expandAllMode;
   const toggleExpandAllFamilies = useCallback(() => {
-    setFamilyRows((old) => {
-      const next = { ...old };
-      for (const id of expandablePageIds) {
-        if (allFamiliesExpanded) delete next[id];
-        else next[id] = true;
-      }
-      return next;
-    });
-  }, [allFamiliesExpanded, expandablePageIds]);
+    setExpandAllMode(!allFamiliesExpanded);
+    setFamilyRows({});
+  }, [allFamiliesExpanded]);
   const allPageSelected =
     pageSelectionIds.length > 0 && pageSelectedCount === pageSelectionIds.length;
   const toggleAllPage = useCallback(() => {
@@ -389,6 +398,7 @@ export default function ScreeningPage() {
   useEffect(() => {
     setSelected({});
     setFamilyRows({});
+    setExpandAllMode(false);
     setFocus(null);
     setReviewOpen(false);
     setImportOpen(false);
@@ -415,7 +425,6 @@ export default function ScreeningPage() {
   function filter(key: string, value: string) {
     setFilters((old) => ({ ...old, [key]: value }));
     setPage(1);
-    setFamilyRows({});
   }
   const columns = useMemo<ColumnDef<Product>[]>(
     () => [
@@ -449,8 +458,8 @@ export default function ScreeningPage() {
         cell: ({ row }) => (
           <ProductIdentityCell
             product={row.original}
-            familyRows={familyRows}
-            setFamilyRows={setFamilyRows}
+            expanded={isFamilyExpanded(row.original.id)}
+            onToggleFamily={toggleFamilyRow}
             onOpenReview={openReview}
           />
         )
@@ -666,14 +675,15 @@ export default function ScreeningPage() {
     ],
     [
       allPageSelected,
-      familyRows,
+      isFamilyExpanded,
       openProfit,
       openReview,
       pageSelectedCount,
       pageSelectionIds,
       products.isPlaceholderData,
       today,
-      toggleAllPage
+      toggleAllPage,
+      toggleFamilyRow
     ]
   );
   const sizedColumns = useMemo(
@@ -1089,11 +1099,19 @@ export default function ScreeningPage() {
                 </div>
 
                 <div className='flex flex-wrap items-center gap-2'>
-                  {expandablePageIds.length > 0 && (
-                    <Button size='sm' variant='outline' onClick={toggleExpandAllFamilies}>
-                      {allFamiliesExpanded ? '全部收起子体' : '全部展开子体'}
-                    </Button>
-                  )}
+                  <Button
+                    size='sm'
+                    variant={allFamiliesExpanded ? 'secondary' : 'outline'}
+                    disabled={expandablePageIds.length === 0 && !expandAllMode}
+                    title={
+                      expandablePageIds.length === 0 && !expandAllMode
+                        ? '当前页暂无可展开的多子体商品'
+                        : undefined
+                    }
+                    onClick={toggleExpandAllFamilies}
+                  >
+                    {allFamiliesExpanded ? '全部收起子体' : '全部展开子体'}
+                  </Button>
                   <button
                     type='button'
                     onClick={() => {
@@ -1105,7 +1123,6 @@ export default function ScreeningPage() {
                         review_status: active ? '' : 'pending'
                       }));
                       setPage(1);
-                      setFamilyRows({});
                     }}
                     className={cn(
                       'inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-xs font-medium transition-all',
@@ -1277,14 +1294,15 @@ export default function ScreeningPage() {
                                 </td>
                               ))}
                             </tr>
-                            {familyRows[row.original.id] && (
-                              <FamilyChildren
-                                product={row.original}
-                                columns={columns}
-                                selected={selected}
-                                onSelectionChange={setSelected}
-                              />
-                            )}
+                            {isFamilyExpanded(row.original.id) &&
+                              (row.original.family_count || 1) > 1 && (
+                                <FamilyChildren
+                                  product={row.original}
+                                  columns={columns}
+                                  selected={selected}
+                                  onSelectionChange={setSelected}
+                                />
+                              )}
                           </Fragment>
                         ))}
                       </tbody>
@@ -1480,17 +1498,16 @@ export default function ScreeningPage() {
 
 function ProductIdentityCell({
   product,
-  familyRows,
-  setFamilyRows,
+  expanded,
+  onToggleFamily,
   onOpenReview
 }: {
   product: Product;
-  familyRows: Record<string, boolean>;
-  setFamilyRows: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
+  expanded: boolean;
+  onToggleFamily: (id: string) => void;
   onOpenReview: (product: Product) => void;
 }) {
   const childCtx = useContext(ChildRowContext);
-  const expanded = Boolean(familyRows[product.id]);
   const hasFamily = !childCtx.isChild && (product.family_count || 1) > 1;
   return (
     <div className='flex min-w-0 items-start gap-2.5'>
@@ -1544,7 +1561,7 @@ function ProductIdentityCell({
               aria-label={`${expanded ? '收起' : '展开'} ${product.parent_asin} 的子体`}
               aria-expanded={expanded}
               aria-controls={`family-${product.id}`}
-              onClick={() => setFamilyRows((old) => ({ ...old, [product.id]: !old[product.id] }))}
+              onClick={() => onToggleFamily(product.id)}
               className='bg-muted/70 hover:border-primary/40 hover:bg-muted inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors'
             >
               <span className='text-muted-foreground font-mono'>
