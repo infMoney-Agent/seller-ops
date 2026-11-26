@@ -61,16 +61,15 @@ const ChildRowContext = createContext<{ isChild: boolean; index: number }>({
   index: 0
 });
 
-function stickyColumnClass(columnId: string, isHeader: boolean, isSelected = false) {
-  const bodyBg = isSelected ? 'bg-muted' : 'bg-card group-hover/row:bg-muted';
+function stickyColumnClass(columnId: string, isHeader: boolean) {
   if (columnId === 'selection') {
-    return cn('md:sticky md:left-0', isHeader ? 'bg-muted md:z-40' : cn(bodyBg, 'md:z-10'));
+    return cn('md:sticky md:left-0', isHeader ? 'bg-muted md:z-40' : 'md:z-10');
   }
   if (columnId === 'asin') {
-    return cn('md:sticky md:left-10', isHeader ? 'bg-muted md:z-40' : cn(bodyBg, 'md:z-10'));
+    return cn('md:sticky md:left-10', isHeader ? 'bg-muted md:z-40' : 'md:z-10');
   }
   if (columnId === 'actions') {
-    return cn('md:sticky md:right-0', isHeader ? 'bg-muted md:z-40' : cn(bodyBg, 'md:z-10'));
+    return cn('md:sticky md:right-0', isHeader ? 'bg-muted md:z-40' : 'md:z-10');
   }
   return undefined;
 }
@@ -1257,12 +1256,7 @@ export default function ScreeningPage() {
                       <tbody inert={products.isPlaceholderData}>
                         {table.getRowModel().rows.map((row) => (
                           <Fragment key={row.id}>
-                            <tr
-                              className={cn(
-                                'group/row bg-card transition-colors hover:bg-muted',
-                                row.getIsSelected() && 'bg-muted'
-                              )}
-                            >
+                            <tr className='group/row'>
                               {row.getVisibleCells().map((cell) => (
                                 <td
                                   key={cell.id}
@@ -1273,7 +1267,10 @@ export default function ScreeningPage() {
                                   }
                                   className={cn(
                                     'break-words border-b px-2 py-2.5 align-middle [&>*]:min-w-0 [&>*]:max-w-full [&_p]:whitespace-normal',
-                                    stickyColumnClass(cell.column.id, false, row.getIsSelected())
+                                    row.getIsSelected()
+                                      ? 'bg-muted'
+                                      : 'bg-card group-hover/row:bg-muted',
+                                    stickyColumnClass(cell.column.id, false)
                                   )}
                                 >
                                   {flexRender(cell.column.columnDef.cell, cell.getContext())}
@@ -1654,13 +1651,7 @@ function FamilyChildren({
           key={row.id}
           value={{ isChild: true, index: (page - 1) * 50 + rowIndex + 1 }}
         >
-          <tr
-            data-family={product.id}
-            className={cn(
-              'group/row bg-card transition-colors hover:bg-muted',
-              row.getIsSelected() && 'bg-muted'
-            )}
-          >
+          <tr data-family={product.id} className='group/row'>
             {row.getVisibleCells().map((cell) => (
               <td
                 key={cell.id}
@@ -1669,7 +1660,8 @@ function FamilyChildren({
                 }
                 className={cn(
                   'break-words border-b px-2 py-2.5 align-middle [&>*]:min-w-0 [&>*]:max-w-full [&_p]:whitespace-normal',
-                  stickyColumnClass(cell.column.id, false, row.getIsSelected())
+                  row.getIsSelected() ? 'bg-muted' : 'bg-card group-hover/row:bg-muted',
+                  stickyColumnClass(cell.column.id, false)
                 )}
               >
                 {flexRender(cell.column.columnDef.cell, cell.getContext())}
