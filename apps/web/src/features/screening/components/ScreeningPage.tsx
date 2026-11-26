@@ -65,19 +65,19 @@ function stickyColumnClass(columnId: string, isHeader: boolean) {
   if (columnId === 'selection') {
     return cn(
       'md:sticky md:left-0',
-      isHeader ? 'bg-muted md:z-30' : 'bg-card group-hover/row:bg-muted/40 md:z-20'
+      isHeader ? 'bg-muted md:z-30' : 'bg-card group-hover/row:bg-muted md:z-20'
     );
   }
   if (columnId === 'asin') {
     return cn(
       'md:sticky md:left-10 md:shadow-[4px_0_10px_-4px_rgba(15,23,42,0.08)] dark:md:shadow-[4px_0_12px_-4px_rgba(0,0,0,0.4)]',
-      isHeader ? 'bg-muted md:z-30' : 'bg-card group-hover/row:bg-muted/40 md:z-20'
+      isHeader ? 'bg-muted md:z-30' : 'bg-card group-hover/row:bg-muted md:z-20'
     );
   }
   if (columnId === 'actions') {
     return cn(
       'md:sticky md:right-0 md:shadow-[-4px_0_10px_-4px_rgba(15,23,42,0.08)] dark:md:shadow-[-4px_0_12px_-4px_rgba(0,0,0,0.4)]',
-      isHeader ? 'bg-muted md:z-30' : 'bg-card group-hover/row:bg-muted/40 md:z-20'
+      isHeader ? 'bg-muted md:z-30' : 'bg-card group-hover/row:bg-muted md:z-20'
     );
   }
   return undefined;
