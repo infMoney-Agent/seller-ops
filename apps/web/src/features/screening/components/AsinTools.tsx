@@ -5,6 +5,24 @@ import { Button } from './shared';
 
 let lastCopyFeedback = '';
 
+function legacyCopy(text: string): boolean {
+  if (typeof document === 'undefined') return false;
+  const previousFocus = document.activeElement;
+  const field = Object.assign(document.createElement('textarea'), { value: text });
+  field.setAttribute('readonly', '');
+  field.style.cssText = 'position:fixed;inset-block-start:0;opacity:0;pointer-events:none';
+  document.body.append(field);
+  field.select();
+  try {
+    return document.execCommand('copy');
+  } catch {
+    return false;
+  } finally {
+    field.remove();
+    if (previousFocus instanceof HTMLElement) previousFocus.focus({ preventScroll: true });
+  }
+}
+
 export default function AsinTools({ asin }: { asin: string }) {
   const [status, setStatus] = useState<'idle' | 'copied' | 'error'>('idle');
   const [announcement, setAnnouncement] = useState('');
@@ -43,11 +61,15 @@ export default function AsinTools({ asin }: { asin: string }) {
         title={status === 'copied' ? '已复制 ASIN' : '复制 ASIN'}
         onClick={async () => {
           try {
-            await navigator.clipboard.writeText(asin);
-            report(true);
+            if (navigator.clipboard?.writeText) {
+              await navigator.clipboard.writeText(asin);
+              report(true);
+              return;
+            }
           } catch {
-            report(false);
+            // Fall through to synchronous execCommand fallback for non-HTTPS HTTP origins.
           }
+          report(legacyCopy(asin));
         }}
       >
         {status === 'copied' ? (
