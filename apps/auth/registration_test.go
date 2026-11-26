@@ -1,6 +1,7 @@
 package main
 
 import (
+	"connectrpc.com/connect"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -16,6 +18,8 @@ import (
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"golang.org/x/oauth2"
+	authv1 "seller-ops/contracts/sellerops/auth/v1"
+	"seller-ops/contracts/sellerops/auth/v1/authv1connect"
 	"seller-ops/server/internal/auth"
 )
 
@@ -108,8 +112,20 @@ func TestCompanyRegistration(t *testing.T) {
 	s := &server{db: db, auth: service, origins: []string{"https://seller.test"}, allowUnverifiedInvites: true}
 	mux := http.NewServeMux()
 	s.auth.Register(mux)
-	s.registerBusiness(mux)
-	mux.HandleFunc("GET /api/auth/session", s.session)
+	s.registerAuthRPC(mux)
+	rpcServer := httptest.NewServer(mux)
+	defer rpcServer.Close()
+	client := authv1connect.NewAuthServiceClient(rpcServer.Client(), rpcServer.URL, connect.WithProtoJSON())
+	attachCookies := func(h http.Header, cookies []*http.Cookie) {
+		var parts []string
+		for _, c := range cookies {
+			parts = append(parts, c.Name+"="+c.Value)
+		}
+		if len(parts) > 0 {
+			h.Set("Cookie", strings.Join(parts, "; "))
+		}
+		h.Set("Origin", "https://seller.test")
+	}
 	call := func(method, path, body string, cookies []*http.Cookie, headers map[string]string) *httptest.ResponseRecorder {
 		t.Helper()
 		req := httptest.NewRequest(method, "https://seller.test"+path, strings.NewReader(body))
@@ -145,18 +161,23 @@ func TestCompanyRegistration(t *testing.T) {
 		ID, WorkspaceID int64
 		Role            string
 	}
+	getSession := func(cookies []*http.Cookie) userSession {
+		t.Helper()
+		req := connect.NewRequest(&authv1.GetSessionRequest{})
+		attachCookies(req.Header(), cookies)
+		res, err := client.GetSession(ctx, req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return userSession{ID: res.Msg.Data.GetId(), WorkspaceID: res.Msg.Data.GetWorkspaceId(), Role: res.Msg.Data.GetRole()}
+	}
 	account := func(response *httptest.ResponseRecorder) ([]*http.Cookie, userSession) {
 		t.Helper()
 		if response.Code != 303 {
 			t.Fatal(response.Code, response.Body)
 		}
 		cookies := response.Result().Cookies()
-		result := call("GET", "/api/auth/session", "", cookies, nil)
-		var session userSession
-		if result.Code != 200 || json.Unmarshal(result.Body.Bytes(), &session) != nil {
-			t.Fatal(result.Code, result.Body)
-		}
-		return cookies, session
+		return cookies, getSession(cookies)
 	}
 	suffix := strings.ToLower(auth.NewToken()[:8])
 	suffix = strings.NewReplacer("-", "a", "_", "b").Replace(suffix)
@@ -183,50 +204,71 @@ func TestCompanyRegistration(t *testing.T) {
 	if pending.WorkspaceID != 0 || pending.Role != "" || pendingResponse.Header().Get("Location") != "/company-required" {
 		t.Fatal("Applicant received access before approval")
 	}
-	if got := call("GET", "/api/products", "", pendingCookies, nil); got.Code != 403 {
-		t.Fatal("Pending applicant can access company products")
+	listProductsReq := connect.NewRequest(&authv1.ListManagedProductsRequest{})
+	attachCookies(listProductsReq.Header(), pendingCookies)
+	if _, err := client.ListManagedProducts(ctx, listProductsReq); authErrHTTPStatus(err) != 403 {
+		t.Fatal("Pending applicant can access company products", err)
 	}
-	list := call("GET", "/api/auth/join-requests", "", ownerCookies, nil)
-	var requests []struct{ ID int64 }
-	_ = json.Unmarshal(list.Body.Bytes(), &requests)
-	if len(requests) != 1 {
-		t.Fatal("Owner did not receive request", list.Body)
+	if legacy := call("GET", "/api/auth/join-requests", "", ownerCookies, nil); legacy.Code != 404 {
+		t.Fatalf("legacy join-requests HTTP route still exposed: %d", legacy.Code)
 	}
-	requestID := requests[0].ID
-	path := fmt.Sprintf("/api/auth/join-requests/%d/approve", requestID)
-	if got := call("POST", path, "{}", otherCookies, nil); got.Code != 404 {
-		t.Fatal("Foreign owner approved request")
+	listJoinReq := connect.NewRequest(&authv1.ListJoinRequestsRequest{})
+	attachCookies(listJoinReq.Header(), ownerCookies)
+	listRes, err := client.ListJoinRequests(ctx, listJoinReq)
+	if err != nil || len(listRes.Msg.Data.Items) != 1 {
+		t.Fatal("Owner did not receive request", err)
 	}
-	if got := call("POST", path, "{}", pendingCookies, nil); got.Code != 403 {
-		t.Fatal("Applicant approved themselves")
+	requestID := strconv.FormatInt(listRes.Msg.Data.Items[0].GetId(), 10)
+	decide := func(id, action string, c []*http.Cookie) int {
+		req := connect.NewRequest(&authv1.DecideJoinRequestRequest{Id: &id, Action: &action})
+		attachCookies(req.Header(), c)
+		res, err := client.DecideJoinRequest(ctx, req)
+		if err != nil {
+			return authErrHTTPStatus(err)
+		}
+		return int(res.Msg.StatusCode)
+	}
+	if got := decide(requestID, "approve", otherCookies); got != 404 {
+		t.Fatal("Foreign owner approved request", got)
+	}
+	if got := decide(requestID, "approve", pendingCookies); got != 403 {
+		t.Fatal("Applicant approved themselves", got)
 	}
 	for i := 0; i < 2; i++ {
-		if got := call("POST", path, "{}", ownerCookies, nil); got.Code != 200 {
-			t.Fatal(got.Code, got.Body)
+		if got := decide(requestID, "approve", ownerCookies); got != 200 {
+			t.Fatal("approve failed", got)
 		}
 	}
-	approved := call("GET", "/api/auth/session", "", pendingCookies, nil)
-	var member userSession
-	_ = json.Unmarshal(approved.Body.Bytes(), &member)
+	member := getSession(pendingCookies)
 	if member.WorkspaceID != owner.WorkspaceID || member.Role != "member" {
-		t.Fatal("Approval did not grant only member access", approved.Body)
+		t.Fatal("Approval did not grant only member access", member)
 	}
 	rejectCookies, rejectCSRF := start("join")
 	rejectedResponse := submit(rejectCookies, rejectCSRF, "join", "reject"+suffix, "reject"+suffix+"@example.com", "", code)
 	rejectedCookies, _ := account(rejectedResponse)
-	list = call("GET", "/api/auth/join-requests", "", ownerCookies, nil)
-	_ = json.Unmarshal(list.Body.Bytes(), &requests)
-	rejectPath := fmt.Sprintf("/api/auth/join-requests/%d/reject", requests[0].ID)
-	if got := call("POST", rejectPath, "{}", ownerCookies, nil); got.Code != 200 {
-		t.Fatal(got.Code, got.Body)
+	listJoinReq = connect.NewRequest(&authv1.ListJoinRequestsRequest{})
+	attachCookies(listJoinReq.Header(), ownerCookies)
+	listRes, err = client.ListJoinRequests(ctx, listJoinReq)
+	if err != nil || len(listRes.Msg.Data.Items) == 0 {
+		t.Fatal("Owner did not receive reject request", err)
 	}
-	if got := call("GET", "/api/products", "", rejectedCookies, nil); got.Code != 403 {
-		t.Fatal("Rejected applicant gained access")
+	rejectID := strconv.FormatInt(listRes.Msg.Data.Items[0].GetId(), 10)
+	if got := decide(rejectID, "reject", ownerCookies); got != 200 {
+		t.Fatal("reject failed", got)
 	}
-	invitation := call("POST", "/api/invitations", `{"email":"invite`+suffix+`@example.com"}`, ownerCookies, map[string]string{"Content-Type": "application/json"})
-	var link struct{ URL string }
-	_ = json.Unmarshal(invitation.Body.Bytes(), &link)
-	inviteURL, _ := url.Parse(link.URL)
+	rejProductsReq := connect.NewRequest(&authv1.ListManagedProductsRequest{})
+	attachCookies(rejProductsReq.Header(), rejectedCookies)
+	if _, err := client.ListManagedProducts(ctx, rejProductsReq); authErrHTTPStatus(err) != 403 {
+		t.Fatal("Rejected applicant gained access", err)
+	}
+	inviteEmail := "invite" + suffix + "@example.com"
+	inviteReq := connect.NewRequest(&authv1.CreateInvitationRequest{Body: &authv1.InvitationInput{Email: &inviteEmail}})
+	attachCookies(inviteReq.Header(), ownerCookies)
+	inviteRes, err := client.CreateInvitation(ctx, inviteReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	inviteURL, _ := url.Parse(inviteRes.Msg.Data.GetUrl())
 	invited, invitedCSRF := start("create")
 	prepared := call("POST", "/api/auth/registration/prepare", `{"token":"`+inviteURL.Fragment+`"}`, invited, map[string]string{"Content-Type": "application/json", "X-Registration-CSRF": invitedCSRF})
 	if prepared.Code != 200 {
@@ -268,7 +310,7 @@ func TestCompanyRegistration(t *testing.T) {
 	if _, e = db.Exec(ctx, "INSERT INTO sessions(token_hash,user_id,tenant_id,expires_at) VALUES($1,$2,$3,now()+interval '1 hour')", auth.HashToken(staleToken), staleUser, owner.WorkspaceID); e != nil {
 		t.Fatal(e)
 	}
-	staleResponse := call("GET", "/api/auth/session", "", []*http.Cookie{{Name: auth.SessionCookie, Value: staleToken}}, nil)
+	staleResponse := call("POST", authv1connect.AuthServiceGetSessionProcedure, "{}", []*http.Cookie{{Name: auth.SessionCookie, Value: staleToken}}, map[string]string{"Content-Type": "application/json"})
 	if staleResponse.Code != 401 || len(staleResponse.Result().Cookies()) == 0 || staleResponse.Result().Cookies()[0].MaxAge >= 0 {
 		t.Fatal("Invalid company session must be expired and request fresh login", staleResponse.Code)
 	}

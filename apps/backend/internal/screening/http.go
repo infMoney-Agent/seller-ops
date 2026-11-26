@@ -12,7 +12,6 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"io"
 	"log"
 	"net/http"
 	"strconv"
@@ -56,35 +55,6 @@ func str(v any) string {
 }
 func integer(v any) int64  { n, _ := strconv.ParseInt(str(v), 10, 64); return n }
 func encoded(v any) []byte { b, _ := json.Marshal(v); return b }
-func readBody(w http.ResponseWriter, r *http.Request) (Object, error) {
-	r.Body = http.MaxBytesReader(w, r.Body, 256*1024)
-	defer r.Body.Close()
-	dec := json.NewDecoder(r.Body)
-	dec.UseNumber()
-	var b Object
-	if e := dec.Decode(&b); e != nil {
-		if e == io.EOF {
-			return Object{}, nil
-		}
-		var oversized *http.MaxBytesError
-		if errors.As(e, &oversized) {
-			return nil, fail(413, "JSON 请求超过256KB")
-		}
-		return nil, fail(422, "JSON 请求无效")
-	}
-	var extra any
-	if e := dec.Decode(&extra); e != io.EOF {
-		var oversized *http.MaxBytesError
-		if errors.As(e, &oversized) {
-			return nil, fail(413, "JSON 请求超过256KB")
-		}
-		return nil, fail(422, "请求只能包含一个JSON对象")
-	}
-	if b == nil {
-		return nil, fail(422, "请求必须是JSON对象")
-	}
-	return b, nil
-}
 func respond(w http.ResponseWriter, v any, e error) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")

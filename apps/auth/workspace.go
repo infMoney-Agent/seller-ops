@@ -2,18 +2,9 @@ package main
 
 import (
 	"context"
-	"net/http"
 	"seller-ops/server/internal/auth"
 )
 
-func (s *server) session(w http.ResponseWriter, r *http.Request) {
-	a, ok := s.auth.Authenticate(w, r)
-	if !ok {
-		return
-	}
-	result, err := s.sessionUsecase(r.Context(), a)
-	s.respondBusiness(w, result, err)
-}
 func (s *server) sessionUsecase(ctx context.Context, a auth.Principal) (*auth.Result, error) {
 	var name, email string
 	var verified bool

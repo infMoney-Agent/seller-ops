@@ -3,16 +3,74 @@ package main
 import (
 	"connectrpc.com/connect"
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	authv1 "seller-ops/contracts/sellerops/auth/v1"
 	"seller-ops/contracts/sellerops/auth/v1/authv1connect"
+	commonv1 "seller-ops/contracts/sellerops/common/v1"
 	"seller-ops/rpccompat"
 	"seller-ops/server/internal/auth"
 	"strings"
 	"testing"
+
+	"golang.org/x/oauth2"
 )
+
+func authErrHTTPStatus(err error) int {
+	if err == nil {
+		return 200
+	}
+	var ce *connect.Error
+	if errors.As(err, &ce) {
+		for _, d := range ce.Details() {
+			if msg, e := d.Value(); e == nil {
+				if detail, ok := msg.(*commonv1.ErrorDetail); ok {
+					var code int
+					if _, e := fmt.Sscanf(detail.Reason, "HTTP_%d", &code); e == nil && code > 0 {
+						return code
+					}
+				}
+			}
+		}
+	}
+	return 500
+}
+
+func TestLegacyAuthJSONRoutesRemoved(t *testing.T) {
+	svc := auth.New(nil, oauth2.Config{}, nil)
+	if err := svc.EnableRegistration("http://127.0.0.1:18000", "app", "client", "secret", "https://auth.example.test"); err != nil {
+		t.Fatal(err)
+	}
+	s := &server{origins: []string{"https://test.example.com"}, auth: svc}
+	mux := http.NewServeMux()
+	s.auth.Register(mux)
+	s.registerAuthRPC(mux)
+	for _, tc := range []struct{ method, path string }{
+		{"GET", "/api/auth/session"},
+		{"GET", "/api/products"},
+		{"POST", "/api/products"},
+		{"GET", "/api/products/1"},
+		{"GET", "/api/users"},
+		{"DELETE", "/api/users/1"},
+		{"GET", "/api/invitations"},
+		{"POST", "/api/invitations"},
+		{"POST", "/api/invitations/inspect"},
+		{"POST", "/api/invitations/accept"},
+		{"GET", "/api/auth/registration/status"},
+		{"GET", "/api/auth/company"},
+		{"GET", "/api/auth/join-requests"},
+		{"POST", "/api/auth/join-requests"},
+		{"POST", "/api/auth/join-requests/1/approve"},
+	} {
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, httptest.NewRequest(tc.method, tc.path, nil))
+		if w.Code != http.StatusNotFound {
+			t.Fatalf("legacy route %s %s still registered: %d", tc.method, tc.path, w.Code)
+		}
+	}
+}
 
 func testAuthRPC(t *testing.T, s *server, mux *http.ServeMux, a, b, member string, tenant, user int64) {
 	t.Helper()

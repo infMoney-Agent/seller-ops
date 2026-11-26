@@ -39,12 +39,7 @@ func prepareImportMutation(ctx context.Context, id, method, suffix string, meta 
 		return a, fail(422, "请求参数无效")
 	}
 	a.RequestKey = meta.IdempotencyKey
-	uri := "/api/v1/screening/" + suffix + query
-	if method == "DELETE" {
-		a.RequestHash = shaDigest([]byte(method + " " + uri))
-	} else {
-		a.RequestHash = shaDigest(append([]byte(method+" "+uri+"\n"), encoded(body)...))
-	}
+	a.RequestHash = buildIdempotencyHash(method, suffix, query, body)
 	return a, nil
 }
 func settingsBody(settings *screeningv1.ImportSettings) (Object, error) {

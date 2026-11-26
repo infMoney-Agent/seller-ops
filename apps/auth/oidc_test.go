@@ -18,6 +18,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"golang.org/x/oauth2"
+	"seller-ops/contracts/sellerops/auth/v1/authv1connect"
 	"seller-ops/server/internal/auth"
 	"seller-ops/server/internal/httpresponse"
 )
@@ -53,6 +54,7 @@ func verifyOIDCFlow(t *testing.T, db *pgxpool.Pool) {
 	s.auth.SetLegacy(legacy, oidc.NewVerifier(issuer, &oidc.StaticKeySet{PublicKeys: []crypto.PublicKey{&key.PublicKey}}, &oidc.Config{ClientID: legacy.ClientID}))
 	mux := http.NewServeMux()
 	s.auth.Register(mux)
+	s.registerAuthRPC(mux)
 	makeToken := func(nonce, audience string) string {
 		claims, err := json.Marshal(map[string]any{
 			"iss": issuer, "sub": subject, "aud": audience, "iat": time.Now().Unix(), "exp": time.Now().Add(time.Minute).Unix(),
@@ -134,12 +136,15 @@ func verifyOIDCFlow(t *testing.T, db *pgxpool.Pool) {
 			if !session.Secure || !session.HttpOnly || session.SameSite != http.SameSiteLaxMode {
 				t.Fatal("session cookie must be secure")
 			}
-			req = httptest.NewRequest("GET", "/api/auth/session", nil)
+			req = httptest.NewRequest("POST", authv1connect.AuthServiceGetSessionProcedure, strings.NewReader("{}"))
+			req.Header.Set("Content-Type", "application/json")
 			req.AddCookie(session)
 			response = httptest.NewRecorder()
-			s.session(response, req)
-			var account map[string]any
-			if err := json.Unmarshal(response.Body.Bytes(), &account); err != nil || account["workspaceId"] != float64(0) {
+			mux.ServeHTTP(response, req)
+			var rpcSession struct {
+				Data map[string]any `json:"data"`
+			}
+			if err := json.Unmarshal(response.Body.Bytes(), &rpcSession); err != nil || rpcSession.Data["workspaceId"] != nil && rpcSession.Data["workspaceId"] != "0" && rpcSession.Data["workspaceId"] != float64(0) {
 				t.Fatal("new accounts must not automatically join or create a company", response.Body)
 			}
 			if response.Code != 200 || !strings.Contains(response.Body.String(), "oidc@example.com") {

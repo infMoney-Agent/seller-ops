@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
-	"net/http"
 	"net/url"
 	"sort"
 	"strconv"
@@ -29,155 +28,148 @@ func prompt(module, key string, values map[string]string) string {
 	}
 	return strings.ReplaceAll(strings.ReplaceAll(out, "{{", "{"), "}}", "}")
 }
-func (s *Service) route(w http.ResponseWriter, r *http.Request) (any, error) {
-	path := strings.TrimPrefix(r.URL.Path, "/api/v1/")
-	body := Obj{}
-	if r.Method == "POST" && path != "ads/optimize" && (!strings.HasPrefix(path, "monitor/") || path == "monitor/add") {
-		var err error
-		body, err = decode(w, r)
-		if err != nil {
-			return nil, err
-		}
+func validatePlatform(platform string) error {
+	if platform != "" && platform != "amazon" {
+		return httpError{422, "不支持的平台"}
 	}
-	return s.executeEcom(r.Context(), r.Context().Value(userKey{}).(int64), r.Method, path, r.URL.Query(), body)
+	return nil
 }
-func (s *Service) executeEcom(ctx context.Context, user int64, method, path string, query url.Values, b Obj) (any, error) {
-	parts := strings.Split(path, "/")
-	if len(parts) < 2 {
-		return nil, httpError{404, "接口不存在"}
+func (s *Service) listResearchCategories() (Obj, error) {
+	keys := []string{}
+	for k := range categories {
+		keys = append(keys, k)
 	}
-	if parts[0] == "monitor" {
-		return s.monitorUsecase(ctx, user, method, parts[1:], query, b)
+	sort.Strings(keys)
+	return Obj{"categories": keys}, nil
+}
+func (s *Service) listListingLanguages() (Obj, error) {
+	return Obj{"languages": languages}, nil
+}
+func (s *Service) scoreProduct(ctx context.Context, rawASIN string, query url.Values) (Obj, error) {
+	asin, e := validateASIN(rawASIN)
+	if e != nil {
+		return nil, e
 	}
-	if method == "GET" {
-		switch path {
-		case "product-research/categories":
-			keys := []string{}
-			for k := range categories {
-				keys = append(keys, k)
-			}
-			sort.Strings(keys)
-			return Obj{"categories": keys}, nil
-		case "listing/languages":
-			return Obj{"languages": languages}, nil
-		}
-		if len(parts) == 3 && parts[0] == "product-research" && parts[1] == "score" {
-			asin, e := validateASIN(parts[2])
-			if e != nil {
-				return nil, e
-			}
-			if p := query.Get("platform"); p != "" && p != "amazon" {
-				return nil, httpError{422, "不支持的平台"}
-			}
-			product, e := s.adapter.Product(ctx, asin)
-			if e != nil {
-				return nil, e
-			}
-			return s.score(ctx, product)
-		}
+	if e := validatePlatform(query.Get("platform")); e != nil {
+		return nil, e
 	}
-	if method == "GET" && len(parts) == 3 && parts[0] == "reviews" && parts[1] == "analyze" {
-		asin, e := validateASIN(parts[2])
-		if e != nil {
+	product, e := s.adapter.Product(ctx, asin)
+	if e != nil {
+		return nil, e
+	}
+	return s.score(ctx, product)
+}
+func (s *Service) researchProducts(ctx context.Context, b Obj) (Obj, error) {
+	if e := validatePlatform(text(b["platform"])); e != nil {
+		return nil, e
+	}
+	category := text(b["category"])
+	if _, ok := categories[category]; !ok {
+		return nil, httpError{422, "不支持的类目"}
+	}
+	limit := 50
+	if b["limit"] != nil {
+		limit = int(number(b["limit"]))
+	}
+	min := 6.0
+	if b["min_score"] != nil {
+		min = number(b["min_score"])
+	}
+	if limit < 1 || limit > 100 || min < 0 || min > 10 {
+		return nil, httpError{422, "数量或最低分无效"}
+	}
+	products, e := s.adapter.BestSellers(ctx, category, limit)
+	if e != nil {
+		return nil, e
+	}
+	results := []Obj{}
+	failed := 0
+	for _, p := range products {
+		if e := ctx.Err(); e != nil {
 			return nil, e
 		}
-		pages := 3
-		if value := query.Get("max_pages"); value != "" {
-			pages, e = strconv.Atoi(value)
-			if e != nil || pages < 1 || pages > 20 {
-				return nil, httpError{422, "评论页数无效"}
-			}
-		}
-		if value := query.Get("platform"); value != "" && value != "amazon" {
-			return nil, httpError{422, "不支持的平台"}
-		}
-		rows, e := s.adapter.Reviews(ctx, asin, pages)
+		v, e := s.score(ctx, p)
 		if e != nil {
-			return nil, e
+			failed++
+			continue
 		}
-		return s.analyze(ctx, asin, rows)
+		if number(v["overall_score"]) >= min {
+			results = append(results, v)
+		}
 	}
-	if method != "POST" {
-		return nil, httpError{404, "接口不存在"}
+	if len(products) > 0 && failed == len(products) {
+		return nil, httpError{502, "商品已采集，但模型评分全部失败，请检查模型配置"}
 	}
-	if platform := text(b["platform"]); platform != "" && platform != "amazon" {
-		return nil, httpError{422, "不支持的平台"}
+	sort.SliceStable(results, func(i, j int) bool { return number(results[i]["overall_score"]) > number(results[j]["overall_score"]) })
+	return Obj{"category": category, "results": results, "failed": failed}, nil
+}
+func (s *Service) generateListing(ctx context.Context, b Obj) (Obj, error) {
+	if e := validatePlatform(text(b["platform"])); e != nil {
+		return nil, e
 	}
-	switch path {
-	case "product-research/research":
-		category := text(b["category"])
-		if _, ok := categories[category]; !ok {
-			return nil, httpError{422, "不支持的类目"}
-		}
-		limit := 50
-		if b["limit"] != nil {
-			limit = int(number(b["limit"]))
-		}
-		min := 6.0
-		if b["min_score"] != nil {
-			min = number(b["min_score"])
-		}
-		if limit < 1 || limit > 100 || min < 0 || min > 10 {
-			return nil, httpError{422, "数量或最低分无效"}
-		}
-		products, e := s.adapter.BestSellers(ctx, category, limit)
-		if e != nil {
-			return nil, e
-		}
-		results := []Obj{}
-		failed := 0
-		for _, p := range products {
-			if e := ctx.Err(); e != nil {
-				return nil, e
-			}
-			v, e := s.score(ctx, p)
-			if e != nil {
-				failed++
-				continue
-			}
-			if number(v["overall_score"]) >= min {
-				results = append(results, v)
-			}
-		}
-		if len(products) > 0 && failed == len(products) {
-			return nil, httpError{502, "商品已采集，但模型评分全部失败，请检查模型配置"}
-		}
-		sort.SliceStable(results, func(i, j int) bool { return number(results[i]["overall_score"]) > number(results[j]["overall_score"]) })
-		return Obj{"category": category, "results": results, "failed": failed}, nil
-	case "listing/generate", "listing/optimize":
-		return s.listing(ctx, path, b)
-	case "reviews/analyze":
-		asin, e := validateASIN(text(b["asin"]))
-		if e != nil {
-			return nil, e
-		}
-		pages := 5
-		if b["max_pages"] != nil {
-			pages = int(number(b["max_pages"]))
-		}
-		if pages < 1 || pages > 20 {
-			return nil, httpError{422, "评论页数须在1到20之间"}
-		}
-		rows, e := s.adapter.Reviews(ctx, asin, pages)
-		if e != nil {
-			return nil, e
-		}
-		return s.analyze(ctx, asin, rows)
-	case "ads/optimize":
-		if p := query.Get("platform"); p != "" && p != "amazon" {
-			return nil, httpError{422, "不支持的平台"}
-		}
-		target := 25.0
-		if raw := query.Get("target_acos"); raw != "" {
-			var e error
-			target, e = strconv.ParseFloat(raw, 64)
-			if e != nil || math.IsNaN(target) || math.IsInf(target, 0) || target <= 0 || target > 100 {
-				return nil, httpError{422, "目标ACoS须大于0且不超过100"}
-			}
-		}
-		return s.optimizeAds(ctx, target)
+	return s.listing(ctx, false, b)
+}
+func (s *Service) optimizeListing(ctx context.Context, b Obj) (Obj, error) {
+	if e := validatePlatform(text(b["platform"])); e != nil {
+		return nil, e
 	}
-	return nil, httpError{404, "接口不存在"}
+	return s.listing(ctx, true, b)
+}
+func (s *Service) analyzeReviews(ctx context.Context, b Obj) (Obj, error) {
+	if e := validatePlatform(text(b["platform"])); e != nil {
+		return nil, e
+	}
+	asin, e := validateASIN(text(b["asin"]))
+	if e != nil {
+		return nil, e
+	}
+	pages := 5
+	if b["max_pages"] != nil {
+		pages = int(number(b["max_pages"]))
+	}
+	if pages < 1 || pages > 20 {
+		return nil, httpError{422, "评论页数须在1到20之间"}
+	}
+	rows, e := s.adapter.Reviews(ctx, asin, pages)
+	if e != nil {
+		return nil, e
+	}
+	return s.analyze(ctx, asin, rows)
+}
+func (s *Service) analyzeReviewsLegacy(ctx context.Context, rawASIN string, query url.Values) (Obj, error) {
+	asin, e := validateASIN(rawASIN)
+	if e != nil {
+		return nil, e
+	}
+	pages := 3
+	if value := query.Get("max_pages"); value != "" {
+		pages, e = strconv.Atoi(value)
+		if e != nil || pages < 1 || pages > 20 {
+			return nil, httpError{422, "评论页数无效"}
+		}
+	}
+	if e := validatePlatform(query.Get("platform")); e != nil {
+		return nil, e
+	}
+	rows, e := s.adapter.Reviews(ctx, asin, pages)
+	if e != nil {
+		return nil, e
+	}
+	return s.analyze(ctx, asin, rows)
+}
+func (s *Service) optimizeAdsRequest(ctx context.Context, query url.Values) (Obj, error) {
+	if e := validatePlatform(query.Get("platform")); e != nil {
+		return nil, e
+	}
+	target := 25.0
+	if raw := query.Get("target_acos"); raw != "" {
+		var e error
+		target, e = strconv.ParseFloat(raw, 64)
+		if e != nil || math.IsNaN(target) || math.IsInf(target, 0) || target <= 0 || target > 100 {
+			return nil, httpError{422, "目标ACoS须大于0且不超过100"}
+		}
+	}
+	return s.optimizeAds(ctx, target)
 }
 func (s *Service) score(ctx context.Context, p Product) (Obj, error) {
 	data := Obj{"asin": p.ASIN, "title": p.Title, "price_usd": p.Price, "bsr_rank": p.BSR, "bsr_category": p.Category, "review_count": p.ReviewCount, "rating": p.Rating, "num_bullet_points": len(p.Bullets)}
@@ -210,7 +202,7 @@ func stringsList(value any) []string {
 	}
 	return out
 }
-func (s *Service) listing(ctx context.Context, path string, b Obj) (Obj, error) {
+func (s *Service) listing(ctx context.Context, optimize bool, b Obj) (Obj, error) {
 	language := text(b["language"])
 	if language == "" {
 		language = "en"
@@ -225,7 +217,7 @@ func (s *Service) listing(ctx context.Context, path string, b Obj) (Obj, error) 
 	}
 	asin := ""
 	var p string
-	if path == "listing/optimize" {
+	if optimize {
 		var e error
 		asin, e = validateASIN(text(b["asin"]))
 		if e != nil {

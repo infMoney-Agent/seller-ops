@@ -9,7 +9,6 @@ import (
 	"github.com/redis/go-redis/v9"
 	"log"
 	"math"
-	"net/http"
 	"net/url"
 	"sort"
 	"strconv"
@@ -17,128 +16,117 @@ import (
 	"time"
 )
 
-func account(r *http.Request) string {
-	return "seller:" + strconv.FormatInt(r.Context().Value(userKey{}).(int64), 10)
+func monitorPrefix(user int64) string {
+	return "seller:" + strconv.FormatInt(user, 10)
 }
-func (s *Service) monitor(w http.ResponseWriter, r *http.Request, parts []string) (any, error) {
-	body := Obj{}
-	if r.Method == "POST" && len(parts) > 0 && parts[0] == "add" {
-		var err error
-		body, err = decode(w, r)
-		if err != nil {
-			return nil, err
+func (s *Service) listMonitors(ctx context.Context, user int64) (Obj, error) {
+	prefix := monitorPrefix(user)
+	out := []Obj{}
+	iter := s.redis.Scan(ctx, 0, prefix+":monitor:*", 100).Iterator()
+	for iter.Next(ctx) {
+		raw, e := s.redis.Get(ctx, iter.Val()).Bytes()
+		if e == redis.Nil {
+			continue
 		}
+		if e != nil {
+			return nil, e
+		}
+		var v Obj
+		if e = json.Unmarshal(raw, &v); e != nil {
+			return nil, e
+		}
+		out = append(out, v)
 	}
-	return s.monitorUsecase(r.Context(), r.Context().Value(userKey{}).(int64), r.Method, parts, r.URL.Query(), body)
+	if e := iter.Err(); e != nil {
+		return nil, e
+	}
+	sortMonitors(out)
+	return Obj{"monitors": out}, nil
 }
-func (s *Service) monitorUsecase(ctx context.Context, user int64, method string, parts []string, query url.Values, body Obj) (any, error) {
-	prefix := "seller:" + strconv.FormatInt(user, 10)
-	action := parts[0]
-	asin := ""
-	if len(parts) > 1 {
-		var e error
-		asin, e = validateASIN(parts[1])
-		if e != nil {
-			return nil, e
+func (s *Service) addMonitor(ctx context.Context, user int64, b Obj) (Obj, error) {
+	prefix := monitorPrefix(user)
+	asin, e := validateASIN(text(b["asin"]))
+	if e != nil {
+		return nil, e
+	}
+	if e := validatePlatform(text(b["platform"])); e != nil {
+		return nil, e
+	}
+	interval := 60
+	if b["check_interval_minutes"] != nil {
+		interval = int(number(b["check_interval_minutes"]))
+	}
+	if interval < 60 || interval > 10080 || len([]rune(text(b["label"]))) > 200 {
+		return nil, httpError{422, "监控间隔或标签无效"}
+	}
+	rules := Obj{}
+	if b["alert_rules"] != nil {
+		var ok bool
+		rules, ok = b["alert_rules"].(map[string]any)
+		if !ok {
+			return nil, httpError{422, "提醒规则无效"}
+		}
+		for k, v := range rules {
+			switch k {
+			case "price_drop_pct", "price_rise_pct", "bsr_change_pct", "review_spike":
+			default:
+				return nil, httpError{422, "不支持的提醒规则"}
+			}
+			if number(v) < 0 {
+				return nil, httpError{422, "提醒阈值不能小于零"}
+			}
 		}
 	}
-	switch {
-	case method == "GET" && action == "list":
-		out := []Obj{}
-		iter := s.redis.Scan(ctx, 0, prefix+":monitor:*", 100).Iterator()
-		for iter.Next(ctx) {
-			raw, e := s.redis.Get(ctx, iter.Val()).Bytes()
-			if e == redis.Nil {
-				continue
-			}
-			if e != nil {
-				return nil, e
-			}
-			var v Obj
-			if e = json.Unmarshal(raw, &v); e != nil {
-				return nil, e
-			}
-			out = append(out, v)
-		}
-		if e := iter.Err(); e != nil {
-			return nil, e
-		}
-		sortMonitors(out)
-		return Obj{"monitors": out}, nil
-	case method == "POST" && action == "add":
-		b := body
-		var e error
-		asin, e = validateASIN(text(b["asin"]))
-		if e != nil {
-			return nil, e
-		}
-		platform := text(b["platform"])
-		if platform != "" && platform != "amazon" {
-			return nil, httpError{422, "不支持的平台"}
-		}
-		interval := 60
-		if b["check_interval_minutes"] != nil {
-			interval = int(number(b["check_interval_minutes"]))
-		}
-		if interval < 60 || interval > 10080 || len([]rune(text(b["label"]))) > 200 {
-			return nil, httpError{422, "监控间隔或标签无效"}
-		}
-		rules := Obj{}
-		if b["alert_rules"] != nil {
-			var ok bool
-			rules, ok = b["alert_rules"].(map[string]any)
-			if !ok {
-				return nil, httpError{422, "提醒规则无效"}
-			}
-			for k, v := range rules {
-				switch k {
-				case "price_drop_pct", "price_rise_pct", "bsr_change_pct", "review_spike":
-				default:
-					return nil, httpError{422, "不支持的提醒规则"}
-				}
-				if number(v) < 0 {
-					return nil, httpError{422, "提醒阈值不能小于零"}
-				}
-			}
-		}
-		value := Obj{"asin": asin, "platform": "amazon", "label": text(b["label"]), "check_interval_minutes": interval, "alert_rules": rules}
-		if e = s.redis.Set(ctx, prefix+":monitor:"+asin, jsonBytes(value), 0).Err(); e != nil {
-			return nil, e
-		}
-		return Obj{"status": "added", "asin": asin}, nil
-	case method == "DELETE" && action == "remove" && asin != "":
-		n, e := s.redis.Del(ctx, prefix+":monitor:"+asin).Result()
-		status := "not_found"
-		if n > 0 {
-			status = "removed"
-		}
-		return Obj{"status": status, "asin": asin}, e
-	case method == "GET" && action == "snapshots" && asin != "":
-		limit := 100
-		if raw := query.Get("limit"); raw != "" {
-			var e error
-			limit, e = strconv.Atoi(raw)
-			if e != nil || limit < 1 || limit > 1000 {
-				return nil, httpError{422, "数量须在1到1000之间"}
-			}
-		}
-		rows, e := s.redis.LRange(ctx, prefix+":snapshots:"+asin, 0, int64(limit-1)).Result()
-		if e != nil {
-			return nil, e
-		}
-		out := []Obj{}
-		for _, raw := range rows {
-			var v Obj
-			if e = json.Unmarshal([]byte(raw), &v); e != nil {
-				return nil, e
-			}
-			out = append(out, v)
-		}
-		return Obj{"asin": asin, "snapshots": out}, nil
-	case method == "POST" && action == "snapshot" && asin != "":
-		return s.snapshot(ctx, prefix, asin, false)
+	value := Obj{"asin": asin, "platform": "amazon", "label": text(b["label"]), "check_interval_minutes": interval, "alert_rules": rules}
+	if e = s.redis.Set(ctx, prefix+":monitor:"+asin, jsonBytes(value), 0).Err(); e != nil {
+		return nil, e
 	}
-	return nil, httpError{404, "接口不存在"}
+	return Obj{"status": "added", "asin": asin}, nil
+}
+func (s *Service) removeMonitor(ctx context.Context, user int64, rawASIN string) (Obj, error) {
+	asin, e := validateASIN(rawASIN)
+	if e != nil {
+		return nil, e
+	}
+	n, e := s.redis.Del(ctx, monitorPrefix(user)+":monitor:"+asin).Result()
+	status := "not_found"
+	if n > 0 {
+		status = "removed"
+	}
+	return Obj{"status": status, "asin": asin}, e
+}
+func (s *Service) listSnapshots(ctx context.Context, user int64, rawASIN string, query url.Values) (Obj, error) {
+	asin, e := validateASIN(rawASIN)
+	if e != nil {
+		return nil, e
+	}
+	limit := 100
+	if raw := query.Get("limit"); raw != "" {
+		limit, e = strconv.Atoi(raw)
+		if e != nil || limit < 1 || limit > 1000 {
+			return nil, httpError{422, "数量须在1到1000之间"}
+		}
+	}
+	rows, e := s.redis.LRange(ctx, monitorPrefix(user)+":snapshots:"+asin, 0, int64(limit-1)).Result()
+	if e != nil {
+		return nil, e
+	}
+	out := []Obj{}
+	for _, raw := range rows {
+		var v Obj
+		if e = json.Unmarshal([]byte(raw), &v); e != nil {
+			return nil, e
+		}
+		out = append(out, v)
+	}
+	return Obj{"asin": asin, "snapshots": out}, nil
+}
+func (s *Service) createSnapshot(ctx context.Context, user int64, rawASIN string) (Obj, error) {
+	asin, e := validateASIN(rawASIN)
+	if e != nil {
+		return nil, e
+	}
+	return s.snapshot(ctx, monitorPrefix(user), asin, false)
 }
 func alerts(current, previous, rules Obj) (bool, string) {
 	if previous == nil {

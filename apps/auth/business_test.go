@@ -1,9 +1,9 @@
 package main
 
 import (
+	"connectrpc.com/connect"
 	"context"
 	"encoding/hex"
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -14,6 +14,9 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"golang.org/x/oauth2"
+	authv1 "seller-ops/contracts/sellerops/auth/v1"
+	"seller-ops/contracts/sellerops/auth/v1/authv1connect"
+	"seller-ops/rpccompat"
 	"seller-ops/server/internal/auth"
 )
 
@@ -65,75 +68,163 @@ func TestWorkspaceIsolation(t *testing.T) {
 	a, b, m := makeSession(alice, first), makeSession(bob, second), makeSession(member, first)
 	s := &server{db: db, origins: []string{"https://test.example.com"}, auth: auth.New(db, oauth2.Config{}, nil)}
 	mux := http.NewServeMux()
-	s.registerBusiness(mux)
 	s.auth.Register(mux)
-	mux.HandleFunc("GET /api/auth/session", s.session)
 	s.registerAuthRPC(mux)
 	testAuthRPC(t, s, mux, a, b, m, first, alice)
-	call := func(method, path, token, body string, status int) *httptest.ResponseRecorder {
+	rpcServer := httptest.NewServer(mux)
+	defer rpcServer.Close()
+	client := authv1connect.NewAuthServiceClient(rpcServer.Client(), rpcServer.URL, connect.WithProtoJSON())
+	withSession := func(h http.Header, token string) {
+		if token != "" {
+			h.Set("Cookie", auth.SessionCookie+"="+token)
+		}
+		h.Set("Origin", "https://test.example.com")
+	}
+	expectStatus := func(label string, got int, want int, err error) {
 		t.Helper()
-		req := httptest.NewRequest(method, path, strings.NewReader(body))
+		if got != want {
+			t.Fatalf("%s: got %d, want %d (%v)", label, got, want, err)
+		}
+	}
+	callHTTP := func(method, path, token string, want int) {
+		t.Helper()
+		req := httptest.NewRequest(method, path, nil)
 		if token != "" {
 			req.AddCookie(&http.Cookie{Name: auth.SessionCookie, Value: token})
 		}
 		response := httptest.NewRecorder()
 		mux.ServeHTTP(response, req)
-		if response.Code != status {
-			t.Fatalf("%s %s: got %d, want %d: %s", method, path, response.Code, status, response.Body)
+		if response.Code != want {
+			t.Fatalf("%s %s: got %d, want %d: %s", method, path, response.Code, want, response.Body)
 		}
-		return response
 	}
-	body := `{"name":"Private product","category":"Books","price":42.10,"description":"Only first workspace"}`
-	result := call("POST", "/api/products", a, body, 201)
-	var created struct{ Product product }
-	must(json.Unmarshal(result.Body.Bytes(), &created))
-	path := "/api/products/" + strconv.FormatInt(created.Product.ID, 10)
-	call("GET", path, a, "", 200)
-	call("GET", path, b, "", 404)
-	call("PUT", path, b, body, 404)
-	call("DELETE", path, b, "", 404)
-	call("GET", path, m, "", 200)
-	call("POST", "/api/products", m, body, 403)
-	call("GET", "/api/products", "", "", 401)
-	result = call("GET", "/api/products?search=Private", b, "", 200)
-	if !strings.Contains(result.Body.String(), `"total_products":0`) {
-		t.Fatal(result.Body.String())
+
+	productInputMsg := func() *authv1.ManagedProductInput {
+		in := &authv1.ManagedProductInput{}
+		must(rpccompat.FromLegacy(in, map[string]any{"name": "Private product", "category": "Books", "price": 42.10, "description": "Only first workspace"}))
+		return in
 	}
-	result = call("GET", "/api/products?search=Private", a, "", 200)
-	if !strings.Contains(result.Body.String(), `"total_products":1`) {
-		t.Fatal(result.Body.String())
+	createReq := connect.NewRequest(&authv1.CreateManagedProductRequest{Body: productInputMsg()})
+	withSession(createReq.Header(), a)
+	created, err := client.CreateManagedProduct(ctx, createReq)
+	expectStatus("create product", authErrHTTPStatus(err), 200, err)
+	if created.Msg.StatusCode != 201 {
+		t.Fatalf("create product status=%d", created.Msg.StatusCode)
 	}
-	call("DELETE", "/api/users/"+strconv.FormatInt(alice, 10), a, "", 409)
-	call("DELETE", "/api/users/"+strconv.FormatInt(member, 10), a, "", 204)
-	call("GET", path, m, "", 403)
+	prodID := strconv.FormatInt(created.Msg.Data.Product.GetId(), 10)
+
+	getProduct := func(token string, want int) {
+		t.Helper()
+		req := connect.NewRequest(&authv1.GetManagedProductRequest{Id: &prodID})
+		withSession(req.Header(), token)
+		_, err := client.GetManagedProduct(ctx, req)
+		expectStatus("get product", authErrHTTPStatus(err), want, err)
+	}
+	getProduct(a, 200)
+	getProduct(b, 404)
+	updateReq := connect.NewRequest(&authv1.UpdateManagedProductRequest{Id: &prodID, Body: productInputMsg()})
+	withSession(updateReq.Header(), b)
+	_, err = client.UpdateManagedProduct(ctx, updateReq)
+	expectStatus("cross-tenant update", authErrHTTPStatus(err), 404, err)
+	delReq := connect.NewRequest(&authv1.DeleteManagedProductRequest{Id: &prodID})
+	withSession(delReq.Header(), b)
+	_, err = client.DeleteManagedProduct(ctx, delReq)
+	expectStatus("cross-tenant delete", authErrHTTPStatus(err), 404, err)
+	getProduct(m, 200)
+	memberCreate := connect.NewRequest(&authv1.CreateManagedProductRequest{Body: productInputMsg()})
+	withSession(memberCreate.Header(), m)
+	_, err = client.CreateManagedProduct(ctx, memberCreate)
+	expectStatus("member create product", authErrHTTPStatus(err), 403, err)
+	anonList := connect.NewRequest(&authv1.ListManagedProductsRequest{})
+	_, err = client.ListManagedProducts(ctx, anonList)
+	expectStatus("anon list products", authErrHTTPStatus(err), 401, err)
+
+	listSearch := func(token string) int64 {
+		t.Helper()
+		req := connect.NewRequest(&authv1.ListManagedProductsRequest{Query: &authv1.AuthQuery{Search: []string{"Private"}}})
+		withSession(req.Header(), token)
+		res, err := client.ListManagedProducts(ctx, req)
+		must(err)
+		return res.Msg.Data.GetTotalProducts()
+	}
+	if got := listSearch(b); got != 0 {
+		t.Fatalf("bob saw %d private products", got)
+	}
+	if got := listSearch(a); got != 1 {
+		t.Fatalf("alice saw %d private products", got)
+	}
+
+	removeMember := func(target int64, token string, want int) {
+		t.Helper()
+		tid := strconv.FormatInt(target, 10)
+		req := connect.NewRequest(&authv1.RemoveMemberRequest{Id: &tid})
+		withSession(req.Header(), token)
+		res, err := client.RemoveMember(ctx, req)
+		if err != nil {
+			expectStatus("remove member", authErrHTTPStatus(err), want, err)
+			return
+		}
+		expectStatus("remove member", int(res.Msg.StatusCode), want, nil)
+	}
+	removeMember(alice, a, 409)
+	removeMember(member, a, 204)
+	getProduct(m, 403)
+
+	createInvite := func(token, email string) string {
+		t.Helper()
+		req := connect.NewRequest(&authv1.CreateInvitationRequest{Body: &authv1.InvitationInput{Email: &email}})
+		withSession(req.Header(), token)
+		res, err := client.CreateInvitation(ctx, req)
+		must(err)
+		if res.Msg.StatusCode != 201 {
+			t.Fatalf("invite status=%d", res.Msg.StatusCode)
+		}
+		return strings.SplitN(res.Msg.Data.GetUrl(), "#", 2)[1]
+	}
+	acceptInvite := func(token, inviteToken string, want int) {
+		t.Helper()
+		req := connect.NewRequest(&authv1.AcceptInvitationRequest{Body: &authv1.InvitationToken{Token: &inviteToken}})
+		withSession(req.Header(), token)
+		res, err := client.AcceptInvitation(ctx, req)
+		if err != nil {
+			expectStatus("accept invite", authErrHTTPStatus(err), want, err)
+			return
+		}
+		expectStatus("accept invite", int(res.Msg.StatusCode), want, nil)
+	}
+	inspectInvite := func(inviteToken string, want int) *authv1.InvitationInspection {
+		t.Helper()
+		req := connect.NewRequest(&authv1.InspectInvitationRequest{Body: &authv1.InvitationToken{Token: &inviteToken}})
+		res, err := client.InspectInvitation(ctx, req)
+		if err != nil {
+			expectStatus("inspect invite", authErrHTTPStatus(err), want, err)
+			return nil
+		}
+		expectStatus("inspect invite", int(res.Msg.StatusCode), want, nil)
+		return res.Msg.Data
+	}
+
 	invited := makeSession(member, 0)
-	result = call("POST", "/api/invitations", a, `{"email":"member@example.com"}`, 201)
-	var invite struct{ URL string }
-	must(json.Unmarshal(result.Body.Bytes(), &invite))
-	token := strings.SplitN(invite.URL, "#", 2)[1]
-	inviteBody, err := json.Marshal(map[string]string{"token": token})
+	token := createInvite(a, "member@example.com")
+	acceptInvite(b, token, 404)
+	acceptInvite(invited, token, 200)
+	acceptInvite(invited, token, 404)
+	getProduct(invited, 200)
+
+	token = createInvite(a, "member@example.com")
+	revokeID := hex.EncodeToString(auth.HashToken(token))
+	revokeReq := connect.NewRequest(&authv1.RevokeInvitationRequest{Id: &revokeID})
+	withSession(revokeReq.Header(), a)
+	revokeRes, err := client.RevokeInvitation(ctx, revokeReq)
 	must(err)
-	call("POST", "/api/invitations/accept", b, string(inviteBody), 404)
-	call("POST", "/api/invitations/accept", invited, string(inviteBody), 200)
-	call("POST", "/api/invitations/accept", invited, string(inviteBody), 404)
-	call("GET", path, invited, "", 200)
-	result = call("POST", "/api/invitations", a, `{"email":"member@example.com"}`, 201)
-	must(json.Unmarshal(result.Body.Bytes(), &invite))
-	token = strings.SplitN(invite.URL, "#", 2)[1]
-	call("DELETE", "/api/invitations/"+hex.EncodeToString(auth.HashToken(token)), a, "", 204)
-	inviteBody, err = json.Marshal(map[string]string{"token": token})
-	must(err)
-	call("POST", "/api/invitations/accept", invited, string(inviteBody), 404)
+	expectStatus("revoke invite", int(revokeRes.Msg.StatusCode), 204, nil)
+	acceptInvite(invited, token, 404)
 
 	// A valid invite never moves an account away from an existing company.
-	payload, _ := json.Marshal(map[string]string{"email": "alice@example.com"})
-	result = call("POST", "/api/invitations", b, string(payload), 201)
-	must(json.Unmarshal(result.Body.Bytes(), &invite))
-	blockedToken := strings.SplitN(invite.URL, "#", 2)[1]
-	blockedBody, _ := json.Marshal(map[string]string{"token": blockedToken})
-	call("POST", "/api/invitations/accept", a, string(blockedBody), 409)
-	preview := call("POST", "/api/invitations/inspect", "", string(blockedBody), 200)
-	if strings.Contains(preview.Body.String(), "alice@example.com") {
+	blockedToken := createInvite(b, "alice@example.com")
+	acceptInvite(a, blockedToken, 409)
+	preview := inspectInvite(blockedToken, 200)
+	if strings.Contains(preview.GetEmailHint(), "alice@example.com") {
 		t.Fatal("invitation preview leaked full email")
 	}
 	var company int64
@@ -145,47 +236,36 @@ func TestWorkspaceIsolation(t *testing.T) {
 		t.Fatal("database allowed multiple companies")
 	}
 	// Accepting a same-company invite preserves owner privileges.
-	result = call("POST", "/api/invitations", a, string(payload), 201)
-	must(json.Unmarshal(result.Body.Bytes(), &invite))
-	ownerToken := strings.SplitN(invite.URL, "#", 2)[1]
-	ownerBody, _ := json.Marshal(map[string]string{"token": ownerToken})
-	call("POST", "/api/invitations/accept", a, string(ownerBody), 200)
+	ownerToken := createInvite(a, "alice@example.com")
+	acceptInvite(a, ownerToken, 200)
 	var ownerRole string
 	must(db.QueryRow(ctx, "SELECT role FROM memberships WHERE user_id=$1", alice).Scan(&ownerRole))
 	if ownerRole != "owner" {
 		t.Fatal("invitation downgraded owner")
 	}
-	call("GET", path, m, "", 200)
+	getProduct(m, 200)
 	// Verification is required and a failed attempt does not consume the invitation.
 	unverified := makeUser("unverified")
 	runSQL("UPDATE users SET email_verified=false WHERE id=$1", unverified)
 	unverifiedSession := makeSession(unverified, 0)
-	payload, _ = json.Marshal(map[string]string{"email": "unverified@example.com"})
-	result = call("POST", "/api/invitations", a, string(payload), 201)
-	must(json.Unmarshal(result.Body.Bytes(), &invite))
-	verificationToken := strings.SplitN(invite.URL, "#", 2)[1]
-	verificationBody, _ := json.Marshal(map[string]string{"token": verificationToken})
-	call("POST", "/api/invitations/accept", unverifiedSession, string(verificationBody), 403)
-	call("POST", "/api/invitations/inspect", "", string(verificationBody), 200)
+	verificationToken := createInvite(a, "unverified@example.com")
+	acceptInvite(unverifiedSession, verificationToken, 403)
+	inspectInvite(verificationToken, 200)
 	s.allowUnverifiedInvites = true
-	call("POST", "/api/invitations/accept", b, string(verificationBody), 404)
-	call("POST", "/api/invitations/accept", unverifiedSession, string(verificationBody), 200)
+	acceptInvite(b, verificationToken, 404)
+	acceptInvite(unverifiedSession, verificationToken, 200)
 	var emailStillUnverified bool
 	must(db.QueryRow(ctx, "SELECT NOT email_verified FROM users WHERE id=$1", unverified).Scan(&emailStillUnverified))
 	if !emailStillUnverified {
 		t.Fatal("verification bypass must not forge email ownership")
 	}
-	payload, _ = json.Marshal(map[string]string{"email": "unverified@example.com"})
-	result = call("POST", "/api/invitations", b, string(payload), 201)
-	must(json.Unmarshal(result.Body.Bytes(), &invite))
-	crossToken := strings.SplitN(invite.URL, "#", 2)[1]
-	crossBody, _ := json.Marshal(map[string]string{"token": crossToken})
-	call("POST", "/api/invitations/accept", unverifiedSession, string(crossBody), 409)
+	crossToken := createInvite(b, "unverified@example.com")
+	acceptInvite(unverifiedSession, crossToken, 409)
 	s.allowUnverifiedInvites = false
 
 	runSQL("UPDATE sessions SET expires_at=now() WHERE token_hash=$1", auth.HashToken(invited))
-	call("GET", path, invited, "", 401)
-	call("POST", "/api/auth/logout", a, "", 204)
-	call("GET", path, a, "", 401)
+	getProduct(invited, 401)
+	callHTTP("POST", "/api/auth/logout", a, 204)
+	getProduct(a, 401)
 	verifyOIDCFlow(t, db)
 }

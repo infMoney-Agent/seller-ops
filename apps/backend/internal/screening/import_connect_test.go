@@ -157,7 +157,7 @@ func TestImportsConnectParity(t *testing.T) {
 	client := screeningv1connect.NewScreeningImportServiceClient(server.Client(), server.URL, connect.WithProtoJSON())
 	testImportReadRPC(t, svc, server, client)
 	testImportMutationRPC(t, svc, server, client)
- testScreeningRPCReadParity(t,svc,server)
+	testScreeningRPCReads(t, svc, server)
 	for _, tc := range []struct {
 		p, n   int32
 		tenant int64
@@ -175,21 +175,16 @@ func TestImportsConnectParity(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		var old any
-		err = json.NewDecoder(r.Body).Decode(&old)
 		r.Body.Close()
-		if err != nil || r.StatusCode != 200 {
-			t.Fatal(err, r.StatusCode)
+		if r.StatusCode != 404 {
+			t.Fatalf("legacy GET imports route still exposed: %d", r.StatusCode)
 		}
-		oracle, oracleErr := svc.list(rest, "ps_imports", "tenant_id=$1 AND NOT(counts ? 'data_deleted_at')", tc.tenant)
+		oracle, oracleErr := svc.listPage(ctx, int(tc.p), int(tc.n), "ps_imports", "tenant_id=$1 AND NOT(counts ? 'data_deleted_at')", tc.tenant)
 		if oracleErr != nil {
 			t.Fatal(oracleErr)
 		}
 		var original any
 		json.Unmarshal(encoded(oracle), &original)
-		if !reflect.DeepEqual(old, original) {
-			t.Fatal("legacy HTTP projection changed")
-		}
 		msg := response.Msg
 		items := []Object{}
 		for _, item := range msg.Items {
@@ -208,8 +203,8 @@ func TestImportsConnectParity(t *testing.T) {
 		projected := Object{"items": items, "page": msg.Pagination.Page, "page_size": msg.Pagination.PageSize, "total": msg.Pagination.Total}
 		var got any
 		json.Unmarshal(encoded(projected), &got)
-		if !reflect.DeepEqual(old, got) {
-			t.Fatalf("REST/RPC mismatch page=%d size=%d tenant=%d", tc.p, tc.n, tc.tenant)
+		if !reflect.DeepEqual(original, got) {
+			t.Fatalf("RPC projection mismatch page=%d size=%d tenant=%d", tc.p, tc.n, tc.tenant)
 		}
 		if tc.tenant == 501 && msg.Pagination.Total != 105 {
 			t.Fatal("deleted or other tenant row leaked", msg.Pagination.Total)
@@ -270,7 +265,9 @@ func testImportReadRPC(t *testing.T, svc *service, server *httptest.Server, clie
 				signImportRequest(h, "POST", path, svc.cfg.Secret, tc.tenant, fmt.Sprint(time.Now().Unix()))
 			}
 			var got any
+			var expected any
 			var err error
+			actor := identity{Tenant: tc.tenant, User: 7, Role: "member"}
 			restPath := "/api/v1/screening/imports/" + tc.id
 			switch tc.kind {
 			case "detail":
@@ -280,10 +277,11 @@ func testImportReadRPC(t *testing.T, svc *service, server *httptest.Server, clie
 				out, err = client.GetImport(ctx, req)
 				if err == nil {
 					got = legacyRPCImport(out.Msg.Item)
+					expected, _ = svc.getImport(ctx, actor, tc.id)
 				}
 			case "rows":
 				restPath += "/preview"
-				p, n := page(&http.Request{URL: mustImportURL(tc.query)})
+				p, n := queryPage(mustImportURL(tc.query).Query())
 				req := connect.NewRequest(&screeningv1.ListImportRowsRequest{ImportId: tc.id, Pagination: &commonv1.PaginationRequest{Page: int32(p), PageSize: int32(n)}})
 				sign(req.Header(), screeningv1connect.ScreeningImportServiceListImportRowsProcedure)
 				var out *connect.Response[screeningv1.ListImportRowsResponse]
@@ -310,6 +308,7 @@ func testImportReadRPC(t *testing.T, svc *service, server *httptest.Server, clie
 						items = append(items, item)
 					}
 					got = Object{"items": items, "page": out.Msg.Pagination.Page, "page_size": out.Msg.Pagination.PageSize, "total": out.Msg.Pagination.Total}
+					expected, _ = svc.importRows(ctx, actor, tc.id, p, n)
 				}
 			case "job":
 				restPath = "/api/v1/screening/jobs/" + tc.id
@@ -335,6 +334,7 @@ func testImportReadRPC(t *testing.T, svc *service, server *httptest.Server, clie
 						}
 					}
 					got = v
+					expected, _ = svc.getPublicJob(ctx, actor, tc.id)
 				}
 			}
 			restPath += tc.query
@@ -344,9 +344,9 @@ func testImportReadRPC(t *testing.T, svc *service, server *httptest.Server, clie
 			if e != nil {
 				t.Fatal(e)
 			}
-			defer res.Body.Close()
-			if res.StatusCode != tc.status {
-				t.Fatal("REST status", res.StatusCode, tc.status)
+			res.Body.Close()
+			if res.StatusCode != 404 {
+				t.Fatalf("legacy metadata HTTP endpoint %s still exposed: %d", restPath, res.StatusCode)
 			}
 			if tc.status != 200 {
 				want := connect.CodeNotFound
@@ -362,12 +362,10 @@ func testImportReadRPC(t *testing.T, svc *service, server *httptest.Server, clie
 				t.Fatal(err)
 			}
 			var old, projected any
-			if e = json.NewDecoder(res.Body).Decode(&old); e != nil {
-				t.Fatal(e)
-			}
+			json.Unmarshal(encoded(expected), &old)
 			json.Unmarshal(encoded(got), &projected)
 			if !reflect.DeepEqual(old, projected) {
-				t.Fatalf("projection mismatch old=%s got=%s", encoded(old), encoded(projected))
+				t.Fatalf("projection mismatch want=%s got=%s", encoded(old), encoded(projected))
 			}
 		})
 	}

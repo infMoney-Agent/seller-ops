@@ -2,10 +2,11 @@
 
 ## 1. 背景与目标
 
-截至当前基线，业务与认证服务已完成 80 个具名 Connect RPC 方法与 Proto 契约迁移（详见 [Proto 接口迁移状态](proto-migration-status.md)），并已完成 **Phase 2（Web 侧全量 Connect 收口与 6 个过渡开关拆除）**。当前剩余的过渡态主要集中在 Go 后端（Phase 3）：
+截至当前基线，业务与认证服务已完成 80 个具名 Connect RPC 方法与 Proto 契约迁移（详见 [Proto 接口迁移状态](proto-migration-status.md)），并已完成 **Phase 2（Web 侧全量 Connect 收口）与 Phase 3 Step 3.1 / 3.2 / 测试迁移（Go 后端旧元数据 HTTP 下线与字符串路径分发拆除）**：
 
 - Web 代理层已完成收口：6 个 `*_TRANSPORT` 开关与旧元数据 HTTP 转发分支已移除，仅保留 4 个初筛文件流端点及认证页面/Cookie HTTP 透传。
-- Go 后端仍同时暴露旧元数据 HTTP 路由和 Connect RPC，且 `ScreeningService` / `EcomService` 的 Connect 适配层仍通过 `rpccompat.Legacy` 转回 `map[string]any` 后再拼接路径字符串分发到 `executeScreening` / `executeEcom`。
+- Go 后端已完成收口：`apps/backend`（`ecom` + `screening`）与 `apps/auth` 已下线全部旧内部元数据 HTTP 路由，80 个 Connect RPC 全部直调具名 Go 用例（已删除 `executeScreening`、`executeEcom`、`monitorUsecase` 及 `auth` 按 HTTP Method 复合分支的过渡胶水层）。
+- 后续持续演进项（Step 3.3 兼容投影退出与第 7 节领域强类型化）：逐步提升 `legacy_fields` 消费字段以退出 `packages/rpccompat`，并推进 `screening` 核心写路径去 `map[string]any` 与错误解耦。
 
 本方案的目标是**先平稳完成全量 Connect 切流，再分步拆除双轨过渡代码**，使系统收敛到单一、清晰的内部 RPC 架构，为后续 `screening` 核心域强类型化与错误解耦打下基础。
 
@@ -135,46 +136,42 @@
 
 > **准入条件**：Phase 2 已稳定上线，且确认不再需要通过环境变量切回旧 HTTP 元数据接口。
 
-### Step 3.1：下线 Go 后端已废弃的内部元数据 HTTP 路由
+### Step 3.1：下线 Go 后端已废弃的内部元数据 HTTP 路由（已完成）
+
+> 状态：**已完成**（旧内部元数据 HTTP 路由全部下线并返回 `404`，仅保留 4 个初筛文件流端点、认证 OIDC/登录/注册页面与 `registration/prepare`、健康检查与 OpenAPI）。
 
 1. **电商模块（`apps/backend/internal/ecom/` & `apps/backend/main.go`）**
-   - `apps/backend/main.go`：移除 `/api/v1/` 向 `ecommerce.Handler()` 的旧元数据路由挂载（保留 `ecom.RPCPrefix` 与按需保留 `GET /openapi.json`）。
-   - `apps/backend/internal/ecom/http.go` & `modules.go`：移除旧 HTTP `route()` 与 `/api/v1/` Handler 分发逻辑。
+   - `apps/backend/main.go`：已移除 `/api/v1/` 向 `ecommerce.Handler()` 的旧元数据路由挂载（保留 `ecom.RPCPrefix` 与 `GET /openapi.json`）。
+   - `apps/backend/internal/ecom/http.go` & `modules.go`：已移除旧 HTTP `route()` 与 `/api/v1/` Handler 分发逻辑。
 
 2. **初筛模块（`apps/backend/internal/screening/`）**
    - `apps/backend/internal/screening/api.go`：`/api/v1/screening/` 的 HTTP `route()` 仅保留 4 个文件上传/下载端点（`upload`、`importDownload`、`exportDownload`），其余路径统一返回 `404`。
    - 保留 `verifyIdentity`（4 个文件流端点仍需 HMAC 签名验权）。
 
 3. **认证服务（`apps/auth/`）**
-   - `apps/auth/main.go`、`business.go`、`workspace.go`：移除已完全由 `AuthService` 接管的 20 个旧 JSON HTTP 路由注册（`/api/auth/session`、`/api/products*`、`/api/users*`、`/api/invitations*`、`/api/auth/registration/status` 等）。
+   - `apps/auth/main.go`、`business.go`、`workspace.go`、`internal/auth/registration.go`：已移除已完全由 `AuthService` 接管的 20 个旧 JSON HTTP 路由注册（`/api/auth/session`、`/api/products*`、`/api/users*`、`/api/invitations*`、`/api/auth/registration/status`、`/api/auth/company`、`/api/auth/join-requests*`），并删除废弃的 `business_transport.go`。
    - 保留 `s.auth.Register(mux)` 中必要的浏览器 Cookie / OIDC / 注册表单与 `registration/prepare` 端点。
 
-### Step 3.2：拆除 Connect 层的“伪 REST 字符串路径路由”
+### Step 3.2：拆除 Connect 层的“伪 REST 字符串路径路由”（已完成）
 
-当前最核心的过渡态债务是：Connect Handler 拿到强类型 Proto 请求后，又退化成字符串路径 + `map[string]any` 分发（例如 `screening_connect.go` 中的 `s.screeningRPC(ctx, "GET", "products/"+req.Msg.GetId()+"/family", ...)`）。
+> 状态：**已完成**（全部 80 个 Connect RPC 已改为直调具名 Go 用例，`executeScreening`、`executeEcom`、`monitorUsecase` 与 `auth` 按 HTTP Method 分支的复合函数已全部拆除）。
 
-收口改造（可按模块分 PR 执行）：
+1. **`apps/backend/internal/screening/screening_connect.go` & `api.go`**
+   - 37 个 RPC 方法已全部改为**直接调用对应具名 Go 用例函数**，已删除 `screeningCommand`、`executeScreening` 整套伪 HTTP 路由分发器。
+   - **幂等指纹兼容**：已抽取共享的 `buildIdempotencyHash(method, canonicalPath, rawQuery, body)` 辅助函数供 `ScreeningService` 与 `ScreeningImportService` 共用，与既有 `ps_idempotency` 指纹算法完全一致。
 
-1. **`apps/backend/internal/screening/screening_connect.go`**
-   - 将 37 个 RPC 方法逐批改为**直接调用对应具名 Go 用例函数**（如 `productsUsecase`、`summaryUsecase`、`mutateProduct`、`saveProfit`、`reviewWorkspaceUsecase` 等），参考 `import_connect.go` 中 `ListImports` 与 `import_mutations_connect.go` 中 `GetImportRemovalPreview` 的直调方式。
-   - 删除 `screeningCommand`、`executeScreening` 整套伪 HTTP 路由分发器。
-   - **幂等指纹兼容**：抽取独立的 `buildIdempotencyHash(method, canonicalPath, rawQuery, body)` 辅助函数，保持与既有 `ps_idempotency` 表内指纹算法一致，避免切流后重放失效。
-
-2. **`apps/backend/internal/ecom/connect.go` & `modules.go`**
-   - 将 14 个 RPC 方法改为直接调用具名函数（如 `listCategories`、`researchProducts`、`scoreProduct`、`generateListing`、`analyzeReviews`、`optimizeAds` 以及 `monitor` 拆出的 5 个具体方法），删除 `executeEcom` 和 `monitorUsecase` 里的字符串路径解析。
+2. **`apps/backend/internal/ecom/connect.go`、`modules.go` & `monitor.go`**
+   - 14 个 RPC 方法已全部改为直接调用具名函数（`listResearchCategories`、`researchProducts`、`scoreProduct`、`listListingLanguages`、`generateListing`、`optimizeListing`、`analyzeReviews`、`analyzeReviewsLegacy`、`optimizeAdsRequest` 以及监控 5 个独立方法），已删除 `executeEcom` 和 `monitorUsecase`。
 
 3. **`apps/auth/connect.go` & `business.go`**
-   - 将 `productsUsecase`、`invitationsUsecase` 等按 HTTP Method 分支的复合函数拆分为清晰的具名方法（`ListProducts`、`CreateProduct`、`UpdateProduct`、`DeleteProduct` 等），由 `AuthService` RPC 方法直接调用。
+   - 已将 `productsUsecase`、`changeMemberUsecase`、`invitationsUsecase` 等复合函数拆分为 13 个清晰具名方法并由 `AuthService` RPC 方法直接调用。
 
-### Step 3.3：测试与兼容投影收口
+### Step 3.3：测试与兼容投影收口（测试迁移已完成，`legacy_fields` 退出待后续迭代）
 
-- **保留并强化**：
-  - `apps/web/tests/rpc-coverage.test.mjs`（确保 50 个暴露路由 = 46 个 RPC + 4 个文件流，不遗漏也不退化）；
-  - `apps/web/tests/rpc-compat.test.mjs` 与 `import-connect.test.mjs`；
-  - Go 端 RPC 身份签名、过期、跨租户隔离、幂等冲突、最后管理员保护等安全回归测试。
-- **清理冗余**：
-  - 移除仅用于验证“旧 HTTP vs 新 Connect 投影一致”且对应旧 HTTP 已下线的对比测试代码。
-- **规划 `legacy_fields` / `omitted_fields` 逐步退出**：
+- **已完成**：
+  - Go 端 `ecom`、`screening`、`auth` 集成/契约测试已迁移至直接验证 Connect RPC，并新增旧元数据 HTTP 路由返回 `404` 及 `buildIdempotencyHash` 回归断言；
+  - 保留 `apps/web/tests/rpc-coverage.test.mjs`、`rpc-compat.test.mjs`、`import-connect.test.mjs` 与 Go 端身份签名、跨租户隔离、幂等冲突、最后管理员保护等安全回归测试。
+- **待后续迭代规划 `legacy_fields` / `omitted_fields` 逐步退出**：
   - 盘点仍写入 `legacy_fields` 的字段，前端真正消费的字段按 Proto 演进规范（遵守 `buf breaking` FILE 级别，**只增新字段号、不复用/删改旧编号**）提升为具名字段，为后续移除 `packages/rpccompat` 创造条件。
 
 ---

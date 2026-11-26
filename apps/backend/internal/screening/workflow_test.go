@@ -11,9 +11,15 @@ import (
 	"fmt"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/xuri/excelize/v2"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 	"mime/multipart"
 	"net/http/httptest"
+	"net/url"
 	"os"
+	screeningv1 "seller-ops/contracts/sellerops/screening/v1"
+	"seller-ops/contracts/sellerops/screening/v1/screeningv1connect"
+	"seller-ops/rpccompat"
 	"strings"
 	"testing"
 	"time"
@@ -98,24 +104,126 @@ func TestImportHTTPWorkflow(t *testing.T) {
 	defer func() { cancel(); <-done }()
 	call := func(method, path, content string, data []byte) Object {
 		t.Helper()
-		r := httptest.NewRequest(method, "http://screening/api/v1/screening/"+path, bytes.NewReader(data))
-		r.Header.Set("Content-Type", content)
-		stamp := fmt.Sprint(time.Now().Unix())
-		r.Header.Set("x-seller-user", "7")
-		r.Header.Set("x-seller-workspace", "501")
-		r.Header.Set("x-seller-role", "owner")
-		r.Header.Set("x-screening-time", stamp)
-		r.Header.Set("Idempotency-Key", uuid())
-		mac := hmac.New(sha256.New, []byte(s.cfg.Secret))
-		mac.Write([]byte(strings.Join([]string{stamp, method, r.URL.RequestURI(), "7", "501", "owner"}, "\n")))
-		r.Header.Set("x-screening-signature", hex.EncodeToString(mac.Sum(nil)))
-		w := httptest.NewRecorder()
-		handler.ServeHTTP(w, r)
-		if w.Code < 200 || w.Code >= 300 {
-			t.Fatalf("%s %s HTTP %d %s", method, path, w.Code, w.Body.String())
+		sign := func(r *httptest.ResponseRecorder, reqMethod, target string, body []byte, ct string) {
+			req := httptest.NewRequest(reqMethod, "http://screening"+target, bytes.NewReader(body))
+			if ct != "" {
+				req.Header.Set("Content-Type", ct)
+			}
+			if strings.HasPrefix(target, "/sellerops.") {
+				req.Header.Set("Connect-Protocol-Version", "1")
+			}
+			stamp := fmt.Sprint(time.Now().Unix())
+			req.Header.Set("x-seller-user", "7")
+			req.Header.Set("x-seller-workspace", "501")
+			req.Header.Set("x-seller-role", "owner")
+			req.Header.Set("x-screening-time", stamp)
+			req.Header.Set("Idempotency-Key", uuid())
+			mac := hmac.New(sha256.New, []byte(s.cfg.Secret))
+			mac.Write([]byte(strings.Join([]string{stamp, reqMethod, req.URL.RequestURI(), "7", "501", "owner"}, "\n")))
+			req.Header.Set("x-screening-signature", hex.EncodeToString(mac.Sum(nil)))
+			handler.ServeHTTP(r, req)
 		}
-		out := decodeObject(w.Body.Bytes())
-		return out
+		if method == "POST" && path == "imports" {
+			w := httptest.NewRecorder()
+			sign(w, "POST", "/api/v1/screening/imports", data, content)
+			if w.Code < 200 || w.Code >= 300 {
+				t.Fatalf("%s %s HTTP %d %s", method, path, w.Code, w.Body.String())
+			}
+			return decodeObject(w.Body.Bytes())
+		}
+		rawPath, rawQuery, _ := strings.Cut(path, "?")
+		parts := strings.Split(rawPath, "/")
+		if method == "POST" && len(parts) == 3 && parts[0] == "imports" && parts[2] == "commit" {
+			payload := Object{"id": parts[1], "mutation": Object{"idempotency_key": uuid()}}
+			w := httptest.NewRecorder()
+			sign(w, "POST", screeningv1connect.ScreeningImportServiceCommitImportProcedure, encoded(payload), "application/json")
+			if w.Code != 200 {
+				t.Fatalf("CommitImport HTTP %d %s", w.Code, w.Body.String())
+			}
+			var resp screeningv1.CommitImportResponse
+			if err := protojson.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+				t.Fatal(err)
+			}
+			return decodeObject(encoded(submissionLegacy(resp.Submission)))
+		}
+		var procedure, id string
+		var reqMsg, respMsg proto.Message
+		switch {
+		case method == "GET" && rawPath == "products":
+			procedure, reqMsg, respMsg = "ListProducts", &screeningv1.ListProductsRequest{}, &screeningv1.ListProductsResponse{}
+		case method == "GET" && rawPath == "summary":
+			procedure, reqMsg, respMsg = "GetSummary", &screeningv1.GetSummaryRequest{}, &screeningv1.GetSummaryResponse{}
+		case method == "GET" && len(parts) == 2 && parts[0] == "products":
+			procedure, id, reqMsg, respMsg = "GetProduct", parts[1], &screeningv1.GetProductRequest{}, &screeningv1.GetProductResponse{}
+		case method == "GET" && len(parts) == 3 && parts[0] == "products" && parts[2] == "family":
+			procedure, id, reqMsg, respMsg = "GetProductFamily", parts[1], &screeningv1.GetProductFamilyRequest{}, &screeningv1.GetProductFamilyResponse{}
+		case method == "GET" && len(parts) == 3 && parts[0] == "products" && parts[2] == "monthly":
+			procedure, id, reqMsg, respMsg = "ListProductMonthly", parts[1], &screeningv1.ListProductMonthlyRequest{}, &screeningv1.ListProductMonthlyResponse{}
+		case method == "PATCH" && len(parts) == 3 && parts[0] == "products" && parts[2] == "review":
+			procedure, id, reqMsg, respMsg = "ReviewProduct", parts[1], &screeningv1.ReviewProductRequest{}, &screeningv1.ReviewProductResponse{}
+		case method == "POST" && len(parts) == 3 && parts[0] == "products" && parts[2] == "profit-scenarios":
+			procedure, id, reqMsg, respMsg = "SaveProfitScenario", parts[1], &screeningv1.SaveProfitScenarioRequest{}, &screeningv1.SaveProfitScenarioResponse{}
+		case method == "POST" && rawPath == "review-batches/preview":
+			procedure, reqMsg, respMsg = "CreateReviewPreview", &screeningv1.CreateReviewPreviewRequest{}, &screeningv1.CreateReviewPreviewResponse{}
+		case method == "POST" && len(parts) == 3 && parts[0] == "review-batches" && parts[2] == "apply":
+			procedure, id, reqMsg, respMsg = "ApplyReviewBatch", parts[1], &screeningv1.ApplyReviewBatchRequest{}, &screeningv1.ApplyReviewBatchResponse{}
+		case method == "POST" && len(parts) == 3 && parts[0] == "review-batches" && parts[2] == "undo":
+			procedure, id, reqMsg, respMsg = "UndoReviewBatch", parts[1], &screeningv1.UndoReviewBatchRequest{}, &screeningv1.UndoReviewBatchResponse{}
+		case method == "POST" && rawPath == "profit/batches":
+			procedure, reqMsg, respMsg = "CreateProfitBatch", &screeningv1.CreateProfitBatchRequest{}, &screeningv1.CreateProfitBatchResponse{}
+		case method == "POST" && rawPath == "exports":
+			procedure, reqMsg, respMsg = "CreateExport", &screeningv1.CreateExportRequest{}, &screeningv1.CreateExportResponse{}
+		case method == "POST" && len(parts) == 3 && parts[0] == "policies" && parts[2] == "activate":
+			procedure, id, reqMsg, respMsg = "ActivatePolicy", parts[1], &screeningv1.ActivatePolicyRequest{}, &screeningv1.ActivatePolicyResponse{}
+		default:
+			t.Fatalf("unmapped workflow RPC %s %s", method, path)
+		}
+		payload := Object{}
+		if id != "" {
+			payload["id"] = id
+		}
+		if rawQuery != "" {
+			qv, err := url.ParseQuery(rawQuery)
+			if err != nil {
+				t.Fatal(err)
+			}
+			extra := Object{}
+			for k, vals := range qv {
+				extra[k] = Object{"values": vals}
+			}
+			payload["query"] = Object{"extra": extra}
+		}
+		if method != "GET" {
+			orig := ""
+			if rawQuery != "" {
+				orig = "?" + rawQuery
+			}
+			payload["mutation"] = Object{"idempotency_key": uuid(), "original_query": orig}
+			if len(data) > 0 {
+				payload["body"] = decodeObject(data)
+			}
+		}
+		if err := rpccompat.FromLegacy(reqMsg, payload); err != nil {
+			t.Fatal(procedure, err)
+		}
+		reqBytes, err := protojson.Marshal(reqMsg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		w := httptest.NewRecorder()
+		sign(w, "POST", ScreeningRPCPrefix+procedure, reqBytes, "application/json")
+		if w.Code != 200 {
+			t.Fatalf("%s (%s %s) HTTP %d %s", procedure, method, path, w.Code, w.Body.String())
+		}
+		if err := protojson.Unmarshal(w.Body.Bytes(), respMsg); err != nil {
+			t.Fatal(err)
+		}
+		dataField := respMsg.ProtoReflect().Descriptor().Fields().ByName("data")
+		projected, err := rpccompat.Legacy(respMsg.ProtoReflect().Get(dataField).Message().Interface())
+		if err != nil {
+			t.Fatal(err)
+		}
+		return decodeObject(encoded(projected))
 	}
 	wait := func(id string) Object {
 		t.Helper()

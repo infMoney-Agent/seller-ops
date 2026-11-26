@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	_ "embed"
-	"encoding/json"
 	"log"
 	"net"
 	"net/http"
@@ -104,8 +103,6 @@ func main() {
 	mux := http.NewServeMux()
 	s.auth.Register(mux)
 	s.registerAuthRPC(mux)
-	mux.HandleFunc("GET /api/auth/session", s.session)
-	s.registerBusiness(mux)
 	listenAddr := os.Getenv("SELLER_LISTEN_ADDR")
 	if listenAddr == "" {
 		listenAddr = ":8080"
@@ -162,14 +159,4 @@ func required(name string) string {
 		log.Fatal("missing ", name)
 	}
 	return value
-}
-
-func decode(w http.ResponseWriter, r *http.Request, dest any) bool {
-	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(dest); err != nil {
-		httpresponse.Fail(w, 400, "invalid request")
-		return false
-	}
-	return true
 }
