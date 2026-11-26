@@ -1,6 +1,15 @@
 'use client';
 /* oxlint-disable react/no-unstable-nested-components -- TanStack column renderers are stable useMemo callbacks. */
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  Fragment,
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState
+} from 'react';
 import Image from 'next/image';
 import { useQueryClient } from '@tanstack/react-query';
 import {
@@ -20,26 +29,19 @@ import { useSellerSession } from '@/features/auth/session';
 import { cn } from '@/lib/utils';
 import { useJob, useScreeningQuery } from '../queries';
 import { download, request } from '../service';
-import type {
-  ImportRecord,
-  JobCreated,
-  PageResult,
-  Product,
-  ReviewStatus,
-  FamilyResult
-} from '../types';
+import type { ImportRecord, JobCreated, PageResult, Policy, Product, FamilyResult } from '../types';
 import { childSales } from '../sales';
 import { productTrademark, trademarkOptionLabel } from '../trademark';
 import { useTableTextAlignment } from '../use-table-text-alignment';
 import { countryCode, listingAge, shanghaiToday } from '../product-display';
+import AsinTools from './AsinTools';
 import ImportDialog from './ImportDialog';
+import ReviewDrawer from './ReviewDrawer';
 import ReviewPanel from './ReviewPanel';
 import BilingualProductTitle from './BilingualProductTitle';
 import BatchReviewDialog from './BatchReviewDialog';
 import ProfitPanel from './ProfitPanel';
 import PolicyPanel from './PolicyPanel';
-import ProductParameters from './ProductParameters';
-import FamilyPanel from './FamilyPanel';
 import ParentMonthlyPanel from './ParentMonthlyPanel';
 import MonthlyHistory, { periodLabels } from './MonthlyHistory';
 import {
@@ -50,23 +52,51 @@ import {
   Input,
   TableScroll,
   formatMoney,
+  labels,
   type Action
 } from './shared';
 
+const ChildRowContext = createContext<{ isChild: boolean; index: number }>({
+  isChild: false,
+  index: 0
+});
+
+function stickyColumnClass(columnId: string, isHeader: boolean) {
+  if (columnId === 'selection') {
+    return cn(
+      'md:sticky md:left-0',
+      isHeader ? 'bg-muted md:z-30' : 'bg-card group-hover/row:bg-muted/40 md:z-20'
+    );
+  }
+  if (columnId === 'asin') {
+    return cn(
+      'md:sticky md:left-10 md:shadow-[4px_0_10px_-4px_rgba(15,23,42,0.08)] dark:md:shadow-[4px_0_12px_-4px_rgba(0,0,0,0.4)]',
+      isHeader ? 'bg-muted md:z-30' : 'bg-card group-hover/row:bg-muted/40 md:z-20'
+    );
+  }
+  if (columnId === 'actions') {
+    return cn(
+      'md:sticky md:right-0 md:shadow-[-4px_0_10px_-4px_rgba(15,23,42,0.08)] dark:md:shadow-[-4px_0_12px_-4px_rgba(0,0,0,0.4)]',
+      isHeader ? 'bg-muted md:z-30' : 'bg-card group-hover/row:bg-muted/40 md:z-20'
+    );
+  }
+  return undefined;
+}
+
 const minimumColumnWidths: ColumnSizingState = {
   selection: 40,
-  asin: 156,
+  asin: 164,
   price_usd: 104,
   monthly_sales: 88,
-  rating_reviews: 132,
+  rating_reviews: 120,
   listing_date: 90,
-  dimensions: 120,
+  dimensions: 124,
   seller: 92,
   decision: 96,
-  review_status: 88,
-  margin: 88,
-  profit: 104,
-  actions: 56
+  review_status: 92,
+  margin: 84,
+  profit: 96,
+  actions: 64
 };
 function fittedColumnWidths(width: number): ColumnSizingState {
   const minimum = Object.values(minimumColumnWidths).reduce((a, b) => a + b, 0);
@@ -156,6 +186,41 @@ export default function ScreeningPage() {
   }
   const [familyRows, setFamilyRows] = useState<Record<string, boolean>>({});
   const [focus, setFocus] = useState<Product | null>(null);
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const openReview = useCallback((product: Product) => {
+    setFocus(product);
+    setReviewOpen(true);
+  }, []);
+  const openProfit = useCallback((product: Product) => {
+    setReviewOpen(false);
+    setFocus(product);
+    setTab(3);
+  }, []);
+  useEffect(() => {
+    if (tab !== 0) return;
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key !== '/' || event.metaKey || event.ctrlKey || event.altKey) return;
+      const target = event.target as HTMLElement | null;
+      if (
+        target &&
+        (['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName) || target.isContentEditable)
+      ) {
+        return;
+      }
+      if (
+        document.querySelector(
+          'dialog[open], [data-slot="dialog-content"][data-open], [data-slot="sheet-content"]'
+        )
+      ) {
+        return;
+      }
+      event.preventDefault();
+      searchInputRef.current?.focus();
+    }
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [tab]);
   const [group, setGroup] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
@@ -213,6 +278,8 @@ export default function ScreeningPage() {
       )
   );
   const imports = useScreeningQuery<PageResult<ImportRecord>>('/imports');
+  const policies = useScreeningQuery<{ items: Policy[] }>('/policies');
+  const activePolicy = policies.data?.items.find((item) => item.active);
   const trademarks = useScreeningQuery<{
     items: { value: string; label: string; count: number }[];
   }>(
@@ -250,6 +317,7 @@ export default function ScreeningPage() {
     setFamilyRows({});
     setGroup(null);
     setFocus(null);
+    setReviewOpen(false);
     setShowAdvanced(false);
   }
   const selectedIds = Object.keys(selected).filter((id) => selected[id]);
@@ -262,6 +330,32 @@ export default function ScreeningPage() {
     return [...ids];
   }, [products.data?.items]);
   const pageSelectedCount = pageSelectionIds.filter((id) => selected[id]).length;
+  const hiddenSelectedVariantCount = useMemo(() => {
+    let total = 0;
+    for (const product of products.data?.items ?? []) {
+      if (familyRows[product.id]) continue;
+      for (const memberId of product.family_member_ids ?? []) {
+        if (memberId !== product.id && selected[memberId]) total += 1;
+      }
+    }
+    return total;
+  }, [familyRows, products.data?.items, selected]);
+  const expandablePageIds = useMemo(
+    () => (products.data?.items ?? []).filter((p) => (p.family_count || 1) > 1).map((p) => p.id),
+    [products.data?.items]
+  );
+  const allFamiliesExpanded =
+    expandablePageIds.length > 0 && expandablePageIds.every((id) => Boolean(familyRows[id]));
+  const toggleExpandAllFamilies = useCallback(() => {
+    setFamilyRows((old) => {
+      const next = { ...old };
+      for (const id of expandablePageIds) {
+        if (allFamiliesExpanded) delete next[id];
+        else next[id] = true;
+      }
+      return next;
+    });
+  }, [allFamiliesExpanded, expandablePageIds]);
   const allPageSelected =
     pageSelectionIds.length > 0 && pageSelectedCount === pageSelectionIds.length;
   const toggleAllPage = useCallback(() => {
@@ -305,6 +399,7 @@ export default function ScreeningPage() {
     setSelected({});
     setFamilyRows({});
     setFocus(null);
+    setReviewOpen(false);
     setImportOpen(false);
     setGroup(null);
     setJobs([]);
@@ -361,83 +456,18 @@ export default function ScreeningPage() {
         accessorKey: 'asin',
         header: '商品',
         cell: ({ row }) => (
-          <div className='flex min-w-0 items-center gap-2'>
-            {row.original.image_url && (
-              <Image
-                unoptimized
-                width={64}
-                height={64}
-                src={row.original.image_url}
-                alt=''
-                className='h-14 w-14 shrink-0 rounded-md border bg-white object-contain'
-                loading='lazy'
-                referrerPolicy='no-referrer'
-              />
-            )}
-            <div>
-              <div className='flex flex-wrap items-center gap-1'>
-                <button
-                  className='break-all text-xs font-semibold underline-offset-4 hover:underline'
-                  title='打开商品复核'
-                  onClick={() => setFocus(row.original)}
-                >
-                  {row.original.asin}
-                </button>
-                <AsinTools asin={row.original.asin} />
-                <span
-                  className='bg-muted text-muted-foreground rounded border px-1.5 py-0.5 text-[11px]'
-                  title={productTrademark(row.original).title}
-                >
-                  {productTrademark(row.original).label}
-                </span>
-              </div>
-              <BilingualProductTitle product={row.original} />
-              <div className='flex flex-wrap items-center gap-x-1 gap-y-0.5 text-xs'>
-                <span>父体：{row.original.parent_asin || '未知'}</span>
-                {(row.original.family_count || 1) > 1 && (
-                  <Button
-                    size='sm'
-                    variant='ghost'
-                    className='h-6 px-1 text-xs'
-                    aria-label={`${familyRows[row.original.id] ? '收起' : '展开'} ${row.original.parent_asin} 的子体`}
-                    aria-expanded={Boolean(familyRows[row.original.id])}
-                    aria-controls={`family-${row.original.id}`}
-                    onClick={() =>
-                      setFamilyRows((old) => ({ ...old, [row.original.id]: !old[row.original.id] }))
-                    }
-                  >
-                    {familyRows[row.original.id] ? (
-                      <Icons.chevronDown className='size-3' />
-                    ) : (
-                      <Icons.chevronRight className='size-3' />
-                    )}
-                    {row.original.family_count} 个子体
-                  </Button>
-                )}
-                {row.original.manual_category && (
-                  <span>· 人工分类：{row.original.manual_category}</span>
-                )}
-              </div>
-              <p className='text-muted-foreground text-xs'>
-                {row.original.stat_month?.slice(0, 7)} ·{' '}
-                {periodLabels[row.original.period_type || ''] || '暂无分期数据'}
-              </p>
-            </div>
-          </div>
+          <ProductIdentityCell
+            product={row.original}
+            familyRows={familyRows}
+            setFamilyRows={setFamilyRows}
+            onOpenReview={openReview}
+          />
         )
       },
       {
         accessorKey: 'price_usd',
         header: '价格 USD',
-        cell: ({ row }) => (
-          <PriceHistoryCard
-            product={row.original}
-            onCalculate={(product) => {
-              setFocus(product);
-              setTab(3);
-            }}
-          />
-        )
+        cell: ({ row }) => <PriceHistoryCard product={row.original} onCalculate={openProfit} />
       },
       {
         accessorKey: 'monthly_sales',
@@ -524,38 +554,90 @@ export default function ScreeningPage() {
       {
         accessorKey: 'review_status',
         header: '人工结论',
-        cell: ({ row }) => (
-          <div>
-            <Badge value={row.original.review_status} />
-            <p className='max-w-40 text-xs'>{row.original.review_reason}</p>
-            {row.original.has_reference && (
-              <span className='text-muted-foreground text-xs'>有人工样本</span>
-            )}
-          </div>
-        )
+        cell: ({ row }) => {
+          const isPending = row.original.review_status === 'pending';
+          return (
+            <div className='space-y-1'>
+              <button
+                type='button'
+                title='点击修改人工复核结论'
+                onClick={() => openReview(row.original)}
+                className={cn(
+                  'inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset transition-colors',
+                  row.original.review_status === 'kept'
+                    ? 'bg-emerald-50 text-emerald-700 ring-emerald-600/20 hover:bg-emerald-100/80 dark:bg-emerald-500/10 dark:text-emerald-300 dark:hover:bg-emerald-500/20'
+                    : row.original.review_status === 'excluded'
+                      ? 'bg-red-50 text-red-700 ring-red-600/20 hover:bg-red-100/80 dark:bg-red-500/10 dark:text-red-300 dark:hover:bg-red-500/20'
+                      : 'bg-amber-50 text-amber-700 ring-amber-600/25 hover:bg-amber-100/80 dark:bg-amber-500/10 dark:text-amber-300 dark:hover:bg-amber-500/20'
+                )}
+              >
+                {isPending && (
+                  <span
+                    aria-hidden='true'
+                    className='size-1.5 animate-pulse rounded-full bg-amber-500'
+                  />
+                )}
+                <span>{labels[row.original.review_status] || row.original.review_status}</span>
+              </button>
+              {row.original.review_reason && (
+                <p className='text-muted-foreground mx-auto max-w-40 text-xs'>
+                  {row.original.review_reason}
+                </p>
+              )}
+              {row.original.has_reference && (
+                <span className='text-muted-foreground block text-xs'>有人工样本</span>
+              )}
+            </div>
+          );
+        }
       },
       {
         id: 'margin',
         header: '利润率',
         cell: ({ row }) => {
           const margin = row.original.profit_output?.margin;
-          return margin !== undefined && margin !== null && margin !== ''
-            ? (Number(margin) * 100).toFixed(2) + '%'
-            : '待测算';
+          return margin !== undefined && margin !== null && margin !== '' ? (
+            <span
+              className={cn(
+                'font-mono font-semibold tabular-nums',
+                Number(margin) >= 0.25 && 'text-emerald-600 dark:text-emerald-400'
+              )}
+            >
+              {(Number(margin) * 100).toFixed(2)}%
+            </span>
+          ) : (
+            <button
+              type='button'
+              onClick={() => openProfit(row.original)}
+              className='text-muted-foreground hover:text-foreground text-xs underline decoration-dotted underline-offset-2'
+            >
+              待测算
+            </button>
+          );
         }
       },
       {
         id: 'profit',
         header: '预计利润',
         cell: ({ row }) => (
-          <div>
-            {row.original.profit_output?.profit_usd
-              ? `$${row.original.profit_output.profit_usd}`
-              : '待测算'}
+          <div className='space-y-0.5'>
+            {row.original.profit_output?.profit_usd ? (
+              <span className='font-mono font-semibold tabular-nums'>
+                ${row.original.profit_output.profit_usd}
+              </span>
+            ) : (
+              <button
+                type='button'
+                onClick={() => openProfit(row.original)}
+                className='text-muted-foreground hover:text-foreground text-xs underline decoration-dotted underline-offset-2'
+              >
+                待测算
+              </button>
+            )}
             {row.original.profit_data_revision !== null &&
               (row.original.profit_data_revision !== row.original.data_revision ||
                 row.original.profit_monthly_revision !== row.original.monthly_revision) && (
-                <p className='text-xs'>来源已更新</p>
+                <p className='text-amber-600 dark:text-amber-400 text-xs'>来源已更新</p>
               )}
           </div>
         )
@@ -564,18 +646,15 @@ export default function ScreeningPage() {
         id: 'actions',
         header: '操作',
         cell: ({ row }) => (
-          <div className='flex flex-col items-stretch gap-1 [&>button]:h-7 [&>button]:px-1'>
-            <Button size='sm' variant='ghost' onClick={() => setFocus(row.original)}>
-              复核
-            </Button>
+          <div className='flex flex-col items-stretch gap-1 [&>button]:h-7 [&>button]:px-2 [&>button]:text-xs'>
             <Button
               size='sm'
-              variant='ghost'
-              onClick={() => {
-                setFocus(row.original);
-                setTab(3);
-              }}
+              variant={row.original.review_status === 'pending' ? 'default' : 'outline'}
+              onClick={() => openReview(row.original)}
             >
+              复核
+            </Button>
+            <Button size='sm' variant='ghost' onClick={() => openProfit(row.original)}>
               测算
             </Button>
             {row.original.group_key && (
@@ -597,6 +676,8 @@ export default function ScreeningPage() {
     [
       allPageSelected,
       familyRows,
+      openProfit,
+      openReview,
       pageSelectedCount,
       pageSelectionIds,
       products.isPlaceholderData,
@@ -642,33 +723,60 @@ export default function ScreeningPage() {
         pageTitle='产品初筛'
         pageDescription='导入、筛选、人工复核与利润测算，保留每次判断的来源。'
         pageHeaderAction={
-          <div className='flex items-center gap-2'>
-            {tab === 0 && (
-              <Button size='sm' onClick={() => setImportOpen(true)}>
-                导入商品
-              </Button>
-            )}
+          <div className='flex flex-wrap items-center justify-end gap-2'>
+            <button
+              type='button'
+              title='查看或调整初筛规则版本'
+              onClick={() => setTab(4)}
+              className='bg-muted/70 text-foreground hover:border-primary/40 hidden items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors sm:inline-flex'
+            >
+              <span aria-hidden='true' className='size-1.5 rounded-full bg-emerald-500' />
+              <span>
+                {activePolicy
+                  ? `规则库 ${activePolicy.name} v${activePolicy.version} · 机筛后人工复核`
+                  : '规则库默认策略 · 机筛后人工复核'}
+              </span>
+            </button>
             <Button
               size='sm'
               variant='outline'
               disabled={products.isFetching}
               onClick={() => void refresh()}
             >
+              <Icons.ecomRefreshCw
+                aria-hidden='true'
+                className={cn('size-3.5', products.isFetching && 'animate-spin')}
+              />
               {products.isFetching ? '刷新中…' : '刷新'}
             </Button>
+            {tab === 0 && (
+              <Button size='sm' onClick={() => setImportOpen(true)}>
+                <Icons.ecomPlus aria-hidden='true' className='size-3.5' />
+                导入商品
+              </Button>
+            )}
           </div>
         }
       >
         <div className='min-w-0 max-w-full space-y-4'>
-          <nav className='flex flex-wrap gap-2 border-b pb-3' aria-label='初筛工作台'>
+          <nav
+            className='bg-muted/60 inline-flex flex-wrap items-center gap-1 rounded-xl border p-1'
+            aria-label='初筛工作台'
+          >
             {tabs.map(({ title, id: i }) => (
-              <Button
+              <button
                 key={title}
-                variant={tab === i ? 'default' : 'ghost'}
+                type='button'
                 onClick={() => setTab(i)}
+                className={cn(
+                  'rounded-lg px-3.5 py-1.5 text-xs font-medium transition-all',
+                  tab === i
+                    ? 'bg-primary text-primary-foreground font-semibold shadow-2xs'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-background/60'
+                )}
               >
                 {title}
-              </Button>
+              </button>
             ))}
           </nav>
           {error && (
@@ -733,43 +841,107 @@ export default function ScreeningPage() {
           )}
           {tab === 0 && (
             <>
-              <div className='grid grid-cols-1 gap-2 sm:grid-cols-3'>
-                {[
-                  ['displayed', '商品数'],
-                  ['products', '子体商品数'],
-                  ['pending_displayed', '待复核']
-                ].map(([key, title]) => (
-                  <div
-                    key={key}
-                    className='bg-card flex items-center justify-between gap-2 rounded-lg border px-3 py-3'
-                  >
-                    <span className='text-muted-foreground text-xs'>{title}</span>
-                    <p className='text-xl font-semibold tabular-nums'>
-                      {counts.data?.[key]?.toLocaleString('zh-CN') ?? '—'}
-                    </p>
+              <div className='grid grid-cols-1 gap-3 sm:grid-cols-3'>
+                <div className='bg-card rounded-xl border p-4 shadow-2xs'>
+                  <div className='flex items-center justify-between gap-2'>
+                    <span className='text-muted-foreground text-xs font-medium'>商品数</span>
+                    <span className='bg-muted text-muted-foreground rounded-md px-2 py-0.5 text-[11px]'>
+                      当前筛选结果
+                    </span>
                   </div>
-                ))}
-              </div>
-              <section aria-label='商品筛选' className='bg-card space-y-3 rounded-lg border p-3'>
-                <div className='flex items-center justify-between gap-3'>
-                  <p className='text-muted-foreground text-xs'>
-                    默认最新一期 · 同父体折叠展示 · 点击价格销量查看历史
+                  <p className='mt-2 font-mono text-2xl font-bold tabular-nums'>
+                    {counts.data?.displayed?.toLocaleString('zh-CN') ?? '—'}
                   </p>
+                  <p className='text-muted-foreground mt-1 text-xs'>按父体折叠聚合计数</p>
+                </div>
+
+                <div className='bg-card rounded-xl border p-4 shadow-2xs'>
+                  <div className='flex items-center justify-between gap-2'>
+                    <span className='text-muted-foreground text-xs font-medium'>子体商品数</span>
+                    <span className='bg-muted text-muted-foreground rounded-md px-2 py-0.5 text-[11px]'>
+                      全部变体
+                    </span>
+                  </div>
+                  <p className='mt-2 font-mono text-2xl font-bold tabular-nums'>
+                    {counts.data?.products?.toLocaleString('zh-CN') ?? '—'}
+                  </p>
+                  <p className='text-muted-foreground mt-1 text-xs'>含未展开变体（尺寸 / 颜色）</p>
+                </div>
+
+                <div className='from-amber-500/[0.08] via-card to-card rounded-xl border border-amber-500/35 bg-gradient-to-br p-4 shadow-2xs'>
+                  <div className='flex items-center justify-between gap-2'>
+                    <span className='inline-flex items-center gap-1.5 text-xs font-semibold text-amber-700 dark:text-amber-300'>
+                      <span
+                        aria-hidden='true'
+                        className='size-2 animate-pulse rounded-full bg-amber-500'
+                      />
+                      <span>待复核</span>
+                    </span>
+                    <button
+                      type='button'
+                      onClick={() =>
+                        filter(
+                          'review_status',
+                          filters.review_status === 'pending' ? '' : 'pending'
+                        )
+                      }
+                      className='text-xs font-semibold text-amber-700 underline-offset-2 hover:underline dark:text-amber-300'
+                    >
+                      {filters.review_status === 'pending' ? '显示全部 →' : '仅看待复核 →'}
+                    </button>
+                  </div>
+                  <p className='mt-2 font-mono text-2xl font-bold tabular-nums text-amber-700 dark:text-amber-300'>
+                    {counts.data?.pending_displayed?.toLocaleString('zh-CN') ?? '—'}
+                  </p>
+                  <p className='text-muted-foreground mt-1 text-xs'>
+                    优先处理机器通过但尚未人工确认的商品
+                  </p>
+                </div>
+              </div>
+              <section
+                aria-label='商品筛选'
+                className='bg-card space-y-3 rounded-xl border p-4 shadow-2xs'
+              >
+                <div className='flex flex-wrap items-center justify-between gap-2'>
+                  <div className='flex flex-wrap items-center gap-2'>
+                    <p className='text-muted-foreground text-xs'>
+                      默认最新一期 · 同父体折叠展示 · 点击价格查看分期历史
+                    </p>
+                    {filterCount > 0 && (
+                      <span className='inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-300'>
+                        已应用筛选条件
+                      </span>
+                    )}
+                  </div>
                   <Button size='sm' variant='ghost' disabled={!filterCount} onClick={resetFilters}>
                     重置筛选{filterCount ? `（${filterCount}）` : ''}
                   </Button>
                 </div>
                 <div className='grid gap-3 sm:grid-cols-2 xl:grid-cols-4'>
                   <Field label='关键词 / ASIN'>
-                    <Input
-                      placeholder='搜索 ASIN 或商品标题'
-                      value={filters.q || ''}
-                      onChange={(e) => filter('q', e.target.value)}
-                    />
+                    <div className='relative flex items-center'>
+                      <Icons.search
+                        aria-hidden='true'
+                        className='text-muted-foreground pointer-events-none absolute left-2.5 size-4'
+                      />
+                      <Input
+                        ref={searchInputRef}
+                        placeholder='搜索 ASIN 或商品标题'
+                        className='pr-8 pl-8'
+                        value={filters.q || ''}
+                        onChange={(e) => filter('q', e.target.value)}
+                      />
+                      <kbd
+                        aria-hidden='true'
+                        className='bg-muted text-muted-foreground pointer-events-none absolute right-2 hidden rounded border px-1.5 py-0.5 font-mono text-[10px] sm:inline-block'
+                      >
+                        /
+                      </kbd>
+                    </div>
                   </Field>
                   <Field label='人工结论'>
                     <select
-                      className='h-9 w-full min-w-0 rounded-md border bg-background px-2 text-sm'
+                      className='bg-background h-9 w-full min-w-0 rounded-md border px-2.5 text-sm'
                       value={filters.review_status || ''}
                       onChange={(e) => filter('review_status', e.target.value)}
                     >
@@ -783,7 +955,7 @@ export default function ScreeningPage() {
                   </Field>
                   <Field label='机器结果'>
                     <select
-                      className='rounded border bg-transparent p-2'
+                      className='bg-background h-9 w-full min-w-0 rounded-md border px-2.5 text-sm'
                       value={filters.machine || ''}
                       onChange={(e) => filter('machine', e.target.value)}
                     >
@@ -797,7 +969,7 @@ export default function ScreeningPage() {
                   <Field label='商标分类'>
                     <select
                       name='trademark'
-                      className='h-9 w-full min-w-0 rounded-md border bg-background px-2 text-sm'
+                      className='bg-background h-9 w-full min-w-0 rounded-md border px-2.5 text-sm'
                       value={filters.trademark || ''}
                       onChange={(e) => {
                         filter('trademark', e.target.value);
@@ -846,10 +1018,9 @@ export default function ScreeningPage() {
                     id='screening-advanced-filters'
                     className='grid gap-3 border-t pt-3 sm:grid-cols-2 xl:grid-cols-4'
                   >
-                    {' '}
                     <Field label='推荐类型'>
                       <select
-                        className='rounded border bg-transparent p-2'
+                        className='bg-background h-9 w-full min-w-0 rounded-md border px-2.5 text-sm'
                         value={filters.recommendation || ''}
                         onChange={(e) => filter('recommendation', e.target.value)}
                       >
@@ -877,7 +1048,7 @@ export default function ScreeningPage() {
                     ))}
                     <Field label='来源批次'>
                       <select
-                        className='rounded border bg-transparent p-2'
+                        className='bg-background h-9 w-full min-w-0 rounded-md border px-2.5 text-sm'
                         value={filters.import_id || ''}
                         onChange={(e) => filter('import_id', e.target.value)}
                       >
@@ -891,7 +1062,7 @@ export default function ScreeningPage() {
                     </Field>
                     <Field label='人工样本'>
                       <select
-                        className='rounded border bg-transparent p-2'
+                        className='bg-background h-9 w-full min-w-0 rounded-md border px-2.5 text-sm'
                         value={filters.has_reference || ''}
                         onChange={(e) => filter('has_reference', e.target.value)}
                       >
@@ -903,33 +1074,76 @@ export default function ScreeningPage() {
                   </div>
                 )}
               </section>
-              <div className='bg-card flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2'>
-                <p role='status' className='text-sm'>
-                  本页已选 {pageSelectedCount} / {pageSelectionIds.length} 项（含未展开子体） ·
-                  跨页已选 {selectedIds.length} 项
-                </p>
-                <Button variant='outline' onClick={() => setSelected({})}>
-                  清空
-                </Button>
-                <Button disabled={!selectedIds.length} onClick={() => setBatchReviewOpen(true)}>
-                  批量复核
-                </Button>
-                <Button
-                  variant='outline'
-                  disabled={busy}
-                  onClick={() =>
-                    void act(async () => {
-                      const job = await request<JobCreated>(
-                        '/exports',
-                        'POST',
-                        selectedIds.length ? { product_ids: selectedIds } : { filters }
-                      );
-                      watch(job.job_id);
-                    }, '导出已排队')
-                  }
-                >
-                  {selectedIds.length ? '导出已选商品' : '导出筛选结果'}
-                </Button>
+              <div className='bg-card flex flex-wrap items-center justify-between gap-2.5 rounded-xl border px-3.5 py-2.5 shadow-2xs'>
+                <div className='flex flex-wrap items-center gap-2'>
+                  <p role='status' className='text-xs font-medium sm:text-sm'>
+                    本页已选 {pageSelectedCount} / {pageSelectionIds.length} 项 · 跨页已选{' '}
+                    {selectedIds.length} 项
+                  </p>
+                  {hiddenSelectedVariantCount > 0 && (
+                    <span className='rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-300'>
+                      含 {hiddenSelectedVariantCount} 个未展开子体
+                    </span>
+                  )}
+                  <Button size='sm' variant='outline' onClick={() => setSelected({})}>
+                    清空
+                  </Button>
+                  <Button
+                    size='sm'
+                    disabled={!selectedIds.length}
+                    onClick={() => setBatchReviewOpen(true)}
+                  >
+                    批量复核
+                  </Button>
+                </div>
+
+                <div className='flex flex-wrap items-center gap-2'>
+                  {expandablePageIds.length > 0 && (
+                    <Button size='sm' variant='outline' onClick={toggleExpandAllFamilies}>
+                      {allFamiliesExpanded ? '全部收起子体' : '全部展开子体'}
+                    </Button>
+                  )}
+                  <button
+                    type='button'
+                    onClick={() => {
+                      const active =
+                        filters.machine === 'passed' && filters.review_status === 'pending';
+                      setFilters((old) => ({
+                        ...old,
+                        machine: active ? '' : 'passed',
+                        review_status: active ? '' : 'pending'
+                      }));
+                      setPage(1);
+                      setFamilyRows({});
+                    }}
+                    className={cn(
+                      'inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-xs font-medium transition-all',
+                      filters.machine === 'passed' && filters.review_status === 'pending'
+                        ? 'border-amber-500 bg-amber-500/20 text-amber-800 ring-2 ring-amber-500/25 dark:text-amber-200'
+                        : 'border-amber-500/35 bg-amber-500/[0.08] text-amber-700 hover:bg-amber-500/15 dark:text-amber-300'
+                    )}
+                  >
+                    <span aria-hidden='true' className='size-1.5 rounded-full bg-amber-500' />
+                    <span>仅看机器通过待人工复核</span>
+                  </button>
+                  <Button
+                    size='sm'
+                    variant='outline'
+                    disabled={busy}
+                    onClick={() =>
+                      void act(async () => {
+                        const job = await request<JobCreated>(
+                          '/exports',
+                          'POST',
+                          selectedIds.length ? { product_ids: selectedIds } : { filters }
+                        );
+                        watch(job.job_id);
+                      }, '导出已排队')
+                    }
+                  >
+                    {selectedIds.length ? '导出已选商品' : '导出筛选结果'}
+                  </Button>
+                </div>
               </div>
               {products.isError && <p role='alert'>{products.error.message}</p>}
               {products.isFetching && products.data && (
@@ -952,10 +1166,10 @@ export default function ScreeningPage() {
                     data-screening-table
                     ref={setTableContainer}
                     aria-busy={products.isFetching}
-                    className='bg-card w-full min-w-0 max-w-full max-h-[65vh] overflow-x-auto overflow-y-auto overscroll-x-contain rounded-lg border [contain:inline-size] [&_td[data-fixed-align=left]]:text-left [&_td[data-fixed-align=left]_p]:text-left [&_tbody_p]:text-center [&_tbody_p[data-multiline=true]]:text-left [&_tbody_p[data-multiline=true]]:justify-start [&_[data-auto-align]]:text-center [&_[data-auto-align][data-multiline=true]]:text-left'
+                    className='screening-scroll bg-card w-full min-w-0 max-w-full max-h-[65vh] overflow-x-auto overflow-y-auto overscroll-x-contain rounded-xl border shadow-2xs [contain:inline-size] [&_td[data-fixed-align=left]]:text-left [&_td[data-fixed-align=left]_p]:text-left [&_tbody_p]:text-center [&_tbody_p[data-multiline=true]]:text-left [&_tbody_p[data-multiline=true]]:justify-start [&_[data-auto-align]]:text-center [&_[data-auto-align][data-multiline=true]]:text-left'
                   >
                     <table
-                      className='table-fixed text-center text-xs'
+                      className='border-separate border-spacing-0 table-fixed text-center text-xs'
                       style={{ width: table.getTotalSize() }}
                     >
                       <colgroup>
@@ -966,7 +1180,7 @@ export default function ScreeningPage() {
                       <caption className='sr-only'>
                         商品列表：商品信息、价格销量、尺寸重量、卖家、筛选与复核结果
                       </caption>
-                      <thead className='bg-muted sticky top-0 z-10 [&_th]:bg-muted'>
+                      <thead className='bg-muted sticky top-0 z-20 [&_th]:bg-muted'>
                         {table.getHeaderGroups().map((g) => (
                           <tr key={g.id}>
                             {g.headers.map((h) => (
@@ -974,7 +1188,10 @@ export default function ScreeningPage() {
                                 scope='col'
                                 key={h.id}
                                 aria-sort={sortDirection(filters.sort, h.column.id)}
-                                className='group relative whitespace-nowrap p-2 text-center align-middle has-[>button:not([data-column-resize])]:p-0'
+                                className={cn(
+                                  'group relative whitespace-nowrap border-b p-2 text-center align-middle has-[>button:not([data-column-resize])]:p-0',
+                                  stickyColumnClass(h.column.id, true)
+                                )}
                               >
                                 {sortFields[h.column.id] ? (
                                   <button
@@ -1050,7 +1267,10 @@ export default function ScreeningPage() {
                           <Fragment key={row.id}>
                             <tr
                               className={cn(
-                                'border-t',
+                                'group/row transition-colors',
+                                row.original.review_status === 'pending'
+                                  ? 'hover:bg-amber-500/[0.04]'
+                                  : 'hover:bg-muted/35',
                                 familyRows[row.original.id] && 'bg-primary/[0.035]',
                                 row.getIsSelected() && 'bg-muted/50'
                               )}
@@ -1063,7 +1283,10 @@ export default function ScreeningPage() {
                                       ? 'left'
                                       : undefined
                                   }
-                                  className='break-words px-2 py-2 align-middle [&>*]:min-w-0 [&>*]:max-w-full [&_p]:whitespace-normal'
+                                  className={cn(
+                                    'break-words border-b px-2 py-2.5 align-middle [&>*]:min-w-0 [&>*]:max-w-full [&_p]:whitespace-normal',
+                                    stickyColumnClass(cell.column.id, false)
+                                  )}
                                 >
                                   {flexRender(cell.column.columnDef.cell, cell.getContext())}
                                 </td>
@@ -1187,29 +1410,12 @@ export default function ScreeningPage() {
                         />{' '}
                         {p.asin} · {p.title}
                       </label>
-                      <Button size='sm' variant='outline' onClick={() => setFocus(p)}>
+                      <Button size='sm' variant='outline' onClick={() => openReview(p)}>
                         复核
                       </Button>
                     </div>
                   ))}
                 </section>
-              )}
-              {focus && (
-                <SingleReview
-                  key={`${focus.id}:${focus.review_revision}`}
-                  product={focus}
-                  act={act}
-                  busy={busy}
-                  close={() => setFocus(null)}
-                  onChooseFamily={(ids) => {
-                    setSelected(Object.fromEntries(ids.map((id) => [id, true])));
-                    setTab(2);
-                  }}
-                  onCalculate={(p) => {
-                    setFocus(p);
-                    setTab(3);
-                  }}
-                />
               )}
             </>
           )}
@@ -1238,6 +1444,18 @@ export default function ScreeningPage() {
           {tab === 4 && <PolicyPanel selected={selectedIds} act={act} watch={watch} busy={busy} />}
         </div>
       </PageContainer>
+      <ReviewDrawer
+        open={reviewOpen}
+        product={focus}
+        act={act}
+        busy={busy}
+        onClose={() => setReviewOpen(false)}
+        onChooseFamily={(ids) => {
+          setSelected(Object.fromEntries(ids.map((id) => [id, true])));
+          setTab(2);
+        }}
+        onCalculate={openProfit}
+      />
       <BatchReviewDialog
         key={'batch-' + session.workspaceId}
         open={batchReviewOpen}
@@ -1260,6 +1478,7 @@ export default function ScreeningPage() {
         onRemoved={(id) => {
           setSelected({});
           setFocus(null);
+          setReviewOpen(false);
           setFamilyRows({});
           setGroup(null);
           setFilters((old) => {
@@ -1270,6 +1489,115 @@ export default function ScreeningPage() {
           });
         }}
       />
+    </div>
+  );
+}
+
+function ProductIdentityCell({
+  product,
+  familyRows,
+  setFamilyRows,
+  onOpenReview
+}: {
+  product: Product;
+  familyRows: Record<string, boolean>;
+  setFamilyRows: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
+  onOpenReview: (product: Product) => void;
+}) {
+  const childCtx = useContext(ChildRowContext);
+  const expanded = Boolean(familyRows[product.id]);
+  const hasFamily = !childCtx.isChild && (product.family_count || 1) > 1;
+  return (
+    <div
+      className={cn(
+        'flex min-w-0 items-start gap-2.5',
+        childCtx.isChild && 'border-primary/30 border-l-2 pl-2.5'
+      )}
+    >
+      {product.image_url ? (
+        <Image
+          unoptimized
+          width={52}
+          height={52}
+          src={product.image_url}
+          alt=''
+          className='size-12 shrink-0 rounded-lg border bg-white object-contain'
+          loading='lazy'
+          referrerPolicy='no-referrer'
+        />
+      ) : (
+        <div
+          aria-hidden='true'
+          className='bg-muted/60 text-muted-foreground flex size-12 shrink-0 items-center justify-center rounded-lg border'
+        >
+          <Icons.product className='size-4 opacity-60' />
+        </div>
+      )}
+      <div className='min-w-0 flex-1 space-y-1'>
+        <div className='flex flex-wrap items-center gap-1'>
+          {childCtx.isChild && (
+            <span className='bg-primary/10 text-primary rounded px-1.5 py-0.5 text-[11px] font-medium'>
+              子体 {childCtx.index}
+            </span>
+          )}
+          <button
+            type='button'
+            className='break-all font-mono text-xs font-semibold tracking-tight underline-offset-4 hover:underline'
+            title='打开商品复核抽屉'
+            onClick={() => onOpenReview(product)}
+          >
+            {product.asin}
+          </button>
+          <AsinTools asin={product.asin} />
+          <span
+            className='bg-muted text-muted-foreground rounded border px-1.5 py-0.5 text-[11px]'
+            title={productTrademark(product).title}
+          >
+            {productTrademark(product).label}
+          </span>
+        </div>
+        <BilingualProductTitle product={product} compact />
+        <div className='flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs'>
+          {hasFamily ? (
+            <button
+              type='button'
+              aria-label={`${expanded ? '收起' : '展开'} ${product.parent_asin} 的子体`}
+              aria-expanded={expanded}
+              aria-controls={`family-${product.id}`}
+              onClick={() => setFamilyRows((old) => ({ ...old, [product.id]: !old[product.id] }))}
+              className='bg-muted/70 hover:border-primary/40 hover:bg-muted inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors'
+            >
+              <span className='text-muted-foreground font-mono'>
+                父体: {product.parent_asin || '未知'}
+              </span>
+              <span aria-hidden='true' className='text-muted-foreground'>
+                |
+              </span>
+              {expanded ? (
+                <Icons.chevronDown aria-hidden='true' className='size-3' />
+              ) : (
+                <Icons.chevronRight aria-hidden='true' className='size-3' />
+              )}
+              <span>
+                {expanded ? '收起' : '展开'} {product.family_count} 个子体
+              </span>
+            </button>
+          ) : (
+            <span className='text-muted-foreground font-mono text-[11px]'>
+              父体：{product.parent_asin || '未知'}
+            </span>
+          )}
+          {product.manual_category && (
+            <span className='text-muted-foreground text-[11px]'>
+              · 人工分类：{product.manual_category}
+            </span>
+          )}
+        </div>
+        <p className='text-muted-foreground text-[11px]'>
+          {product.stat_month?.slice(0, 7)} ·{' '}
+          {periodLabels[product.period_type || ''] || '暂无分期数据'}
+        </p>
+      </div>
     </div>
   );
 }
@@ -1303,62 +1631,6 @@ function SelectAllCheckbox({
   );
 }
 
-function AsinTools({ asin }: { asin: string }) {
-  const [copied, setCopied] = useState(false);
-  const [error, setError] = useState(false);
-  useEffect(() => {
-    if (!copied) return;
-    const timer = setTimeout(() => setCopied(false), 1800);
-    return () => clearTimeout(timer);
-  }, [copied]);
-  return (
-    <>
-      <Button
-        size='sm'
-        variant='ghost'
-        className='h-7 w-7 p-0'
-        aria-label={`复制 ASIN ${asin}`}
-        title={copied ? '已复制 ASIN' : '复制 ASIN'}
-        onClick={async () => {
-          setError(false);
-          try {
-            await navigator.clipboard.writeText(asin);
-            setCopied(true);
-          } catch {
-            setError(true);
-          }
-        }}
-      >
-        {copied ? (
-          <Icons.check className='size-3.5 text-emerald-600' />
-        ) : (
-          <Icons.ecomCopy className='size-3.5 text-muted-foreground' />
-        )}
-      </Button>
-      <a
-        href={`https://www.amazon.com/dp/${asin}`}
-        target='_blank'
-        rel='noopener noreferrer'
-        aria-label={`在 Amazon 查看 ${asin}`}
-        title='在 Amazon 查看'
-        className='text-muted-foreground hover:bg-muted inline-flex size-7 items-center justify-center rounded-md'
-      >
-        <Icons.externalLink className='size-3.5' />
-      </a>
-      {copied && (
-        <span role='status' className='sr-only'>
-          ASIN 已复制
-        </span>
-      )}
-      {error && (
-        <span role='alert' className='text-destructive text-xs'>
-          复制失败，请手动选择 ASIN
-        </span>
-      )}
-    </>
-  );
-}
-
 function FamilyChildren({
   product,
   columns,
@@ -1389,27 +1661,37 @@ function FamilyChildren({
   });
   return (
     <>
-      {table.getRowModel().rows.map((row) => (
-        <tr
+      {table.getRowModel().rows.map((row, rowIndex) => (
+        <ChildRowContext.Provider
           key={row.id}
-          data-family={product.id}
-          className={cn('border-t bg-primary/[0.035]', row.getIsSelected() && 'bg-muted/50')}
+          value={{ isChild: true, index: (page - 1) * 50 + rowIndex + 1 }}
         >
-          {row.getVisibleCells().map((cell) => (
-            <td
-              key={cell.id}
-              data-fixed-align={
-                ['asin', 'dimensions'].includes(cell.column.id) ? 'left' : undefined
-              }
-              className='break-words px-2 py-2 align-middle [&>*]:min-w-0 [&>*]:max-w-full [&_p]:whitespace-normal'
-            >
-              {flexRender(cell.column.columnDef.cell, cell.getContext())}
-            </td>
-          ))}
-        </tr>
+          <tr
+            data-family={product.id}
+            className={cn(
+              'group/row bg-primary/[0.035] transition-colors',
+              row.getIsSelected() && 'bg-muted/50'
+            )}
+          >
+            {row.getVisibleCells().map((cell) => (
+              <td
+                key={cell.id}
+                data-fixed-align={
+                  ['asin', 'dimensions'].includes(cell.column.id) ? 'left' : undefined
+                }
+                className={cn(
+                  'break-words border-b px-2 py-2.5 align-middle [&>*]:min-w-0 [&>*]:max-w-full [&_p]:whitespace-normal',
+                  stickyColumnClass(cell.column.id, false)
+                )}
+              >
+                {flexRender(cell.column.columnDef.cell, cell.getContext())}
+              </td>
+            ))}
+          </tr>
+        </ChildRowContext.Provider>
       ))}
-      <tr id={`family-${product.id}`} className='border-b-2 border-primary/20 bg-primary/[0.035]'>
-        <td colSpan={columns.length} className='p-3'>
+      <tr id={`family-${product.id}`} className='bg-primary/[0.035]'>
+        <td colSpan={columns.length} className='border-primary/20 border-b-2 p-3'>
           {family.isLoading && <p role='status'>正在加载同父体商品…</p>}
           {family.isError && (
             <div role='alert'>
@@ -1503,149 +1785,64 @@ const measurementDimensions = (
     ? [length, width, height].map(measurementNumber).join(' × ') + ' cm'
     : original || '—';
 function ProductMeasurements({ product }: { product: Product }) {
+  const [open, setOpen] = useState(false);
+  const prodDim = measurementDimensions(
+    product.product_length_cm,
+    product.product_width_cm,
+    product.product_height_cm,
+    product.product_dimensions || product.product_dimensions_original
+  );
+  const pkgDim = measurementDimensions(
+    product.package_length_cm,
+    product.package_width_cm,
+    product.package_height_cm,
+    product.package_dimensions || product.package_dimensions_original
+  );
   return (
-    <div className='min-w-56 space-y-1 text-xs leading-5 tabular-nums'>
-      <p>
-        <span className='text-muted-foreground'>商品：</span>
-        {measurementDimensions(
-          product.product_length_cm,
-          product.product_width_cm,
-          product.product_height_cm,
-          product.product_dimensions || product.product_dimensions_original
+    <div className='space-y-1 text-xs leading-5 tabular-nums'>
+      <p className='break-words'>
+        <span className='text-muted-foreground'>本体：</span>
+        {prodDim}
+      </p>
+      <div className='text-muted-foreground flex flex-wrap items-center gap-x-1.5 gap-y-0.5'>
+        <span>
+          净重 {measurementNumber(product.weight_g)}
+          {product.weight_g != null && ' g'}
+        </span>
+        {product.package_weight_g != null && (
+          <span>· 毛重 {measurementNumber(product.package_weight_g)} g</span>
         )}
-      </p>
-      <p>
-        <span className='text-muted-foreground'>净重：</span>
-        {measurementNumber(product.weight_g)}
-        {product.weight_g != null && ' g'}
-      </p>
-      <p>
-        <span className='text-muted-foreground'>包装：</span>
-        {measurementDimensions(
-          product.package_length_cm,
-          product.package_width_cm,
-          product.package_height_cm,
-          product.package_dimensions || product.package_dimensions_original
-        )}
-      </p>
-      <p>
-        <span className='text-muted-foreground'>毛重：</span>
-        {measurementNumber(product.package_weight_g)}
-        {product.package_weight_g != null && ' g'}
-      </p>
-    </div>
-  );
-}
-
-function SingleReview(props: Parameters<typeof SingleReviewContent>[0]) {
-  const detail = useScreeningQuery<Product>(`/products/` + props.product.id);
-  if (detail.isError) return <p role='alert'>{detail.error.message}</p>;
-  if (!detail.data) return <p role='status'>正在加载商品详情…</p>;
-  return (
-    <SingleReviewContent
-      {...props}
-      product={detail.data}
-      key={detail.data.id + ':' + detail.data.data_revision + ':' + detail.data.review_revision}
-    />
-  );
-}
-
-function SingleReviewContent({
-  product,
-  act,
-  busy,
-  close,
-  onCalculate,
-  onChooseFamily
-}: {
-  product: Product;
-  act: Action;
-  busy: boolean;
-  close: () => void;
-  onCalculate: (product: Product) => void;
-  onChooseFamily: (ids: string[]) => void;
-}) {
-  const [status, setStatus] = useState<ReviewStatus>(
-    product.review_status === 'pending' ? 'kept' : product.review_status
-  );
-  const [reason, setReason] = useState(product.review_reason);
-  const [manualCategory, setManualCategory] = useState(product.manual_category || '');
-  const [note, setNote] = useState(product.review_note);
-  const history = useScreeningQuery<unknown>(`/products/${product.id}/history`);
-  const observations = useScreeningQuery<unknown>(`/products/${product.id}/observations`);
-  return (
-    <section className='space-y-3 rounded border p-4'>
-      <div className='flex justify-between'>
-        <h3 className='font-semibold'>人工复核 · {product.asin}</h3>
-        <Button variant='ghost' onClick={close}>
-          关闭
-        </Button>
-      </div>
-      <p>{product.title}</p>
-      <div className='flex flex-wrap items-end gap-2'>
-        <Field label='人工分类'>
-          <Input value={manualCategory} onChange={(e) => setManualCategory(e.target.value)} />
-        </Field>
-        <Button
-          variant='outline'
-          disabled={busy || !manualCategory.trim()}
-          onClick={() =>
-            void act(async () => {
-              await request(`/products/${product.id}/category`, 'PATCH', {
-                expected_data_revision: product.data_revision,
-                expected_review_revision: product.review_revision,
-                category: manualCategory
-              });
-              close();
-            }, '人工分类已保存')
-          }
-        >
-          保存人工分类
-        </Button>
-      </div>
-      <DataBlock title='商品规格' value={product.specs} />
-      <ProductParameters product={product} act={act} busy={busy} close={close} />
-      <FamilyPanel product={product} choose={onChooseFamily} />
-      <MonthlyHistory product={product} onCalculate={onCalculate} />
-      <div className='grid gap-3 md:grid-cols-3'>
-        <Field label='人工结论'>
-          <select
-            className='rounded border bg-transparent p-2'
-            value={status}
-            onChange={(e) => setStatus(e.target.value as ReviewStatus)}
+        <Dialog open={open} onOpenChange={setOpen}>
+          <DialogTrigger className='text-primary cursor-pointer text-xs underline underline-offset-2'>
+            详情
+          </DialogTrigger>
+          <DataDialogContent
+            title={'尺寸与重量明细 · ' + product.asin}
+            description={product.title_zh || product.title}
           >
-            <option value='kept'>保留</option>
-            <option value='excluded'>排除</option>
-            <option value='unsure'>待确认</option>
-          </select>
-        </Field>
-        <Field label='原因'>
-          <Input value={reason} onChange={(e) => setReason(e.target.value)} />
-        </Field>
-        <Field label='备注'>
-          <Input value={note} onChange={(e) => setNote(e.target.value)} />
-        </Field>
+            <div className='grid gap-3 sm:grid-cols-2'>
+              {[
+                ['商品本体尺寸', prodDim],
+                ['外包装尺寸', pkgDim],
+                [
+                  '商品净重',
+                  measurementNumber(product.weight_g) + (product.weight_g != null ? ' g' : '')
+                ],
+                [
+                  '含包装毛重',
+                  measurementNumber(product.package_weight_g) +
+                    (product.package_weight_g != null ? ' g' : '')
+                ]
+              ].map(([label, val]) => (
+                <div key={label} className='bg-muted/40 space-y-1 rounded-xl border p-3'>
+                  <div className='text-muted-foreground text-xs'>{label}</div>
+                  <div className='font-mono text-sm font-semibold tabular-nums'>{val}</div>
+                </div>
+              ))}
+            </div>
+          </DataDialogContent>
+        </Dialog>
       </div>
-      <Button
-        disabled={busy}
-        onClick={() =>
-          void act(async () => {
-            await request(`/products/${product.id}/review`, 'PATCH', {
-              expected_review_revision: product.review_revision,
-              expected_data_revision: product.data_revision,
-              status,
-              reason,
-              note
-            });
-            close();
-          }, '人工结论已保存')
-        }
-      >
-        保存复核结论
-      </Button>
-      <DataBlock title='商品完整资料（主表）' value={product} />
-      <DataBlock title='操作历史' value={history.data} />
-      <DataBlock title='来源历史' value={observations.data} />
-    </section>
+    </div>
   );
 }

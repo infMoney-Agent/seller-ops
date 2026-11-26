@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Dialog } from '@/components/ui/dialog';
 import DataDialogContent from './DataDialogContent';
 import { Button, Field, Input, type Action } from './shared';
+import { QuickReasonChips, ReviewDecisionCards } from './QuickReasonChips';
 import { request } from '../service';
 import type { BatchPreview, BatchResult, Product } from '../types';
 
@@ -169,6 +170,7 @@ function BatchReviewForm({
         <Field label='复核方式'>
           <select
             name='mode'
+            aria-label='批量复核方式'
             className='h-10 rounded border bg-background px-3'
             disabled={disabled}
             value={mode}
@@ -181,6 +183,16 @@ function BatchReviewForm({
             <option value='reference'>采用参考样本 {reference.asin}</option>
           </select>
         </Field>
+      )}
+      {mode === 'direct' && (
+        <ReviewDecisionCards
+          value={status}
+          disabled={disabled}
+          onChange={(next) => {
+            setStatus(next);
+            edited();
+          }}
+        />
       )}
       <Field label='结论'>
         <select
@@ -198,6 +210,17 @@ function BatchReviewForm({
           <option value='unsure'>待确认</option>
         </select>
       </Field>
+      {mode === 'direct' && (
+        <QuickReasonChips
+          currentReason={reason}
+          disabled={disabled}
+          onPick={(pickedReason, suggestedStatus) => {
+            setReason(pickedReason);
+            setStatus(suggestedStatus);
+            edited();
+          }}
+        />
+      )}
       <Field label={mode === 'reference' || status === 'kept' ? '原因' : '原因（必填）'}>
         <Input
           name='reason'
