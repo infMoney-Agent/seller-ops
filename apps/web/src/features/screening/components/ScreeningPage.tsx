@@ -61,24 +61,16 @@ const ChildRowContext = createContext<{ isChild: boolean; index: number }>({
   index: 0
 });
 
-function stickyColumnClass(columnId: string, isHeader: boolean) {
+function stickyColumnClass(columnId: string, isHeader: boolean, isSelected = false) {
+  const bodyBg = isSelected ? 'bg-muted' : 'bg-card group-hover/row:bg-muted';
   if (columnId === 'selection') {
-    return cn(
-      'md:sticky md:left-0',
-      isHeader ? 'bg-muted md:z-30' : 'bg-card group-hover/row:bg-muted md:z-20'
-    );
+    return cn('md:sticky md:left-0', isHeader ? 'bg-muted md:z-40' : cn(bodyBg, 'md:z-10'));
   }
   if (columnId === 'asin') {
-    return cn(
-      'md:sticky md:left-10 md:shadow-[4px_0_10px_-4px_rgba(15,23,42,0.08)] dark:md:shadow-[4px_0_12px_-4px_rgba(0,0,0,0.4)]',
-      isHeader ? 'bg-muted md:z-30' : 'bg-card group-hover/row:bg-muted md:z-20'
-    );
+    return cn('md:sticky md:left-10', isHeader ? 'bg-muted md:z-40' : cn(bodyBg, 'md:z-10'));
   }
   if (columnId === 'actions') {
-    return cn(
-      'md:sticky md:right-0 md:shadow-[-4px_0_10px_-4px_rgba(15,23,42,0.08)] dark:md:shadow-[-4px_0_12px_-4px_rgba(0,0,0,0.4)]',
-      isHeader ? 'bg-muted md:z-30' : 'bg-card group-hover/row:bg-muted md:z-20'
-    );
+    return cn('md:sticky md:right-0', isHeader ? 'bg-muted md:z-40' : cn(bodyBg, 'md:z-10'));
   }
   return undefined;
 }
@@ -1180,7 +1172,7 @@ export default function ScreeningPage() {
                       <caption className='sr-only'>
                         商品列表：商品信息、价格销量、尺寸重量、卖家、筛选与复核结果
                       </caption>
-                      <thead className='bg-muted sticky top-0 z-20 [&_th]:bg-muted'>
+                      <thead className='bg-muted sticky top-0 z-30 [&_th]:bg-muted'>
                         {table.getHeaderGroups().map((g) => (
                           <tr key={g.id}>
                             {g.headers.map((h) => (
@@ -1267,12 +1259,8 @@ export default function ScreeningPage() {
                           <Fragment key={row.id}>
                             <tr
                               className={cn(
-                                'group/row transition-colors',
-                                row.original.review_status === 'pending'
-                                  ? 'hover:bg-amber-500/[0.04]'
-                                  : 'hover:bg-muted/35',
-                                familyRows[row.original.id] && 'bg-primary/[0.035]',
-                                row.getIsSelected() && 'bg-muted/50'
+                                'group/row bg-card transition-colors hover:bg-muted',
+                                row.getIsSelected() && 'bg-muted'
                               )}
                             >
                               {row.getVisibleCells().map((cell) => (
@@ -1285,7 +1273,7 @@ export default function ScreeningPage() {
                                   }
                                   className={cn(
                                     'break-words border-b px-2 py-2.5 align-middle [&>*]:min-w-0 [&>*]:max-w-full [&_p]:whitespace-normal',
-                                    stickyColumnClass(cell.column.id, false)
+                                    stickyColumnClass(cell.column.id, false, row.getIsSelected())
                                   )}
                                 >
                                   {flexRender(cell.column.columnDef.cell, cell.getContext())}
@@ -1669,8 +1657,8 @@ function FamilyChildren({
           <tr
             data-family={product.id}
             className={cn(
-              'group/row bg-primary/[0.035] transition-colors',
-              row.getIsSelected() && 'bg-muted/50'
+              'group/row bg-card transition-colors hover:bg-muted',
+              row.getIsSelected() && 'bg-muted'
             )}
           >
             {row.getVisibleCells().map((cell) => (
@@ -1681,7 +1669,7 @@ function FamilyChildren({
                 }
                 className={cn(
                   'break-words border-b px-2 py-2.5 align-middle [&>*]:min-w-0 [&>*]:max-w-full [&_p]:whitespace-normal',
-                  stickyColumnClass(cell.column.id, false)
+                  stickyColumnClass(cell.column.id, false, row.getIsSelected())
                 )}
               >
                 {flexRender(cell.column.columnDef.cell, cell.getContext())}
