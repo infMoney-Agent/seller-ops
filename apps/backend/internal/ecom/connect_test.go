@@ -2,12 +2,10 @@ package ecom
 
 import (
 	"bytes"
-	"encoding/json"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"net/http"
 	"net/http/httptest"
-	"reflect"
 	ecomv1 "seller-ops/contracts/sellerops/ecom/v1"
 	"seller-ops/rpccompat"
 	"sort"
@@ -15,7 +13,7 @@ import (
 	"testing"
 )
 
-func TestEcomRPCParity(t *testing.T) {
+func TestEcomRPCContractsAndLegacyRemoved(t *testing.T) {
 	s := &Service{adapter: &fixtureAdapter{price: 19.99}, model: &fixtureModel{}, secret: strings.Repeat("s", 32)}
 	keys := []string{}
 	for k := range categories {
@@ -23,27 +21,59 @@ func TestEcomRPCParity(t *testing.T) {
 	}
 	sort.Strings(keys)
 	cases := []struct {
-		name, method, path, input string
-		body                      any
-		response                  proto.Message
+		name, input string
+		response    proto.Message
+		check       func(t *testing.T, projected Obj)
 	}{
-		{"ListResearchCategories", "GET", "product-research/categories", `{}`, nil, &ecomv1.ListResearchCategoriesResponse{}},
-		{"ListListingLanguages", "GET", "listing/languages", `{}`, nil, &ecomv1.ListListingLanguagesResponse{}},
-		{"ScoreProduct", "GET", "product-research/score/B000000001", `{"asin":"B000000001"}`, nil, &ecomv1.ScoreProductResponse{}},
-		{"ResearchProducts", "POST", "product-research/research", string(jsonBytes(Obj{"body": Obj{"category": keys[0], "limit": 2}})), Obj{"category": keys[0], "limit": 2}, &ecomv1.ResearchProductsResponse{}},
-		{"GenerateListing", "POST", "listing/generate", `{"body":{"keyword":"tool"}}`, Obj{"keyword": "tool"}, &ecomv1.GenerateListingResponse{}},
-		{"OptimizeListing", "POST", "listing/optimize", `{"body":{"asin":"B000000001"}}`, Obj{"asin": "B000000001"}, &ecomv1.OptimizeListingResponse{}},
-		{"AnalyzeReviews", "POST", "reviews/analyze", `{"body":{"asin":"B000000001"}}`, Obj{"asin": "B000000001"}, &ecomv1.AnalyzeReviewsResponse{}},
-		{"OptimizeAds", "POST", "ads/optimize", `{}`, nil, &ecomv1.OptimizeAdsResponse{}},
+		{"ListResearchCategories", `{}`, &ecomv1.ListResearchCategoriesResponse{}, func(t *testing.T, p Obj) {
+			if len(p["categories"].([]any)) != len(keys) {
+				t.Fatal("unexpected categories", p)
+			}
+		}},
+		{"ListListingLanguages", `{}`, &ecomv1.ListListingLanguagesResponse{}, func(t *testing.T, p Obj) {
+			if len(p["languages"].(map[string]any)) == 0 {
+				t.Fatal("missing languages", p)
+			}
+		}},
+		{"ScoreProduct", `{"asin":"B000000001"}`, &ecomv1.ScoreProductResponse{}, func(t *testing.T, p Obj) {
+			if p["asin"] != "B000000001" {
+				t.Fatal("unexpected score", p)
+			}
+		}},
+		{"ResearchProducts", string(jsonBytes(Obj{"body": Obj{"category": keys[0], "limit": 2}})), &ecomv1.ResearchProductsResponse{}, func(t *testing.T, p Obj) {
+			if p["category"] != keys[0] {
+				t.Fatal("unexpected research", p)
+			}
+		}},
+		{"GenerateListing", `{"body":{"keyword":"tool"}}`, &ecomv1.GenerateListingResponse{}, func(t *testing.T, p Obj) {
+			if p["title"] == "" {
+				t.Fatal("empty title", p)
+			}
+		}},
+		{"OptimizeListing", `{"body":{"asin":"B000000001"}}`, &ecomv1.OptimizeListingResponse{}, func(t *testing.T, p Obj) {
+			if p["asin_reference"] != "B000000001" {
+				t.Fatal("unexpected optimize listing", p)
+			}
+		}},
+		{"AnalyzeReviews", `{"body":{"asin":"B000000001"}}`, &ecomv1.AnalyzeReviewsResponse{}, func(t *testing.T, p Obj) {
+			if p["asin"] != "B000000001" {
+				t.Fatal("unexpected reviews", p)
+			}
+		}},
+		{"AnalyzeReviewsLegacy", `{"asin":"B000000001"}`, &ecomv1.AnalyzeReviewsLegacyResponse{}, func(t *testing.T, p Obj) {
+			if p["asin"] != "B000000001" {
+				t.Fatal("unexpected legacy reviews", p)
+			}
+		}},
+		{"OptimizeAds", `{}`, &ecomv1.OptimizeAdsResponse{}, func(t *testing.T, p Obj) {
+			if number(p["campaign_count"]) != 1 {
+				t.Fatal("unexpected ads", p)
+			}
+		}},
 	}
 	handler := s.Handler()
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			legacy := httptest.NewRecorder()
-			handler.ServeHTTP(legacy, signed(s, tc.method, "/api/v1/"+tc.path, 1, tc.body))
-			if legacy.Code != 200 {
-				t.Fatal("legacy", legacy.Code, legacy.Body.String())
-			}
 			procedure := RPCPrefix + tc.name
 			req := httptest.NewRequest("POST", procedure, bytes.NewBufferString(tc.input))
 			req.Header = signed(s, "POST", procedure, 1, nil).Header
@@ -62,13 +92,13 @@ func TestEcomRPCParity(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			var want, got any
-			json.Unmarshal(legacy.Body.Bytes(), &want)
-			json.Unmarshal(jsonBytes(projected), &got)
-			if !reflect.DeepEqual(want, got) {
-				t.Fatalf("projection mismatch %s %s", legacy.Body.String(), jsonBytes(projected))
-			}
+			tc.check(t, projected)
 		})
+	}
+	legacy := httptest.NewRecorder()
+	handler.ServeHTTP(legacy, signed(s, "GET", "/api/v1/product-research/categories", 1, nil))
+	if legacy.Code != 404 {
+		t.Fatal("legacy ecom HTTP endpoint still exposed", legacy.Code)
 	}
 	req := httptest.NewRequest(http.MethodPost, RPCPrefix+"ListMonitors", strings.NewReader("{}"))
 	req.Header.Set("Content-Type", "application/json")

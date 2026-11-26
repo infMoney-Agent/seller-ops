@@ -64,74 +64,80 @@ func testImportMutationRPC(t *testing.T, svc *service, server *httptest.Server, 
 			key := "rpc-mutation-" + name
 			meta := &screeningv1.ImportMutationMetadata{IdempotencyKey: key, OriginalQuery: query}
 			body := Object{}
-			var got any
-			switch name {
-			case "commit":
-				body = Object{"check": 1}
-				extra, _ := structpb.NewStruct(body)
-				req := connect.NewRequest(&screeningv1.CommitImportRequest{Id: id, Mutation: meta, LegacyFields: extra})
-				sign(req.Header(), screeningv1connect.ScreeningImportServiceCommitImportProcedure)
-				out, e := client.CommitImport(ctx, req)
-				err = e
-				if e == nil {
-					got = submissionLegacy(out.Msg.Submission)
+			invoke := func() (any, error) {
+				switch name {
+				case "commit":
+					extra, _ := structpb.NewStruct(Object{"check": 1})
+					req := connect.NewRequest(&screeningv1.CommitImportRequest{Id: id, Mutation: meta, LegacyFields: extra})
+					sign(req.Header(), screeningv1connect.ScreeningImportServiceCommitImportProcedure)
+					out, e := client.CommitImport(ctx, req)
+					if e != nil {
+						return nil, e
+					}
+					return submissionLegacy(out.Msg.Submission), nil
+				case "mapping":
+					date, month := "2026-09-03", "2026-09"
+					req := connect.NewRequest(&screeningv1.UpdateImportSettingsRequest{Id: id, Mutation: meta, Settings: &screeningv1.ImportSettings{SourcePeriod: &month, ObservedOn: &date, Mapping: &structpb.Struct{Fields: map[string]*structpb.Value{}}, ClearFields: []string{"period_start"}}})
+					sign(req.Header(), screeningv1connect.ScreeningImportServiceUpdateImportSettingsProcedure)
+					out, e := client.UpdateImportSettings(ctx, req)
+					if e != nil {
+						return nil, e
+					}
+					return submissionLegacy(out.Msg.Submission), nil
+				case "delete":
+					req := connect.NewRequest(&screeningv1.DeleteImportRequest{Id: id, Mutation: meta})
+					sign(req.Header(), screeningv1connect.ScreeningImportServiceDeleteImportProcedure)
+					out, e := client.DeleteImport(ctx, req)
+					if e != nil {
+						return nil, e
+					}
+					v := out.Msg
+					return Object{"id": v.Id, "deleted": v.Deleted, "removed_products": *v.RemovedProducts, "retained_products": *v.RetainedProducts, "removed_monthly": *v.RemovedMonthly}, nil
+				default:
+					req := connect.NewRequest(&screeningv1.RetryImportJobRequest{Id: id, Mutation: meta})
+					sign(req.Header(), screeningv1connect.ScreeningImportServiceRetryImportJobProcedure)
+					out, e := client.RetryImportJob(ctx, req)
+					if e != nil {
+						return nil, e
+					}
+					return submissionLegacy(out.Msg.Submission), nil
 				}
-			case "mapping":
-				body = Object{"source_period": "2026-09", "observed_on": "2026-09-03", "mapping": Object{}, "period_start": nil}
-				date, month := "2026-09-03", "2026-09"
-				req := connect.NewRequest(&screeningv1.UpdateImportSettingsRequest{Id: id, Mutation: meta, Settings: &screeningv1.ImportSettings{SourcePeriod: &month, ObservedOn: &date, Mapping: &structpb.Struct{Fields: map[string]*structpb.Value{}}, ClearFields: []string{"period_start"}}})
-				sign(req.Header(), screeningv1connect.ScreeningImportServiceUpdateImportSettingsProcedure)
-				out, e := client.UpdateImportSettings(ctx, req)
-				err = e
-				if e == nil {
-					got = submissionLegacy(out.Msg.Submission)
-				}
-			case "delete":
+			}
+			if name == "delete" {
 				preview := connect.NewRequest(&screeningv1.GetImportRemovalPreviewRequest{Id: id})
 				sign(preview.Header(), screeningv1connect.ScreeningImportServiceGetImportRemovalPreviewProcedure)
 				pv, e := client.GetImportRemovalPreview(ctx, preview)
 				if e != nil || pv.Msg.Products != 0 || pv.Msg.SourceRows != 0 {
 					t.Fatal("removal preview", e)
 				}
-				req := connect.NewRequest(&screeningv1.DeleteImportRequest{Id: id, Mutation: meta})
-				sign(req.Header(), screeningv1connect.ScreeningImportServiceDeleteImportProcedure)
-				out, e := client.DeleteImport(ctx, req)
-				err = e
-				if e == nil {
-					v := out.Msg
-					got = Object{"id": v.Id, "deleted": v.Deleted, "removed_products": *v.RemovedProducts, "retained_products": *v.RetainedProducts, "removed_monthly": *v.RemovedMonthly}
-				}
-			case "retry":
-				req := connect.NewRequest(&screeningv1.RetryImportJobRequest{Id: id, Mutation: meta})
-				sign(req.Header(), screeningv1connect.ScreeningImportServiceRetryImportJobProcedure)
-				out, e := client.RetryImportJob(ctx, req)
-				err = e
-				if e == nil {
-					got = submissionLegacy(out.Msg.Submission)
-				}
 			}
+			got, err := invoke()
 			if err != nil {
 				t.Fatal(err)
 			}
 			for attempt := 0; attempt < 2; attempt++ {
-				uri := "/api/v1/screening/" + path + query
-				req, _ := http.NewRequest(method, server.URL+uri, bytes.NewReader(encoded(body)))
-				signImportRequest(req.Header, method, uri, svc.cfg.Secret, 601, fmt.Sprint(time.Now().Unix()))
-				req.Header.Set("Idempotency-Key", key)
-				res, e := server.Client().Do(req)
+				replayed, e := invoke()
 				if e != nil {
-					t.Fatal(e)
+					t.Fatal("RPC replay failed", e)
 				}
-				var old, projected any
-				e = json.NewDecoder(res.Body).Decode(&old)
-				res.Body.Close()
-				if e != nil || res.StatusCode >= 300 {
-					t.Fatal("HTTP replay failed", res.StatusCode, old, e)
+				var first, again any
+				json.Unmarshal(encoded(got), &first)
+				json.Unmarshal(encoded(replayed), &again)
+				if !reflect.DeepEqual(first, again) {
+					t.Fatalf("replay mismatch %s %s", encoded(first), encoded(again))
 				}
-				json.Unmarshal(encoded(got), &projected)
-				if !reflect.DeepEqual(old, projected) {
-					t.Fatalf("replay mismatch %s %s", encoded(old), encoded(projected))
-				}
+			}
+			uri := "/api/v1/screening/" + path + query
+			legacyReq, _ := http.NewRequest(method, server.URL+uri, bytes.NewReader(encoded(body)))
+			signImportRequest(legacyReq.Header, method, uri, svc.cfg.Secret, 601, fmt.Sprint(time.Now().Unix()))
+			legacyReq.Header.Set("Idempotency-Key", key)
+			legacyRes, e := server.Client().Do(legacyReq)
+			if e != nil {
+				t.Fatal(e)
+			}
+			legacyRes.Body.Close()
+			if legacyRes.StatusCode != 404 {
+				t.Fatalf("legacy mutation HTTP endpoint %s still exposed: %d", uri, legacyRes.StatusCode)
 			}
 			if name == "commit" {
 				var count int

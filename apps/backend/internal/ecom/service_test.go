@@ -9,9 +9,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/redis/go-redis/v9"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	ecomv1 "seller-ops/contracts/sellerops/ecom/v1"
+	"seller-ops/rpccompat"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -70,16 +74,27 @@ func signed(s *Service, method, path string, user int64, body any) *http.Request
 	r.Header.Set("x-ecom-signature", hex.EncodeToString(mac.Sum(nil)))
 	return r
 }
-func perform(t *testing.T, s *Service, r *http.Request) Obj {
+func performRPC(t *testing.T, s *Service, procedure string, user int64, input any, outMsg proto.Message) Obj {
 	t.Helper()
+	r := signed(s, "POST", RPCPrefix+procedure, user, input)
+	r.Header.Set("Content-Type", "application/json")
+	r.Header.Set("Connect-Protocol-Version", "1")
 	w := httptest.NewRecorder()
 	s.Handler().ServeHTTP(w, r)
 	if w.Code != 200 {
-		t.Fatalf("HTTP %d %s", w.Code, w.Body.String())
+		t.Fatalf("RPC %s HTTP %d %s", procedure, w.Code, w.Body.String())
+	}
+	if err := protojson.Unmarshal(w.Body.Bytes(), outMsg); err != nil {
+		t.Fatal(err)
+	}
+	data := outMsg.ProtoReflect().Get(outMsg.ProtoReflect().Descriptor().Fields().ByName("data")).Message().Interface()
+	projected, err := rpccompat.Legacy(data)
+	if err != nil {
+		t.Fatal(err)
 	}
 	var out Obj
-	if e := json.Unmarshal(w.Body.Bytes(), &out); e != nil {
-		t.Fatal(e)
+	if err = json.Unmarshal(jsonBytes(projected), &out); err != nil {
+		t.Fatal(err)
 	}
 	return out
 }
@@ -88,22 +103,24 @@ func TestFiveModuleContracts(t *testing.T) {
 	model := &fixtureModel{}
 	s := &Service{adapter: adapter, model: model, secret: strings.Repeat("s", 32)}
 	ctx := context.Background()
-	out := perform(t, s, signed(s, "POST", "/api/v1/product-research/research", 1, Obj{"category": "home", "limit": 3, "min_score": 6}))
+	out := performRPC(t, s, "ResearchProducts", 1, Obj{"body": Obj{"category": "home", "limit": 3, "min_score": 6}}, &ecomv1.ResearchProductsResponse{})
 	results := out["results"].([]any)
 	if len(results) != 1 || number(results[0].(map[string]any)["overall_score"]) != 9.25 || adapter.calls.Load() != 0 {
 		t.Fatal("research changed model score or fetched product detail", out)
 	}
-	for _, path := range []string{"/api/v1/listing/generate", "/api/v1/listing/optimize"} {
-		out = perform(t, s, signed(s, "POST", path, 1, Obj{"keyword": "tool", "asin": "B000000001", "language": "de"}))
-		if out["language"] != "de" || len(out["bullet_points"].([]any)) != 5 {
-			t.Fatal(out)
-		}
+	out = performRPC(t, s, "GenerateListing", 1, Obj{"body": Obj{"keyword": "tool", "asin": "B000000001", "language": "de"}}, &ecomv1.GenerateListingResponse{})
+	if out["language"] != "de" || len(out["bullet_points"].([]any)) != 5 {
+		t.Fatal(out)
 	}
-	out = perform(t, s, signed(s, "POST", "/api/v1/reviews/analyze", 1, Obj{"asin": "B000000001", "max_pages": 2}))
+	out = performRPC(t, s, "OptimizeListing", 1, Obj{"body": Obj{"keyword": "tool", "asin": "B000000001", "language": "de"}}, &ecomv1.OptimizeListingResponse{})
+	if out["language"] != "de" || len(out["bullet_points"].([]any)) != 5 {
+		t.Fatal(out)
+	}
+	out = performRPC(t, s, "AnalyzeReviews", 1, Obj{"body": Obj{"asin": "B000000001", "max_pages": 2}}, &ecomv1.AnalyzeReviewsResponse{})
 	if number(out["total_reviews"]) != 2 || number(out["avg_rating"]) != 3 || number(out["verified_purchase_ratio"]) != 0.5 {
 		t.Fatal(out)
 	}
-	out = perform(t, s, signed(s, "POST", "/api/v1/ads/optimize?target_acos=20", 1, nil))
+	out = performRPC(t, s, "OptimizeAds", 1, Obj{"query": Obj{"target_acos": []string{"20"}}}, &ecomv1.OptimizeAdsResponse{})
 	if number(out["overall_acos"]) != 25 || number(out["overall_roas"]) != 4 {
 		t.Fatal(out)
 	}
@@ -112,7 +129,8 @@ func TestFiveModuleContracts(t *testing.T) {
 	if e != nil || number(empty["total_reviews"]) != 0 || model.calls.Load() != before {
 		t.Fatal("empty reviews invoked model", e)
 	}
-	r := signed(s, "GET", "/api/v1/product-research/categories", 1, nil)
+	r := signed(s, "POST", RPCPrefix+"ListResearchCategories", 1, Obj{})
+	r.Header.Set("Content-Type", "application/json")
 	r.Header.Set("x-seller-user", "2")
 	w := httptest.NewRecorder()
 	s.Handler().ServeHTTP(w, r)
@@ -202,11 +220,11 @@ func TestMonitorRedisCompatibility(t *testing.T) {
 		t.Fatal(e)
 	}
 	client.LPush(ctx, keys[1], jsonBytes(Obj{"price": 100, "bsr_rank": 200, "review_count": 10, "timestamp": time.Now().Add(-2 * time.Hour).UTC().Format(time.RFC3339Nano)}))
-	out := perform(t, s, signed(s, "GET", "/api/v1/monitor/list", user, nil))
+	out := performRPC(t, s, "ListMonitors", user, Obj{}, &ecomv1.ListMonitorsResponse{})
 	if len(out["monitors"].([]any)) != 1 {
 		t.Fatal("old monitor missing", out)
 	}
-	out = perform(t, s, signed(s, "GET", "/api/v1/monitor/list", user+1, nil))
+	out = performRPC(t, s, "ListMonitors", user+1, Obj{}, &ecomv1.ListMonitorsResponse{})
 	if len(out["monitors"].([]any)) != 0 {
 		t.Fatal("account isolation failed")
 	}
@@ -217,7 +235,7 @@ func TestMonitorRedisCompatibility(t *testing.T) {
 	if snap, e := s.snapshot(ctx, prefix, asin, true); e != nil || snap != nil {
 		t.Fatal("interval was ignored", snap, e)
 	}
-	out = perform(t, s, signed(s, "GET", "/api/v1/monitor/snapshots/"+asin, user, nil))
+	out = performRPC(t, s, "ListSnapshots", user, Obj{"asin": asin}, &ecomv1.ListSnapshotsResponse{})
 	if len(out["snapshots"].([]any)) != 2 {
 		t.Fatal(out)
 	}

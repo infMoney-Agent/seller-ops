@@ -56,11 +56,6 @@ func (s *Service) registerRegistration(m *http.ServeMux) {
 	m.HandleFunc("GET /api/auth/register-page", s.registrationPage)
 	m.HandleFunc("POST /api/auth/register-page", s.registrationPage)
 	m.HandleFunc("POST /api/auth/registration/prepare", s.prepareRegistrationInvitation)
-	m.HandleFunc("GET /api/auth/registration/status", s.registrationStatus)
-	m.HandleFunc("GET /api/auth/company", s.companyInfo)
-	m.HandleFunc("GET /api/auth/join-requests", s.joinRequests)
-	m.HandleFunc("POST /api/auth/join-requests", s.applyToCompany)
-	m.HandleFunc("POST /api/auth/join-requests/{id}/{action}", s.decideJoinRequest)
 }
 func regJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
@@ -517,32 +512,7 @@ func (s *Service) submitRegistration(w http.ResponseWriter, r *http.Request, f r
 	http.Redirect(w, r, destination, http.StatusSeeOther)
 }
 
-func (s *Service) companyInfo(w http.ResponseWriter, r *http.Request) {
-	a, ok := s.Authenticate(w, r)
-	if !ok {
-		return
-	}
-	input := map[string]any{}
-	if r.Method == "POST" && "companyInfo" == "applyToCompany" {
-		d := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096))
-		if d.Decode(&input) != nil {
-			regError(w, 400, "请求无效")
-			return
-		}
-	}
-	result, err := s.CompanyInfoUsecase(r.Context(), a, r.PathValue("id"), r.PathValue("action"), input)
-	if err != nil {
-		var e APIError
-		if errors.As(err, &e) {
-			regError(w, e.Status, e.Message)
-		} else {
-			regError(w, 503, "服务暂不可用")
-		}
-		return
-	}
-	regJSON(w, result.Status, result.Data)
-}
-func (s *Service) CompanyInfoUsecase(ctx context.Context, a Principal, resourceID, decisionAction string, input map[string]any) (*Result, error) {
+func (s *Service) CompanyInfoUsecase(ctx context.Context, a Principal) (*Result, error) {
 	if a.TenantID == 0 {
 		return nil, APIError{Status: 403, Message: "尚未加入公司", Plain: true}
 	}
@@ -552,32 +522,8 @@ func (s *Service) CompanyInfoUsecase(ctx context.Context, a Principal, resourceI
 	}
 	return &Result{Status: 200, Data: map[string]any{"name": name, "code": fmt.Sprintf("C%d", a.TenantID)}}, nil
 }
-func (s *Service) registrationStatus(w http.ResponseWriter, r *http.Request) {
-	a, ok := s.Authenticate(w, r)
-	if !ok {
-		return
-	}
-	input := map[string]any{}
-	if r.Method == "POST" && "registrationStatus" == "applyToCompany" {
-		d := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096))
-		if d.Decode(&input) != nil {
-			regError(w, 400, "请求无效")
-			return
-		}
-	}
-	result, err := s.RegistrationStatusUsecase(r.Context(), a, r.PathValue("id"), r.PathValue("action"), input)
-	if err != nil {
-		var e APIError
-		if errors.As(err, &e) {
-			regError(w, e.Status, e.Message)
-		} else {
-			regError(w, 503, "服务暂不可用")
-		}
-		return
-	}
-	regJSON(w, result.Status, result.Data)
-}
-func (s *Service) RegistrationStatusUsecase(ctx context.Context, a Principal, resourceID, decisionAction string, input map[string]any) (*Result, error) {
+
+func (s *Service) RegistrationStatusUsecase(ctx context.Context, a Principal) (*Result, error) {
 	var raw []byte
 	e := s.db.QueryRow(ctx, "SELECT jsonb_build_object('id',j.id,'companyName',t.name,'companyCode','C'||t.id::text,'state',j.state,'note',j.note,'createdAt',j.created_at) FROM company_join_requests j JOIN tenants t ON t.id=j.tenant_id WHERE j.user_id=$1", a.UserID).Scan(&raw)
 	if errors.Is(e, pgx.ErrNoRows) {
@@ -588,32 +534,8 @@ func (s *Service) RegistrationStatusUsecase(ctx context.Context, a Principal, re
 	}
 	return &Result{Status: 200, Data: map[string]any{"request": json.RawMessage(raw)}}, nil
 }
-func (s *Service) joinRequests(w http.ResponseWriter, r *http.Request) {
-	a, ok := s.Authenticate(w, r)
-	if !ok {
-		return
-	}
-	input := map[string]any{}
-	if r.Method == "POST" && "joinRequests" == "applyToCompany" {
-		d := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096))
-		if d.Decode(&input) != nil {
-			regError(w, 400, "请求无效")
-			return
-		}
-	}
-	result, err := s.JoinRequestsUsecase(r.Context(), a, r.PathValue("id"), r.PathValue("action"), input)
-	if err != nil {
-		var e APIError
-		if errors.As(err, &e) {
-			regError(w, e.Status, e.Message)
-		} else {
-			regError(w, 503, "服务暂不可用")
-		}
-		return
-	}
-	regJSON(w, result.Status, result.Data)
-}
-func (s *Service) JoinRequestsUsecase(ctx context.Context, a Principal, resourceID, decisionAction string, input map[string]any) (*Result, error) {
+
+func (s *Service) JoinRequestsUsecase(ctx context.Context, a Principal) (*Result, error) {
 	if a.Role != "owner" || a.TenantID == 0 {
 		return nil, APIError{Status: 403, Message: "只有公司管理员可以审批", Plain: true}
 	}
@@ -637,32 +559,8 @@ func (s *Service) JoinRequestsUsecase(ctx context.Context, a Principal, resource
 	}
 	return &Result{Status: 200, Data: items}, nil
 }
-func (s *Service) applyToCompany(w http.ResponseWriter, r *http.Request) {
-	a, ok := s.Authenticate(w, r)
-	if !ok {
-		return
-	}
-	input := map[string]any{}
-	if r.Method == "POST" && "applyToCompany" == "applyToCompany" {
-		d := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096))
-		if d.Decode(&input) != nil {
-			regError(w, 400, "请求无效")
-			return
-		}
-	}
-	result, err := s.ApplyToCompanyUsecase(r.Context(), a, r.PathValue("id"), r.PathValue("action"), input)
-	if err != nil {
-		var e APIError
-		if errors.As(err, &e) {
-			regError(w, e.Status, e.Message)
-		} else {
-			regError(w, 503, "服务暂不可用")
-		}
-		return
-	}
-	regJSON(w, result.Status, result.Data)
-}
-func (s *Service) ApplyToCompanyUsecase(ctx context.Context, a Principal, resourceID, decisionAction string, input map[string]any) (*Result, error) {
+
+func (s *Service) ApplyToCompanyUsecase(ctx context.Context, a Principal, input map[string]any) (*Result, error) {
 	if a.TenantID != 0 {
 		return nil, APIError{Status: 409, Message: "当前账号已加入公司", Plain: true}
 	}
@@ -684,32 +582,8 @@ func (s *Service) ApplyToCompanyUsecase(ctx context.Context, a Principal, resour
 	}
 	return &Result{Status: 200, Data: map[string]bool{"submitted": true}}, nil
 }
-func (s *Service) decideJoinRequest(w http.ResponseWriter, r *http.Request) {
-	a, ok := s.Authenticate(w, r)
-	if !ok {
-		return
-	}
-	input := map[string]any{}
-	if r.Method == "POST" && "decideJoinRequest" == "applyToCompany" {
-		d := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096))
-		if d.Decode(&input) != nil {
-			regError(w, 400, "请求无效")
-			return
-		}
-	}
-	result, err := s.DecideJoinRequestUsecase(r.Context(), a, r.PathValue("id"), r.PathValue("action"), input)
-	if err != nil {
-		var e APIError
-		if errors.As(err, &e) {
-			regError(w, e.Status, e.Message)
-		} else {
-			regError(w, 503, "服务暂不可用")
-		}
-		return
-	}
-	regJSON(w, result.Status, result.Data)
-}
-func (s *Service) DecideJoinRequestUsecase(ctx context.Context, a Principal, resourceID, decisionAction string, input map[string]any) (*Result, error) {
+
+func (s *Service) DecideJoinRequestUsecase(ctx context.Context, a Principal, resourceID, decisionAction string) (*Result, error) {
 	if a.TenantID == 0 || a.Role != "owner" {
 		return nil, APIError{Status: 403, Message: "只有公司管理员可以审批", Plain: true}
 	}

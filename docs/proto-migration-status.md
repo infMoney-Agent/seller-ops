@@ -37,7 +37,7 @@ Web 服务端已移除旧元数据 HTTP 转发分支及六个过渡开关（原 
 
 部署须确保两个 Go 服务与公网网关运行在支持全部 80 个 RPC 的基线，并配置 Web `SELLER_APP_ORIGIN`。公网网关屏蔽 `/sellerops.*` 并将 `registration/status` 交给 Next 代理，其余注册 Cookie 流程仍交给认证服务。如需紧急回滚，恢复已备份的上一版本应用镜像或前端/Go 构建产物，不执行数据库降级。
 
-Go 后端旧 HTTP 元数据路由暂保留至 Phase 3 统一收口清理，内部已复用共享业务用例；保留这些兼容地址不代表对应业务尚未迁移。
+Go 后端（`apps/backend` 与 `apps/auth`）已完成 Phase 3 Step 3.1 / 3.2 收口：已下线全部旧内部元数据 HTTP 路由，全部 80 个 Connect RPC 均直接调用具名 Go 业务用例；仅保留 4 个初筛文件流端点、认证 OIDC/登录/注册表单与 `registration/prepare`、健康检查和 OpenAPI HTTP 端点。
 
 ## 本轮验证
 

@@ -15,34 +15,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"seller-ops/server/internal/auth"
-	"seller-ops/server/internal/httpresponse"
 )
-
-func (s *server) registerBusiness(mux *http.ServeMux) {
-	for _, pattern := range []string{"GET /api/products", "POST /api/products", "GET /api/products/{id}", "PUT /api/products/{id}", "PATCH /api/products/{id}", "DELETE /api/products/{id}"} {
-		mux.HandleFunc(pattern, s.products)
-	}
-	mux.HandleFunc("GET /api/users", s.members)
-	mux.HandleFunc("PATCH /api/users/{id}", s.changeMember)
-	mux.HandleFunc("DELETE /api/users/{id}", s.changeMember)
-	mux.HandleFunc("GET /api/invitations", s.invitations)
-	mux.HandleFunc("POST /api/invitations", s.invitations)
-	mux.HandleFunc("DELETE /api/invitations/{id}", s.invitations)
-	mux.HandleFunc("POST /api/invitations/accept", s.accept)
-	mux.HandleFunc("POST /api/invitations/inspect", s.inspectInvitation)
-}
-
-func (s *server) workspace(w http.ResponseWriter, r *http.Request, owner bool) (auth.Principal, bool) {
-	a, ok := s.auth.Authenticate(w, r)
-	if !ok {
-		return a, false
-	}
-	if a.TenantID == 0 || (owner && a.Role != "owner") {
-		httpresponse.Fail(w, 403, "workspace access denied")
-		return a, false
-	}
-	return a, true
-}
 
 type productInput struct {
 	Name        string  `json:"name"`
@@ -77,59 +50,26 @@ func pageParam(raw string, fallback, max int) int {
 	return n
 }
 
-func (s *server) products(w http.ResponseWriter, r *http.Request) {
-	a, ok := s.workspace(w, r, r.Method != http.MethodGet)
-	if !ok {
-		return
-	}
-	body, ok := s.businessBody(w, r)
-	if !ok {
-		return
-	}
-	result, err := s.productsUsecase(r.Context(), a, r.Method, r.PathValue("id"), r.URL.Query(), body, s.auth.SessionHash(r))
-	s.respondBusiness(w, result, err)
-}
-func (s *server) productsUsecase(ctx context.Context, a auth.Principal, method, resourceID string, params url.Values, body map[string]any, sessionHash []byte) (*auth.Result, error) {
-	rawID := resourceID
-	if method == http.MethodGet && rawID == "" {
-		return s.listProductsUsecase(ctx, a, method, resourceID, params, body, sessionHash)
-	}
+func parseProductID(rawID string) (int64, error) {
 	id, err := strconv.ParseInt(rawID, 10, 64)
-	if rawID != "" && (err != nil || id < 1) {
-		return nil, auth.APIError{Status: 404, Message: "product not found"}
+	if err != nil || id < 1 {
+		return 0, auth.APIError{Status: 404, Message: "product not found"}
 	}
+	return id, nil
+}
 
-	if method == http.MethodDelete {
-		tag, err := s.db.Exec(ctx, "DELETE FROM products WHERE tenant_id=$1 AND id=$2", a.TenantID, id)
-		if err != nil {
-			return nil, err
-		}
-		if tag.RowsAffected() == 0 {
-			return nil, auth.APIError{Status: 404, Message: "product not found"}
-		}
-		return &auth.Result{Status: 200, Data: map[string]any{"success": true, "message": "Product deleted"}}, nil
+func parseProductInput(body map[string]any) (productInput, error) {
+	var p productInput
+	if err := auth.DecodeBody(body, &p); err != nil {
+		return p, err
 	}
-	var row pgx.Row
-	status := 200
-	if method == http.MethodGet {
-		row = s.db.QueryRow(ctx, "SELECT "+productFields+" FROM products WHERE tenant_id=$1 AND id=$2", a.TenantID, id)
-	} else {
-		var p productInput
-		if err := auth.DecodeBody(body, &p); err != nil {
-			return nil, err
-		}
-		if strings.TrimSpace(p.Name) == "" || strings.TrimSpace(p.Category) == "" || p.Price < 0 || p.Price >= 1e12 {
-			return nil, auth.APIError{Status: 400, Message: "invalid product"}
-		}
-		if method == http.MethodPost {
-			status = 201
-			row = s.db.QueryRow(ctx, "INSERT INTO products(tenant_id,name,category,price,description) VALUES($1,$2,$3,$4,$5) RETURNING "+productFields,
-				a.TenantID, p.Name, p.Category, p.Price, p.Description)
-		} else {
-			row = s.db.QueryRow(ctx, "UPDATE products SET name=$3,category=$4,price=$5,description=$6,updated_at=now() WHERE tenant_id=$1 AND id=$2 RETURNING "+productFields,
-				a.TenantID, id, p.Name, p.Category, p.Price, p.Description)
-		}
+	if strings.TrimSpace(p.Name) == "" || strings.TrimSpace(p.Category) == "" || p.Price < 0 || p.Price >= 1e12 {
+		return p, auth.APIError{Status: 400, Message: "invalid product"}
 	}
+	return p, nil
+}
+
+func productResult(status int, row pgx.Row) (*auth.Result, error) {
 	p, err := scanProduct(row)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, auth.APIError{Status: 404, Message: "product not found"}
@@ -140,23 +80,14 @@ func (s *server) productsUsecase(ctx context.Context, a auth.Principal, method, 
 	return &auth.Result{Status: status, Data: map[string]any{"success": true, "time": time.Now().UTC(), "message": "OK", "product": p}}, nil
 }
 
-func (s *server) listProducts(w http.ResponseWriter, r *http.Request, a auth.Principal) {
-	body, ok := s.businessBody(w, r)
-	if !ok {
-		return
-	}
-	result, err := s.listProductsUsecase(r.Context(), a, r.Method, r.PathValue("id"), r.URL.Query(), body, s.auth.SessionHash(r))
-	s.respondBusiness(w, result, err)
-}
-func (s *server) listProductsUsecase(ctx context.Context, a auth.Principal, method, resourceID string, params url.Values, body map[string]any, sessionHash []byte) (*auth.Result, error) {
-	q := params
-	limit := pageParam(q.Get("limit"), 10, 100)
-	offset := (pageParam(q.Get("page"), 1, 1000000) - 1) * limit
-	categories := strings.FieldsFunc(q.Get("categories"), func(r rune) bool { return r == ',' || r == '.' })
+func (s *server) listProductsUsecase(ctx context.Context, a auth.Principal, params url.Values) (*auth.Result, error) {
+	limit := pageParam(params.Get("limit"), 10, 100)
+	offset := (pageParam(params.Get("page"), 1, 1000000) - 1) * limit
+	categories := strings.FieldsFunc(params.Get("categories"), func(r rune) bool { return r == ',' || r == '.' })
 	if categories == nil {
 		categories = []string{}
 	}
-	search := q.Get("search")
+	search := params.Get("search")
 
 	tx, err := s.db.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
 	if err != nil {
@@ -175,7 +106,7 @@ func (s *server) listProductsUsecase(ctx context.Context, a auth.Principal, meth
 		ID   string `json:"id"`
 		Desc bool   `json:"desc"`
 	}
-	if json.Unmarshal([]byte(q.Get("sort")), &sorts) == nil {
+	if json.Unmarshal([]byte(params.Get("sort")), &sorts) == nil {
 		columns := map[string]string{"id": "id", "name": "name", "category": "category", "price": "price", "created_at": "created_at", "updated_at": "updated_at"}
 		fields := []string{}
 		for _, sort := range sorts {
@@ -214,19 +145,55 @@ func (s *server) listProductsUsecase(ctx context.Context, a auth.Principal, meth
 	return &auth.Result{Status: 200, Data: map[string]any{"success": true, "time": time.Now().UTC(), "message": "OK", "total_products": count, "offset": offset, "limit": limit, "products": list}}, nil
 }
 
-func (s *server) members(w http.ResponseWriter, r *http.Request) {
-	a, ok := s.workspace(w, r, false)
-	if !ok {
-		return
+func (s *server) getProductUsecase(ctx context.Context, a auth.Principal, resourceID string) (*auth.Result, error) {
+	id, err := parseProductID(resourceID)
+	if err != nil {
+		return nil, err
 	}
-	body, ok := s.businessBody(w, r)
-	if !ok {
-		return
-	}
-	result, err := s.membersUsecase(r.Context(), a, r.Method, r.PathValue("id"), r.URL.Query(), body, s.auth.SessionHash(r))
-	s.respondBusiness(w, result, err)
+	row := s.db.QueryRow(ctx, "SELECT "+productFields+" FROM products WHERE tenant_id=$1 AND id=$2", a.TenantID, id)
+	return productResult(200, row)
 }
-func (s *server) membersUsecase(ctx context.Context, a auth.Principal, method, resourceID string, params url.Values, body map[string]any, sessionHash []byte) (*auth.Result, error) {
+
+func (s *server) createProductUsecase(ctx context.Context, a auth.Principal, body map[string]any) (*auth.Result, error) {
+	p, err := parseProductInput(body)
+	if err != nil {
+		return nil, err
+	}
+	row := s.db.QueryRow(ctx, "INSERT INTO products(tenant_id,name,category,price,description) VALUES($1,$2,$3,$4,$5) RETURNING "+productFields,
+		a.TenantID, p.Name, p.Category, p.Price, p.Description)
+	return productResult(201, row)
+}
+
+func (s *server) updateProductUsecase(ctx context.Context, a auth.Principal, resourceID string, body map[string]any) (*auth.Result, error) {
+	id, err := parseProductID(resourceID)
+	if err != nil {
+		return nil, err
+	}
+	p, err := parseProductInput(body)
+	if err != nil {
+		return nil, err
+	}
+	row := s.db.QueryRow(ctx, "UPDATE products SET name=$3,category=$4,price=$5,description=$6,updated_at=now() WHERE tenant_id=$1 AND id=$2 RETURNING "+productFields,
+		a.TenantID, id, p.Name, p.Category, p.Price, p.Description)
+	return productResult(200, row)
+}
+
+func (s *server) deleteProductUsecase(ctx context.Context, a auth.Principal, resourceID string) (*auth.Result, error) {
+	id, err := parseProductID(resourceID)
+	if err != nil {
+		return nil, err
+	}
+	tag, err := s.db.Exec(ctx, "DELETE FROM products WHERE tenant_id=$1 AND id=$2", a.TenantID, id)
+	if err != nil {
+		return nil, err
+	}
+	if tag.RowsAffected() == 0 {
+		return nil, auth.APIError{Status: 404, Message: "product not found"}
+	}
+	return &auth.Result{Status: 200, Data: map[string]any{"success": true, "message": "Product deleted"}}, nil
+}
+
+func (s *server) listMembersUsecase(ctx context.Context, a auth.Principal) (*auth.Result, error) {
 	rows, err := s.db.Query(ctx, `SELECT u.id,u.name,u.email,m.role FROM memberships m
  JOIN users u ON u.id=m.user_id WHERE m.tenant_id=$1 ORDER BY u.id`, a.TenantID)
 	if err != nil {
@@ -248,35 +215,28 @@ func (s *server) membersUsecase(ctx context.Context, a auth.Principal, method, r
 	return &auth.Result{Status: 200, Data: list}, nil
 }
 
-func (s *server) changeMember(w http.ResponseWriter, r *http.Request) {
-	a, ok := s.workspace(w, r, true)
-	if !ok {
-		return
+func (s *server) updateMemberUsecase(ctx context.Context, a auth.Principal, resourceID string, body map[string]any) (*auth.Result, error) {
+	var input struct {
+		Role string `json:"role"`
 	}
-	body, ok := s.businessBody(w, r)
-	if !ok {
-		return
+	if err := auth.DecodeBody(body, &input); err != nil {
+		return nil, err
 	}
-	result, err := s.changeMemberUsecase(r.Context(), a, r.Method, r.PathValue("id"), r.URL.Query(), body, s.auth.SessionHash(r))
-	s.respondBusiness(w, result, err)
+	if input.Role != "owner" && input.Role != "member" {
+		return nil, auth.APIError{Status: 400, Message: "invalid role"}
+	}
+	return s.mutateMember(ctx, a, resourceID, input.Role, false)
 }
-func (s *server) changeMemberUsecase(ctx context.Context, a auth.Principal, method, resourceID string, params url.Values, body map[string]any, sessionHash []byte) (*auth.Result, error) {
+
+func (s *server) removeMemberUsecase(ctx context.Context, a auth.Principal, resourceID string) (*auth.Result, error) {
+	return s.mutateMember(ctx, a, resourceID, "", true)
+}
+
+func (s *server) mutateMember(ctx context.Context, a auth.Principal, resourceID, newRole string, remove bool) (*auth.Result, error) {
 	id, err := strconv.ParseInt(resourceID, 10, 64)
 	if err != nil {
 		return nil, auth.APIError{Status: 404, Message: "member not found"}
 	}
-	var input struct {
-		Role string `json:"role"`
-	}
-	if method != http.MethodDelete {
-		if err := auth.DecodeBody(body, &input); err != nil {
-			return nil, err
-		}
-		if input.Role != "owner" && input.Role != "member" {
-			return nil, auth.APIError{Status: 400, Message: "invalid role"}
-		}
-	}
-
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, err
@@ -301,7 +261,7 @@ func (s *server) changeMemberUsecase(ctx context.Context, a auth.Principal, meth
 	if err != nil {
 		return nil, err
 	}
-	if role == "owner" && input.Role != "owner" {
+	if role == "owner" && (remove || newRole != "owner") {
 		var count int
 		if err := tx.QueryRow(ctx, "SELECT count(*) FROM memberships WHERE tenant_id=$1 AND role='owner'", a.TenantID).Scan(&count); err != nil {
 			return nil, err
@@ -310,10 +270,10 @@ func (s *server) changeMemberUsecase(ctx context.Context, a auth.Principal, meth
 			return nil, auth.APIError{Status: 409, Message: "workspace requires an owner"}
 		}
 	}
-	if method == http.MethodDelete {
+	if remove {
 		_, err = tx.Exec(ctx, "DELETE FROM memberships WHERE tenant_id=$1 AND user_id=$2", a.TenantID, id)
 	} else {
-		_, err = tx.Exec(ctx, "UPDATE memberships SET role=$3 WHERE tenant_id=$1 AND user_id=$2", a.TenantID, id, input.Role)
+		_, err = tx.Exec(ctx, "UPDATE memberships SET role=$3 WHERE tenant_id=$1 AND user_id=$2", a.TenantID, id, newRole)
 	}
 	if err != nil {
 		return nil, err
@@ -324,82 +284,61 @@ func (s *server) changeMemberUsecase(ctx context.Context, a auth.Principal, meth
 	return &auth.Result{Status: http.StatusNoContent}, nil
 }
 
-func (s *server) invitations(w http.ResponseWriter, r *http.Request) {
-	a, ok := s.workspace(w, r, true)
-	if !ok {
-		return
-	}
-	body, ok := s.businessBody(w, r)
-	if !ok {
-		return
-	}
-	result, err := s.invitationsUsecase(r.Context(), a, r.Method, r.PathValue("id"), r.URL.Query(), body, s.auth.SessionHash(r))
-	s.respondBusiness(w, result, err)
-}
-func (s *server) invitationsUsecase(ctx context.Context, a auth.Principal, method, resourceID string, params url.Values, body map[string]any, sessionHash []byte) (*auth.Result, error) {
-	switch method {
-	case http.MethodGet:
-		rows, err := s.db.Query(ctx, `SELECT encode(token_hash,'hex'),email,expires_at FROM invitations
+func (s *server) listInvitationsUsecase(ctx context.Context, a auth.Principal) (*auth.Result, error) {
+	rows, err := s.db.Query(ctx, `SELECT encode(token_hash,'hex'),email,expires_at FROM invitations
   WHERE tenant_id=$1 AND expires_at>now() AND accepted_at IS NULL AND revoked_at IS NULL ORDER BY expires_at`, a.TenantID)
-		if err != nil {
-			return nil, err
-		}
-		defer rows.Close()
-		list := []map[string]any{}
-		for rows.Next() {
-			var id, email string
-			var expires time.Time
-			if err := rows.Scan(&id, &email, &expires); err != nil {
-				return nil, err
-			}
-			list = append(list, map[string]any{"id": id, "email": email, "expiresAt": expires})
-		}
-		if err := rows.Err(); err != nil {
-			return nil, err
-		}
-		return &auth.Result{Status: 200, Data: list}, nil
-	case http.MethodPost:
-		var input struct {
-			Email string `json:"email"`
-		}
-		if err := auth.DecodeBody(body, &input); err != nil {
-			return nil, err
-		}
-		email := strings.ToLower(strings.TrimSpace(input.Email))
-		address, err := mail.ParseAddress(email)
-		if err != nil || address.Address != email {
-			return nil, auth.APIError{Status: 400, Message: "invalid email"}
-		}
-		token := auth.NewToken()
-		_, err = s.db.Exec(ctx, "INSERT INTO invitations(token_hash,tenant_id,email,expires_at) VALUES($1,$2,$3,now()+interval '7 days')", auth.HashToken(token), a.TenantID, email)
-		if err != nil {
-			return nil, err
-		}
-		return &auth.Result{Status: 201, Data: map[string]string{"url": fmt.Sprintf("%s/invite#%s", s.origins[0], token)}}, nil
-	case http.MethodDelete:
-		tag, err := s.db.Exec(ctx, `UPDATE invitations SET revoked_at=now() WHERE tenant_id=$1 AND encode(token_hash,'hex')=$2
-  AND accepted_at IS NULL AND revoked_at IS NULL`, a.TenantID, resourceID)
-		if err != nil {
-			return nil, err
-		}
-		if tag.RowsAffected() == 0 {
-			return nil, auth.APIError{Status: 404, Message: "invitation not found"}
-		}
-		return &auth.Result{Status: http.StatusNoContent}, nil
+	if err != nil {
+		return nil, err
 	}
-	return nil, auth.APIError{Status: 404, Message: "endpoint not found"}
+	defer rows.Close()
+	list := []map[string]any{}
+	for rows.Next() {
+		var id, email string
+		var expires time.Time
+		if err := rows.Scan(&id, &email, &expires); err != nil {
+			return nil, err
+		}
+		list = append(list, map[string]any{"id": id, "email": email, "expiresAt": expires})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return &auth.Result{Status: 200, Data: list}, nil
 }
 
-func (s *server) inspectInvitation(w http.ResponseWriter, r *http.Request) {
-	a := auth.Principal{}
-	body, ok := s.businessBody(w, r)
-	if !ok {
-		return
+func (s *server) createInvitationUsecase(ctx context.Context, a auth.Principal, body map[string]any) (*auth.Result, error) {
+	var input struct {
+		Email string `json:"email"`
 	}
-	result, err := s.inspectInvitationUsecase(r.Context(), a, r.Method, r.PathValue("id"), r.URL.Query(), body, s.auth.SessionHash(r))
-	s.respondBusiness(w, result, err)
+	if err := auth.DecodeBody(body, &input); err != nil {
+		return nil, err
+	}
+	email := strings.ToLower(strings.TrimSpace(input.Email))
+	address, err := mail.ParseAddress(email)
+	if err != nil || address.Address != email {
+		return nil, auth.APIError{Status: 400, Message: "invalid email"}
+	}
+	token := auth.NewToken()
+	_, err = s.db.Exec(ctx, "INSERT INTO invitations(token_hash,tenant_id,email,expires_at) VALUES($1,$2,$3,now()+interval '7 days')", auth.HashToken(token), a.TenantID, email)
+	if err != nil {
+		return nil, err
+	}
+	return &auth.Result{Status: 201, Data: map[string]string{"url": fmt.Sprintf("%s/invite#%s", s.origins[0], token)}}, nil
 }
-func (s *server) inspectInvitationUsecase(ctx context.Context, a auth.Principal, method, resourceID string, params url.Values, body map[string]any, sessionHash []byte) (*auth.Result, error) {
+
+func (s *server) revokeInvitationUsecase(ctx context.Context, a auth.Principal, resourceID string) (*auth.Result, error) {
+	tag, err := s.db.Exec(ctx, `UPDATE invitations SET revoked_at=now() WHERE tenant_id=$1 AND encode(token_hash,'hex')=$2
+  AND accepted_at IS NULL AND revoked_at IS NULL`, a.TenantID, resourceID)
+	if err != nil {
+		return nil, err
+	}
+	if tag.RowsAffected() == 0 {
+		return nil, auth.APIError{Status: 404, Message: "invitation not found"}
+	}
+	return &auth.Result{Status: http.StatusNoContent}, nil
+}
+
+func (s *server) inspectInvitationUsecase(ctx context.Context, body map[string]any) (*auth.Result, error) {
 	var input struct{ Token string }
 	if err := auth.DecodeBody(body, &input); err != nil {
 		return nil, err
@@ -424,19 +363,7 @@ func (s *server) inspectInvitationUsecase(ctx context.Context, a auth.Principal,
 	return &auth.Result{Status: 200, Data: map[string]any{"companyName": name, "emailHint": hint, "expiresAt": expires, "organization": organization}}, nil
 }
 
-func (s *server) accept(w http.ResponseWriter, r *http.Request) {
-	a, ok := s.auth.Authenticate(w, r)
-	if !ok {
-		return
-	}
-	body, ok := s.businessBody(w, r)
-	if !ok {
-		return
-	}
-	result, err := s.acceptUsecase(r.Context(), a, r.Method, r.PathValue("id"), r.URL.Query(), body, s.auth.SessionHash(r))
-	s.respondBusiness(w, result, err)
-}
-func (s *server) acceptUsecase(ctx context.Context, a auth.Principal, method, resourceID string, params url.Values, body map[string]any, sessionHash []byte) (*auth.Result, error) {
+func (s *server) acceptInvitationUsecase(ctx context.Context, a auth.Principal, body map[string]any, sessionHash []byte) (*auth.Result, error) {
 	var input struct{ Token string }
 	if err := auth.DecodeBody(body, &input); err != nil {
 		return nil, err

@@ -62,7 +62,7 @@ func TestSingleListenerAndWorkerShutdown(t *testing.T) {
 				}
 			}
 			client := http.Client{Timeout: 2 * time.Second}
-			for path, want := range map[string]string{"/api/v1/product-research/categories": "ecommerce", "/api/v1/screening/products": "screening"} {
+			for path, want := range map[string]string{"/sellerops.ecom.v1.EcomService/ListResearchCategories": "ecommerce", "/api/v1/screening/imports": "screening"} {
 				r, err := client.Get("http://" + listener.Addr().String() + path)
 				if err != nil {
 					t.Fatal(err)
@@ -72,6 +72,14 @@ func TestSingleListenerAndWorkerShutdown(t *testing.T) {
 				if string(data) != want {
 					t.Fatalf("routing %s got %s", path, data)
 				}
+			}
+			legacyResp, err := client.Get("http://" + listener.Addr().String() + "/api/v1/product-research/categories")
+			if err != nil {
+				t.Fatal(err)
+			}
+			legacyResp.Body.Close()
+			if legacyResp.StatusCode != 404 {
+				t.Fatalf("legacy ecom route should return 404, got %d", legacyResp.StatusCode)
 			}
 			r, err := client.Get("http://" + listener.Addr().String() + "/health")
 			if err != nil {

@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/redis/go-redis/v9"
-	"io"
 	"log"
 	"net/http"
 	"os"
@@ -61,7 +60,6 @@ type Service struct {
 	model   Model
 	secret  string
 }
-type userKey struct{}
 type httpError struct {
 	status  int
 	message string
@@ -91,25 +89,6 @@ func validateASIN(raw string) (string, error) {
 		return "", httpError{422, "ASIN必须为10位字母数字"}
 	}
 	return asin, nil
-}
-func decode(w http.ResponseWriter, r *http.Request) (Obj, error) {
-	r.Body = http.MaxBytesReader(w, r.Body, 64*1024)
-	defer r.Body.Close()
-	var v Obj
-	d := json.NewDecoder(r.Body)
-	d.UseNumber()
-	if e := d.Decode(&v); e != nil {
-		var oversized *http.MaxBytesError
-		if errors.As(e, &oversized) {
-			return nil, httpError{413, "请求内容过大"}
-		}
-		return nil, httpError{422, "请求JSON无效"}
-	}
-	var extra any
-	if e := d.Decode(&extra); e != io.EOF {
-		return nil, httpError{422, "请求JSON无效"}
-	}
-	return v, nil
 }
 func write(w http.ResponseWriter, v any, e error) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
@@ -159,16 +138,6 @@ func (s *Service) Handler() http.Handler {
 			return
 		}
 		write(w, Obj{"status": "ok", "version": "2.0.0", "runtime": "go"}, nil)
-	})
-	mux.HandleFunc("/api/v1/", func(w http.ResponseWriter, r *http.Request) {
-		user, e := s.authenticate(r)
-		if e != nil {
-			write(w, nil, e)
-			return
-		}
-		r = r.WithContext(context.WithValue(r.Context(), userKey{}, user))
-		v, e := s.route(w, r)
-		write(w, v, e)
 	})
 	return mux
 }
