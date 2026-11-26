@@ -14,27 +14,24 @@ import (
 // accidentally consuming jobs still owned by the previous implementation.
 const goEngine = "go-v1"
 
-func (s *service) enqueueScreen(ctx context.Context, a identity, b Object, policyID string) (any, error) {
-	if b["product_ids"] != nil || b["filters"] != nil {
-		ids, e := s.selection(ctx, a, b)
+func (s *service) enqueueScreen(ctx context.Context, a identity, cmd EnqueueScreenCommand, policyID string) (*JobSubmission, error) {
+	selection := cmd.Selection
+	if selection.HasProductIDs || selection.HasFilterKeys || len(selection.Filters) > 0 {
+		ids, e := s.selection(ctx, a, selection)
 		if e != nil {
 			return nil, e
 		}
-		explicit := []any{}
-		for _, id := range ids {
-			explicit = append(explicit, id)
-		}
-		b = Object{"product_ids": explicit}
+		selection = ProductSelectionCommand{ProductIDs: ids, HasProductIDs: true}
 	}
 	tx, e := s.db.Begin(ctx)
 	if e != nil {
 		return nil, e
 	}
 	defer tx.Rollback(ctx)
-	if previous, e := receipt(ctx, tx, a); e != nil || previous != nil {
+	if previous, e := typedReceipt[JobSubmission](ctx, tx, a); e != nil || previous != nil {
 		return previous, e
 	}
-	result, e := s.enqueueScreenTx(ctx, tx, a, b, policyID)
+	result, e := s.enqueueScreenTx(ctx, tx, a, EnqueueScreenCommand{Selection: selection}, policyID)
 	if e != nil {
 		return nil, e
 	}
@@ -46,7 +43,8 @@ func (s *service) enqueueScreen(ctx context.Context, a identity, b Object, polic
 	}
 	return result, nil
 }
-func (s *service) enqueueScreenTx(ctx context.Context, tx pgx.Tx, a identity, b Object, policyID string) (Object, error) {
+
+func (s *service) enqueueScreenTx(ctx context.Context, tx pgx.Tx, a identity, cmd EnqueueScreenCommand, policyID string) (*JobSubmission, error) {
 	var e error
 	var policy []byte
 	if policyID == "" {
@@ -65,21 +63,16 @@ func (s *service) enqueueScreenTx(ctx context.Context, tx pgx.Tx, a identity, b 
 	if e = validatePolicy(config); e != nil {
 		return nil, invalid(e.Error())
 	}
-	ids := []string{}
-	if raw, ok := b["product_ids"].([]any); ok {
-		if len(raw) > 100000 {
+	ids := cmd.Selection.ProductIDs
+	if cmd.Selection.HasProductIDs {
+		if len(ids) > 100000 {
 			return nil, invalid("商品数量超限")
 		}
-		for _, v := range raw {
-			ids = append(ids, str(v))
-		}
-	} else if len(b) > 0 {
-		if filters, ok := b["filters"].(map[string]any); ok && len(filters) > 0 {
-			return nil, invalid("Go 重筛暂只接受明确商品集合或全工作区")
-		}
+	} else if cmd.Selection.HasFilterKeys {
+		return nil, invalid("Go 重筛暂只接受明确商品集合或全工作区")
 	}
 	var rows pgx.Rows
-	if b["product_ids"] != nil {
+	if cmd.Selection.HasProductIDs {
 		rows, e = tx.Query(ctx, "UPDATE ps_products SET screen_generation=screen_generation+1 WHERE tenant_id=$1 AND archived_at IS NULL AND id=ANY($2::uuid[]) RETURNING id::text,data_revision,screen_generation", a.Tenant, ids)
 	} else {
 		rows, e = tx.Query(ctx, "UPDATE ps_products SET screen_generation=screen_generation+1 WHERE tenant_id=$1 AND archived_at IS NULL RETURNING id::text,data_revision,screen_generation", a.Tenant)
@@ -87,15 +80,14 @@ func (s *service) enqueueScreenTx(ctx context.Context, tx pgx.Tx, a identity, b 
 	if e != nil {
 		return nil, e
 	}
-	targets := []Object{}
+	targets := []ScreenTargetSnapshot{}
 	for rows.Next() {
-		var id string
-		var revision, generation int64
-		if e = rows.Scan(&id, &revision, &generation); e != nil {
+		var target ScreenTargetSnapshot
+		if e = rows.Scan(&target.ID, &target.Revision, &target.Generation); e != nil {
 			rows.Close()
 			return nil, e
 		}
-		targets = append(targets, Object{"id": id, "revision": revision, "generation": generation})
+		targets = append(targets, target)
 	}
 	e = rows.Err()
 	rows.Close()
@@ -103,12 +95,12 @@ func (s *service) enqueueScreenTx(ctx context.Context, tx pgx.Tx, a identity, b 
 		return nil, e
 	}
 	id := uuid()
-	payload := Object{"engine": goEngine, "policy": cfg, "targets": targets}
+	payload := ScreenJobPayload{Engine: goEngine, Policy: cfg, Targets: targets}
 	_, e = tx.Exec(ctx, "INSERT INTO ps_jobs(tenant_id,id,kind,idempotency_key,payload,created_by) VALUES($1,$2::uuid,'screen',$2::text,$3,$4)", a.Tenant, id, encoded(payload), a.User)
 	if e != nil {
 		return nil, e
 	}
-	return Object{"job_id": id, "run_id": id, "state": "queued"}, nil
+	return &JobSubmission{JobID: id, RunID: id, State: "queued"}, nil
 }
 
 func (s *service) worker(ctx context.Context) error {
@@ -172,21 +164,18 @@ func (s *service) worker(ctx context.Context) error {
 		}
 	}
 }
+
 func (s *service) runScreen(ctx context.Context, job Object, token string) error {
-	payload, ok := job["payload"].(map[string]any)
-	if !ok {
+	payload, err := decodeJobPayload[ScreenJobPayload](job)
+	if err != nil || payload.Policy == nil {
 		return fmt.Errorf("invalid job payload")
 	}
-	policy, ok := payload["policy"].(map[string]any)
-	if !ok {
-		return fmt.Errorf("missing policy snapshot")
-	}
-	config, ok := policy["config"].(map[string]any)
+	config, ok := payload.Policy["config"].(map[string]any)
 	if !ok {
 		return fmt.Errorf("invalid policy snapshot")
 	}
-	targets, ok := payload["targets"].([]any)
-	if !ok {
+	targets := payload.Targets
+	if targets == nil {
 		return fmt.Errorf("missing targets")
 	}
 	tenant := integer(job["tenant_id"])
@@ -196,7 +185,7 @@ func (s *service) runScreen(ctx context.Context, job Object, token string) error
 		completed = integer(result["completed"])
 	}
 	for index := completed; index < int64(len(targets)); index++ {
-		target := targets[index].(map[string]any)
+		target := targets[index]
 		tx, e := s.db.Begin(ctx)
 		if e != nil {
 			return e
@@ -208,7 +197,7 @@ func (s *service) runScreen(ctx context.Context, job Object, token string) error
 			return e
 		}
 		var raw []byte
-		e = tx.QueryRow(ctx, "SELECT to_jsonb(p)||jsonb_build_object('price_usd',m.price_usd::text,'sales_scope',m.sales_scope,'monthly_sales',CASE WHEN m.sales_scope='child' THEN m.monthly_sales END,'sales_quantity_kind',m.sales_quantity_kind,'occurrences',(SELECT count(DISTINCT stat_month) FROM ps_product_monthly h WHERE h.tenant_id=p.tenant_id AND h.product_id=p.id)) FROM ps_products p LEFT JOIN ps_product_monthly m ON m.tenant_id=p.tenant_id AND m.id=p.current_monthly_id WHERE p.tenant_id=$1 AND p.id=$2::uuid AND p.data_revision=$3 AND p.screen_generation=$4 FOR UPDATE OF p", tenant, target["id"], integer(target["revision"]), integer(target["generation"])).Scan(&raw)
+		e = tx.QueryRow(ctx, "SELECT to_jsonb(p)||jsonb_build_object('price_usd',m.price_usd::text,'sales_scope',m.sales_scope,'monthly_sales',CASE WHEN m.sales_scope='child' THEN m.monthly_sales END,'sales_quantity_kind',m.sales_quantity_kind,'occurrences',(SELECT count(DISTINCT stat_month) FROM ps_product_monthly h WHERE h.tenant_id=p.tenant_id AND h.product_id=p.id)) FROM ps_products p LEFT JOIN ps_product_monthly m ON m.tenant_id=p.tenant_id AND m.id=p.current_monthly_id WHERE p.tenant_id=$1 AND p.id=$2::uuid AND p.data_revision=$3 AND p.screen_generation=$4 FOR UPDATE OF p", tenant, target.ID, target.Revision, target.Generation).Scan(&raw)
 		if e != nil && e != pgx.ErrNoRows {
 			tx.Rollback(ctx)
 			return e
@@ -217,7 +206,7 @@ func (s *service) runScreen(ctx context.Context, job Object, token string) error
 			p := decodeObject(raw)
 			result := classify(p, config)
 			group := groupKey(p, result)
-			_, e = tx.Exec(ctx, `UPDATE ps_products SET machine_decision=$5,machine_recommendation=$6,machine_direction=$7,machine_group_key=$8,machine_reasons=$9,machine_evidence=$10,machine_policy_id=$11::uuid,machine_source_row_id=current_row_id,machine_monthly_id=current_monthly_id,machine_monthly_revision=current_monthly_revision,current_group_rep_id=id,screened_at=now() WHERE tenant_id=$1 AND id=$2::uuid AND data_revision=$3 AND screen_generation=$4`, tenant, target["id"], integer(target["revision"]), integer(target["generation"]), result["decision"], result["recommendation"], result["direction"], group, encoded(result["reasons"]), encoded(result["evidence"]), policy["id"])
+			_, e = tx.Exec(ctx, `UPDATE ps_products SET machine_decision=$5,machine_recommendation=$6,machine_direction=$7,machine_group_key=$8,machine_reasons=$9,machine_evidence=$10,machine_policy_id=$11::uuid,machine_source_row_id=current_row_id,machine_monthly_id=current_monthly_id,machine_monthly_revision=current_monthly_revision,current_group_rep_id=id,screened_at=now() WHERE tenant_id=$1 AND id=$2::uuid AND data_revision=$3 AND screen_generation=$4`, tenant, target.ID, target.Revision, target.Generation, result["decision"], result["recommendation"], result["direction"], group, encoded(result["reasons"]), encoded(result["evidence"]), payload.Policy["id"])
 			if e != nil {
 				tx.Rollback(ctx)
 				return e

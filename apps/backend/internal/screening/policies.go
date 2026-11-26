@@ -66,7 +66,7 @@ func (s *service) testPolicy(ctx context.Context, a identity, id string, cmd Tes
 	return &PolicyTestResult{Items: items}, nil
 }
 
-func (s *service) activatePolicy(ctx context.Context, a identity, id string) (Object, error) {
+func (s *service) activatePolicy(ctx context.Context, a identity, id string) (any, error) {
 	if _, e := s.loadValidatedPolicy(ctx, a, id); e != nil {
 		return nil, e
 	}
@@ -78,7 +78,7 @@ func (s *service) activatePolicy(ctx context.Context, a identity, id string) (Ob
 		return nil, e
 	}
 	defer tx.Rollback(ctx)
-	if previous, e := receipt(ctx, tx, a); e != nil || previous != nil {
+	if previous, e := typedReceipt[JobSubmission](ctx, tx, a); e != nil || previous != nil {
 		return previous, e
 	}
 	if _, e = tx.Exec(ctx, "SELECT pg_advisory_xact_lock($1)", a.Tenant); e != nil {
@@ -90,7 +90,7 @@ func (s *service) activatePolicy(ctx context.Context, a identity, id string) (Ob
 	if _, e = tx.Exec(ctx, "UPDATE ps_configs SET active=true WHERE tenant_id=$1 AND id=$2::uuid", a.Tenant, id); e != nil {
 		return nil, e
 	}
-	result, e := s.enqueueScreenTx(ctx, tx, a, Object{}, id)
+	result, e := s.enqueueScreenTx(ctx, tx, a, EnqueueScreenCommand{}, id)
 	if e != nil {
 		return nil, e
 	}

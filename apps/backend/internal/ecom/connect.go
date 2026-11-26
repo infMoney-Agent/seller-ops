@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/structpb"
 	"net/http"
 	"net/url"
 	commonv1 "seller-ops/contracts/sellerops/common/v1"
@@ -56,6 +57,7 @@ func ecomRPCError(err error) *connect.Error {
 	}
 	return out
 }
+
 func (s *Service) registerRPC(mux *http.ServeMux) {
 	path, handler := ecomv1connect.NewEcomServiceHandler(s, connect.WithReadMaxBytes(160*1024))
 	writer := connect.NewErrorWriter()
@@ -69,6 +71,7 @@ func (s *Service) registerRPC(mux *http.ServeMux) {
 		handler.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), rpcUserKey{}, user)))
 	}))
 }
+
 func ecomQueryValues(q *ecomv1.EcomQuery) url.Values {
 	v := url.Values{}
 	if q == nil {
@@ -91,13 +94,24 @@ func ecomQueryValues(q *ecomv1.EcomQuery) url.Values {
 	}
 	return v
 }
-func ecomRPCRequest(ctx context.Context, body proto.Message) (int64, Obj, error) {
+
+func ecomRPCUser(ctx context.Context, body proto.Message) (int64, error) {
 	user, ok := ctx.Value(rpcUserKey{}).(int64)
 	if !ok {
-		return 0, nil, httpError{401, "请先登录"}
+		return 0, httpError{401, "请先登录"}
+	}
+	if body != nil && body.ProtoReflect().IsValid() && proto.Size(body) > 64*1024 {
+		return 0, httpError{413, "请求内容过大"}
+	}
+	return user, nil
+}
+
+func ecomRPCRequest(ctx context.Context, body proto.Message) (int64, Obj, error) {
+	user, err := ecomRPCUser(ctx, body)
+	if err != nil {
+		return 0, nil, err
 	}
 	b := Obj{}
-	var err error
 	if body != nil && body.ProtoReflect().IsValid() {
 		if body.ProtoReflect().Descriptor().FullName() == "google.protobuf.Struct" {
 			raw, ok := body.(interface{ AsMap() map[string]any })
@@ -117,6 +131,7 @@ func ecomRPCRequest(ctx context.Context, body proto.Message) (int64, Obj, error)
 	}
 	return user, b, nil
 }
+
 func ecomRPCResponse[T any, PT interface {
 	*T
 	proto.Message
@@ -130,12 +145,70 @@ func ecomRPCResponse[T any, PT interface {
 	return connect.NewResponse(out), nil
 }
 
+func scoreToProto(v Obj) *ecomv1.Score {
+	out := &ecomv1.Score{
+		Asin:                 proto.String(text(v["asin"])),
+		Title:                proto.String(text(v["title"])),
+		Price:                proto.Float64(number(v["price"])),
+		BsrCategory:          proto.String(text(v["bsr_category"])),
+		ReviewCount:          proto.Int64(int64(number(v["review_count"]))),
+		Rating:               proto.Float64(number(v["rating"])),
+		AiAnalysis:           proto.String(text(v["ai_analysis"])),
+		Recommended:          proto.Bool(v["recommended"] == true),
+		Tags:                 stringsList(v["tags"]),
+		CompetitionScore:     proto.Float64(number(v["competition_score"])),
+		ProfitPotentialScore: proto.Float64(number(v["profit_potential_score"])),
+		TrendScore:           proto.Float64(number(v["trend_score"])),
+		OverallScore:         proto.Float64(number(v["overall_score"])),
+	}
+	switch rank := v["bsr_rank"].(type) {
+	case *int:
+		if rank != nil {
+			out.BsrRank = proto.Int64(int64(*rank))
+		} else {
+			out.LegacyFields = &structpb.Struct{Fields: map[string]*structpb.Value{"bsr_rank": structpb.NewNullValue()}}
+		}
+	case nil:
+		out.LegacyFields = &structpb.Struct{Fields: map[string]*structpb.Value{"bsr_rank": structpb.NewNullValue()}}
+	default:
+		out.BsrRank = proto.Int64(int64(number(rank)))
+	}
+	return out
+}
+
+func listingToProto(v Obj) *ecomv1.ListingResult {
+	counts := map[string]int64{}
+	if raw, ok := v["character_counts"].(Obj); ok {
+		for k, val := range raw {
+			counts[k] = int64(number(val))
+		}
+	}
+	return &ecomv1.ListingResult{
+		AsinReference:   proto.String(text(v["asin_reference"])),
+		Marketplace:     proto.String(text(v["marketplace"])),
+		Language:        proto.String(text(v["language"])),
+		Title:           proto.String(text(v["title"])),
+		Description:     proto.String(text(v["description"])),
+		APlusDraft:      proto.String(text(v["a_plus_draft"])),
+		BulletPoints:    stringsList(v["bullet_points"]),
+		SearchTerms:     stringsList(v["search_terms"]),
+		SubjectMatter:   stringsList(v["subject_matter"]),
+		SeoScore:        proto.Float64(number(v["seo_score"])),
+		CharacterCounts: counts,
+	}
+}
+
 func (s *Service) ListResearchCategories(ctx context.Context, req *connect.Request[ecomv1.ListResearchCategoriesRequest]) (*connect.Response[ecomv1.ListResearchCategoriesResponse], error) {
-	if _, _, err := ecomRPCRequest(ctx, req.Msg.Body); err != nil {
+	if _, err := ecomRPCUser(ctx, req.Msg.Body); err != nil {
 		return nil, ecomRPCError(err)
 	}
 	value, err := s.listResearchCategories()
-	return ecomRPCResponse(&ecomv1.ListResearchCategoriesResponse{}, value, err)
+	if err != nil {
+		return nil, ecomRPCError(err)
+	}
+	return connect.NewResponse(&ecomv1.ListResearchCategoriesResponse{
+		Data: &ecomv1.CategoryResult{Categories: stringsList(value["categories"])},
+	}), nil
 }
 
 func (s *Service) ResearchProducts(ctx context.Context, req *connect.Request[ecomv1.ResearchProductsRequest]) (*connect.Response[ecomv1.ResearchProductsResponse], error) {
@@ -144,23 +217,41 @@ func (s *Service) ResearchProducts(ctx context.Context, req *connect.Request[eco
 		return nil, ecomRPCError(err)
 	}
 	value, err := s.researchProducts(ctx, body)
-	return ecomRPCResponse(&ecomv1.ResearchProductsResponse{}, value, err)
+	if err != nil {
+		return nil, ecomRPCError(err)
+	}
+	rows, _ := value["results"].([]Obj)
+	scores := make([]*ecomv1.Score, 0, len(rows))
+	for _, row := range rows {
+		scores = append(scores, scoreToProto(row))
+	}
+	return connect.NewResponse(&ecomv1.ResearchProductsResponse{
+		Data: &ecomv1.ResearchResult{
+			Category: proto.String(text(value["category"])),
+			Results:  scores,
+			Failed:   proto.Int64(int64(number(value["failed"]))),
+		},
+	}), nil
 }
 
 func (s *Service) ScoreProduct(ctx context.Context, req *connect.Request[ecomv1.ScoreProductRequest]) (*connect.Response[ecomv1.ScoreProductResponse], error) {
-	if _, _, err := ecomRPCRequest(ctx, req.Msg.Body); err != nil {
+	if _, err := ecomRPCUser(ctx, req.Msg.Body); err != nil {
 		return nil, ecomRPCError(err)
 	}
 	value, err := s.scoreProduct(ctx, req.Msg.GetAsin(), ecomQueryValues(req.Msg.Query))
-	return ecomRPCResponse(&ecomv1.ScoreProductResponse{}, value, err)
+	if err != nil {
+		return nil, ecomRPCError(err)
+	}
+	return connect.NewResponse(&ecomv1.ScoreProductResponse{Data: scoreToProto(value)}), nil
 }
 
 func (s *Service) ListListingLanguages(ctx context.Context, req *connect.Request[ecomv1.ListListingLanguagesRequest]) (*connect.Response[ecomv1.ListListingLanguagesResponse], error) {
-	if _, _, err := ecomRPCRequest(ctx, req.Msg.Body); err != nil {
+	if _, err := ecomRPCUser(ctx, req.Msg.Body); err != nil {
 		return nil, ecomRPCError(err)
 	}
-	value, err := s.listListingLanguages()
-	return ecomRPCResponse(&ecomv1.ListListingLanguagesResponse{}, value, err)
+	return connect.NewResponse(&ecomv1.ListListingLanguagesResponse{
+		Data: &ecomv1.LanguageResult{Languages: languages},
+	}), nil
 }
 
 func (s *Service) GenerateListing(ctx context.Context, req *connect.Request[ecomv1.GenerateListingRequest]) (*connect.Response[ecomv1.GenerateListingResponse], error) {
@@ -169,7 +260,10 @@ func (s *Service) GenerateListing(ctx context.Context, req *connect.Request[ecom
 		return nil, ecomRPCError(err)
 	}
 	value, err := s.generateListing(ctx, body)
-	return ecomRPCResponse(&ecomv1.GenerateListingResponse{}, value, err)
+	if err != nil {
+		return nil, ecomRPCError(err)
+	}
+	return connect.NewResponse(&ecomv1.GenerateListingResponse{Data: listingToProto(value)}), nil
 }
 
 func (s *Service) OptimizeListing(ctx context.Context, req *connect.Request[ecomv1.OptimizeListingRequest]) (*connect.Response[ecomv1.OptimizeListingResponse], error) {
@@ -178,7 +272,10 @@ func (s *Service) OptimizeListing(ctx context.Context, req *connect.Request[ecom
 		return nil, ecomRPCError(err)
 	}
 	value, err := s.optimizeListing(ctx, body)
-	return ecomRPCResponse(&ecomv1.OptimizeListingResponse{}, value, err)
+	if err != nil {
+		return nil, ecomRPCError(err)
+	}
+	return connect.NewResponse(&ecomv1.OptimizeListingResponse{Data: listingToProto(value)}), nil
 }
 
 func (s *Service) AnalyzeReviews(ctx context.Context, req *connect.Request[ecomv1.AnalyzeReviewsRequest]) (*connect.Response[ecomv1.AnalyzeReviewsResponse], error) {
@@ -191,7 +288,7 @@ func (s *Service) AnalyzeReviews(ctx context.Context, req *connect.Request[ecomv
 }
 
 func (s *Service) AnalyzeReviewsLegacy(ctx context.Context, req *connect.Request[ecomv1.AnalyzeReviewsLegacyRequest]) (*connect.Response[ecomv1.AnalyzeReviewsLegacyResponse], error) {
-	if _, _, err := ecomRPCRequest(ctx, req.Msg.Body); err != nil {
+	if _, err := ecomRPCUser(ctx, req.Msg.Body); err != nil {
 		return nil, ecomRPCError(err)
 	}
 	value, err := s.analyzeReviewsLegacy(ctx, req.Msg.GetAsin(), ecomQueryValues(req.Msg.Query))
@@ -199,7 +296,7 @@ func (s *Service) AnalyzeReviewsLegacy(ctx context.Context, req *connect.Request
 }
 
 func (s *Service) OptimizeAds(ctx context.Context, req *connect.Request[ecomv1.OptimizeAdsRequest]) (*connect.Response[ecomv1.OptimizeAdsResponse], error) {
-	if _, _, err := ecomRPCRequest(ctx, req.Msg.Body); err != nil {
+	if _, err := ecomRPCUser(ctx, req.Msg.Body); err != nil {
 		return nil, ecomRPCError(err)
 	}
 	value, err := s.optimizeAdsRequest(ctx, ecomQueryValues(req.Msg.Query))
@@ -207,7 +304,7 @@ func (s *Service) OptimizeAds(ctx context.Context, req *connect.Request[ecomv1.O
 }
 
 func (s *Service) ListMonitors(ctx context.Context, req *connect.Request[ecomv1.ListMonitorsRequest]) (*connect.Response[ecomv1.ListMonitorsResponse], error) {
-	user, _, err := ecomRPCRequest(ctx, req.Msg.Body)
+	user, err := ecomRPCUser(ctx, req.Msg.Body)
 	if err != nil {
 		return nil, ecomRPCError(err)
 	}
@@ -221,20 +318,36 @@ func (s *Service) AddMonitor(ctx context.Context, req *connect.Request[ecomv1.Ad
 		return nil, ecomRPCError(err)
 	}
 	value, err := s.addMonitor(ctx, user, body)
-	return ecomRPCResponse(&ecomv1.AddMonitorResponse{}, value, err)
+	if err != nil {
+		return nil, ecomRPCError(err)
+	}
+	return connect.NewResponse(&ecomv1.AddMonitorResponse{
+		Data: &ecomv1.MonitorActionResult{
+			Status: proto.String(text(value["status"])),
+			Asin:   proto.String(text(value["asin"])),
+		},
+	}), nil
 }
 
 func (s *Service) RemoveMonitor(ctx context.Context, req *connect.Request[ecomv1.RemoveMonitorRequest]) (*connect.Response[ecomv1.RemoveMonitorResponse], error) {
-	user, _, err := ecomRPCRequest(ctx, req.Msg.Body)
+	user, err := ecomRPCUser(ctx, req.Msg.Body)
 	if err != nil {
 		return nil, ecomRPCError(err)
 	}
 	value, err := s.removeMonitor(ctx, user, req.Msg.GetAsin())
-	return ecomRPCResponse(&ecomv1.RemoveMonitorResponse{}, value, err)
+	if err != nil {
+		return nil, ecomRPCError(err)
+	}
+	return connect.NewResponse(&ecomv1.RemoveMonitorResponse{
+		Data: &ecomv1.MonitorActionResult{
+			Status: proto.String(text(value["status"])),
+			Asin:   proto.String(text(value["asin"])),
+		},
+	}), nil
 }
 
 func (s *Service) ListSnapshots(ctx context.Context, req *connect.Request[ecomv1.ListSnapshotsRequest]) (*connect.Response[ecomv1.ListSnapshotsResponse], error) {
-	user, _, err := ecomRPCRequest(ctx, req.Msg.Body)
+	user, err := ecomRPCUser(ctx, req.Msg.Body)
 	if err != nil {
 		return nil, ecomRPCError(err)
 	}
@@ -243,7 +356,7 @@ func (s *Service) ListSnapshots(ctx context.Context, req *connect.Request[ecomv1
 }
 
 func (s *Service) CreateSnapshot(ctx context.Context, req *connect.Request[ecomv1.CreateSnapshotRequest]) (*connect.Response[ecomv1.CreateSnapshotResponse], error) {
-	user, _, err := ecomRPCRequest(ctx, req.Msg.Body)
+	user, err := ecomRPCUser(ctx, req.Msg.Body)
 	if err != nil {
 		return nil, ecomRPCError(err)
 	}

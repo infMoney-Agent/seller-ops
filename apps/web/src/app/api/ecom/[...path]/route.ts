@@ -1,7 +1,6 @@
-import { authBackendResponse } from '@/lib/auth-backend';
-import { connectEcom, ecomConnectFailure } from '@/features/screening/ecom-connect';
+import { connectEcom, ecomConnectFailure } from '@/features/ecom/ecom-connect';
 import { isAllowedAppOrigin } from '@/lib/backend';
-import type { SellerSession } from '@/features/auth/session';
+import { resolveWorkspaceSession } from '@/lib/workspace-session';
 
 const allowed = new Map([
   ['product-research', new Set(['GET categories', 'POST research', 'GET score/:asin'])],
@@ -35,24 +34,18 @@ async function proxy(request: Request, { params }: { params: Promise<{ path: str
   }
 
   try {
-    const auth = await authBackendResponse('/api/auth/session', {
-      headers: { cookie: request.headers.get('cookie') || '' },
-      cache: 'no-store',
-      redirect: 'manual',
-      signal: AbortSignal.timeout(10000)
-    });
-    if (auth.status === 401) {
-      return Response.json({ detail: '请登录后继续。' }, { status: 401 });
-    }
-    if (!auth.ok) throw new Error('Session check failed');
-    const session: SellerSession = await auth.json();
-    if (!Number.isSafeInteger(session.id) || session.id <= 0) throw new Error('Invalid session');
-    if (
-      !Number.isSafeInteger(session.workspaceId) ||
-      session.workspaceId <= 0 ||
-      !['owner', 'member'].includes(session.role)
-    ) {
-      return Response.json({ detail: '请先通过邀请加入公司。' }, { status: 403 });
+    const auth = await resolveWorkspaceSession(request);
+    if (!auth.ok) {
+      if (auth.reason === 'unauthenticated') {
+        return Response.json({ detail: '请登录后继续。' }, { status: 401 });
+      }
+      if (auth.reason === 'no_workspace') {
+        return Response.json({ detail: '请先通过邀请加入公司。' }, { status: 403 });
+      }
+      if (auth.reason === 'workspace_switched') {
+        return Response.json({ detail: '工作区已切换，请刷新页面。' }, { status: 409 });
+      }
+      throw new Error('Session check failed');
     }
 
     try {
@@ -60,7 +53,7 @@ async function proxy(request: Request, { params }: { params: Promise<{ path: str
         await connectEcom(
           request,
           module + '/' + action + (asin ? '/' + asin.toUpperCase() : ''),
-          session.id
+          auth.session.id
         ),
         { headers: { 'Cache-Control': 'no-store' } }
       );

@@ -1,9 +1,9 @@
 import 'server-only';
 import { createHmac, randomUUID } from 'node:crypto';
-import { Code, ConnectError, createClient } from '@connectrpc/connect';
-import { createConnectTransport } from '@connectrpc/connect-node';
+import { Code, ConnectError } from '@connectrpc/connect';
 import { ScreeningImportService } from '@/gen/sellerops/screening/v1/import_pb';
 import { ErrorDetailSchema } from '@/gen/sellerops/common/v1/error_pb';
+import { getInternalConnectClient } from '@/lib/connect-transport';
 import type { SellerSession } from '@/features/auth/session';
 import {
   importPagination,
@@ -106,13 +106,11 @@ export function importRPCClient(
       ].join('\n')
     )
     .digest('hex');
-  const transport = createConnectTransport({
-    baseUrl: process.env.SCREENING_API_URL || 'http://127.0.0.1:18090',
-    httpVersion: '1.1',
-    useBinaryFormat: false,
-    defaultTimeoutMs: 120000
-  });
-  const client = createClient(ScreeningImportService, transport);
+  const client = getInternalConnectClient(
+    ScreeningImportService,
+    process.env.SCREENING_API_URL || 'http://127.0.0.1:18090',
+    120000
+  );
   const options = {
     signal,
     headers: {

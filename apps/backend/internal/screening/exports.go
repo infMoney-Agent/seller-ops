@@ -8,7 +8,6 @@ import (
 	"github.com/xuri/excelize/v2"
 	"mime"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -16,17 +15,17 @@ import (
 	"unicode/utf8"
 )
 
-func (s *service) selection(ctx context.Context, a identity, b Object) ([]string, error) {
+func (s *service) selection(ctx context.Context, a identity, cmd ProductSelectionCommand) ([]string, error) {
 	ids := []string{}
-	if raw, ok := b["product_ids"].([]any); ok {
-		if len(raw) == 0 || len(raw) > 100000 {
+	if cmd.HasProductIDs {
+		if len(cmd.ProductIDs) == 0 || len(cmd.ProductIDs) > 100000 {
 			return nil, invalid("商品集合须在1到10万之间")
 		}
-		for _, v := range raw {
-			if !uuidPattern.MatchString(str(v)) {
+		for _, id := range cmd.ProductIDs {
+			if !uuidPattern.MatchString(id) {
 				return nil, invalid("商品ID无效")
 			}
-			ids = append(ids, str(v))
+			ids = append(ids, id)
 		}
 		var total int
 		if e := s.db.QueryRow(ctx, "SELECT count(*) FROM ps_products WHERE tenant_id=$1 AND archived_at IS NULL AND id=ANY($2::uuid[])", a.Tenant, ids).Scan(&total); e != nil {
@@ -38,16 +37,10 @@ func (s *service) selection(ctx context.Context, a identity, b Object) ([]string
 		sort.Strings(ids)
 		return ids, nil
 	}
-	filters := url.Values{}
-	if raw, ok := b["filters"].(map[string]any); ok {
-		for k, v := range raw {
-			filters.Set(k, str(v))
-		}
-	}
-	if e := validateFilters(filters); e != nil {
+	if e := validateFilters(cmd.Filters); e != nil {
 		return nil, e
 	}
-	q := newProductQuery(a, filters)
+	q := newProductQuery(a, cmd.Filters)
 	rows, e := s.db.Query(ctx, "SELECT p.id::text FROM ps_products p "+filterJoins(q, false)+" WHERE "+q.where+" ORDER BY p.id LIMIT 100001", q.args...)
 	if e != nil {
 		return nil, e
@@ -65,59 +58,67 @@ func (s *service) selection(ctx context.Context, a identity, b Object) ([]string
 	}
 	return ids, rows.Err()
 }
-func (s *service) queueExport(ctx context.Context, a identity, b Object) (any, error) {
-	ids, e := s.selection(ctx, a, b)
+func (s *service) queueExport(ctx context.Context, a identity, cmd ProductSelectionCommand) (*JobSubmission, error) {
+	ids, e := s.selection(ctx, a, cmd)
 	if e != nil {
 		return nil, e
 	}
-	return s.queue(ctx, a, "export", Object{"product_ids": ids})
+	return s.queue(ctx, a, "export", ExportJobPayload{Engine: goEngine, ProductIDs: ids})
 }
-func (s *service) queueProfit(ctx context.Context, a identity, b Object) (any, error) {
-	ids, e := s.selection(ctx, a, b)
+func (s *service) queueProfit(ctx context.Context, a identity, cmd QueueProfitBatchCommand) (*JobSubmission, error) {
+	ids, e := s.selection(ctx, a, cmd.Selection)
 	if e != nil {
 		return nil, e
 	}
-	input, ok := b["inputs"].(map[string]any)
-	if !ok {
+	if !cmd.HasInputs {
 		return nil, invalid("缺少测算输入")
 	}
-	if _, e = calculate(input); e != nil {
+	if _, e = calculate(cmd.Inputs); e != nil {
 		return nil, invalid(e.Error())
 	}
-	if id := str(b["template_id"]); id != "" {
-		if _, e = s.one(ctx, "SELECT to_jsonb(c) FROM ps_configs c WHERE tenant_id=$1 AND id=$2::uuid AND kind='profit_template'", a.Tenant, id); e != nil {
+	if tid := stringValue(cmd.TemplateID); tid != "" {
+		if _, e = s.one(ctx, "SELECT to_jsonb(c) FROM ps_configs c WHERE tenant_id=$1 AND id=$2::uuid AND kind='profit_template'", a.Tenant, tid); e != nil {
 			return nil, e
 		}
 	}
-	values := url.Values{}
-	if filters, ok := b["filters"].(map[string]any); ok {
-		for _, key := range []string{"stat_month", "period_type", "source_type"} {
-			if value := str(filters[key]); value != "" {
-				values.Set(key, value)
-			}
-		}
-	}
-	if e = validateFilters(values); e != nil {
+	if e = validateFilters(cmd.PeriodFilters); e != nil {
 		return nil, e
 	}
-	q := newProductQuery(a, values)
+	q := newProductQuery(a, cmd.PeriodFilters)
 	q.args = append(q.args, ids)
-	targets, e := s.query(ctx, fmt.Sprintf("SELECT jsonb_build_object('id',p.id,'data_revision',p.data_revision,'monthly_id',m.id,'monthly_revision',m.revision,'price_usd',m.price_usd::text,'missing_period',m.id IS NULL AND $%d) FROM ps_products p %s WHERE p.tenant_id=$1 AND p.id=ANY($%d::uuid[]) ORDER BY p.id", len(q.args)+1, strings.TrimSuffix(q.joins, profitJoin), len(q.args)), append(q.args, len(values) > 0)...)
+	rawTargets, e := s.query(ctx, fmt.Sprintf("SELECT jsonb_build_object('id',p.id,'data_revision',p.data_revision,'monthly_id',m.id,'monthly_revision',m.revision,'price_usd',m.price_usd::text,'missing_period',m.id IS NULL AND $%d) FROM ps_products p %s WHERE p.tenant_id=$1 AND p.id=ANY($%d::uuid[]) ORDER BY p.id", len(q.args)+1, strings.TrimSuffix(q.joins, profitJoin), len(q.args)), append(q.args, len(cmd.PeriodFilters) > 0)...)
 	if e != nil {
 		return nil, e
 	}
-	return s.queue(ctx, a, "profit_batch", Object{"product_ids": ids, "targets": targets, "inputs": input, "template_id": b["template_id"]})
+	targets := make([]ProfitBatchTarget, 0, len(rawTargets))
+	for _, row := range rawTargets {
+		targets = append(targets, ProfitBatchTarget{
+			ID:              str(row["id"]),
+			DataRevision:    integer(row["data_revision"]),
+			MonthlyID:       optionalImportString(row["monthly_id"]),
+			MonthlyRevision: optionalRevision(row, "monthly_revision"),
+			PriceUSD:        optionalImportString(row["price_usd"]),
+			MissingPeriod:   row["missing_period"] == true,
+		})
+	}
+	return s.queue(ctx, a, "profit_batch", ProfitBatchJobPayload{
+		Engine:     goEngine,
+		ProductIDs: ids,
+		Targets:    targets,
+		Inputs:     cmd.Inputs,
+		TemplateID: cmd.TemplateID,
+	})
 }
-func (s *service) queue(ctx context.Context, a identity, kind string, payload Object) (any, error) {
+func (s *service) queue(ctx context.Context, a identity, kind string, payload any) (*JobSubmission, error) {
 	tx, e := s.db.Begin(ctx)
 	if e != nil {
 		return nil, e
 	}
 	defer tx.Rollback(ctx)
-	if previous, e := receipt(ctx, tx, a); e != nil || previous != nil {
+	if previous, e := typedReceipt[JobSubmission](ctx, tx, a); e != nil || previous != nil {
 		return previous, e
 	}
-	result, e := insertJob(ctx, tx, a, kind, payload)
+	result, e := insertJobPayload(ctx, tx, a, kind, payload)
 	if e != nil {
 		return nil, e
 	}
@@ -195,11 +196,11 @@ func streamSheet(ctx context.Context, tx pgx.Tx, book *excelize.File, name strin
 	return writer.Flush()
 }
 func (s *service) runExport(ctx context.Context, job Object, token string) error {
-	payload := job["payload"].(map[string]any)
-	ids := []string{}
-	for _, raw := range payload["product_ids"].([]any) {
-		ids = append(ids, str(raw))
+	payload, e := decodeJobPayload[ExportJobPayload](job)
+	if e != nil {
+		return e
 	}
+	ids := payload.ProductIDs
 	tenant := integer(job["tenant_id"])
 	tx, e := s.db.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
 	if e != nil {
@@ -261,37 +262,55 @@ func (s *service) runExport(ctx context.Context, job Object, token string) error
 	return s.finishJob(ctx, job, token, Object{"storage_key": key, "products": len(ids), "snapshot": "repeatable_read"}, "succeeded")
 }
 func (s *service) runProfitBatch(ctx context.Context, job Object, token string) error {
-	payload := job["payload"].(map[string]any)
+	payload, err := decodeJobPayload[ProfitBatchJobPayload](job)
+	if err != nil {
+		return err
+	}
 	a := identity{Tenant: integer(job["tenant_id"]), User: integer(job["created_by"])}
-	targets, _ := payload["targets"].([]any)
-	if targets == nil {
-		for _, raw := range payload["product_ids"].([]any) {
-			p, e := s.productView(ctx, a, str(raw))
+	targets := payload.Targets
+	if len(targets) == 0 {
+		for _, pid := range payload.ProductIDs {
+			p, e := s.productView(ctx, a, pid)
 			if e != nil {
 				return e
 			}
-			targets = append(targets, p)
+			targets = append(targets, ProfitBatchTarget{
+				ID:              str(p["id"]),
+				DataRevision:    integer(p["data_revision"]),
+				MonthlyID:       optionalImportString(p["monthly_id"]),
+				MonthlyRevision: optionalRevision(p, "monthly_revision"),
+				PriceUSD:        optionalImportString(p["price_usd"]),
+			})
 		}
 	}
 	items := []Object{}
 	success := 0
-	for _, raw := range targets {
-		target := raw.(map[string]any)
-		id := str(target["id"])
+	for _, target := range targets {
+		id := target.ID
 		item := Object{"id": id, "success": false}
-		if target["missing_period"] == true {
+		if target.MissingPeriod {
 			item["reason"] = "所选统计周期没有商品数据"
 			items = append(items, item)
 			continue
 		}
 		input := Object{}
-		for k, v := range payload["inputs"].(map[string]any) {
+		for k, v := range payload.Inputs {
 			input[k] = v
 		}
-		if str(input["sale_price_usd"]) == "" {
-			input["sale_price_usd"] = target["price_usd"]
+		if str(input["sale_price_usd"]) == "" && target.PriceUSD != nil {
+			input["sale_price_usd"] = *target.PriceUSD
 		}
-		body := Object{"expected_data_revision": target["data_revision"], "inputs": input, "template_id": payload["template_id"], "monthly_id": target["monthly_id"], "expected_monthly_revision": target["monthly_revision"]}
+		var templateID, monthlyID, monthlyRevision any
+		if payload.TemplateID != nil {
+			templateID = *payload.TemplateID
+		}
+		if target.MonthlyID != nil {
+			monthlyID = *target.MonthlyID
+		}
+		if target.MonthlyRevision != nil {
+			monthlyRevision = *target.MonthlyRevision
+		}
+		body := Object{"expected_data_revision": target.DataRevision, "inputs": input, "template_id": templateID, "monthly_id": monthlyID, "expected_monthly_revision": monthlyRevision}
 		a.RequestKey = "profit-job:" + str(job["id"]) + ":" + id
 		a.RequestHash = shaDigest(encoded(body))
 		out, e := s.saveProfit(ctx, a, id, parseSaveProfitCommand(body))
@@ -397,7 +416,7 @@ func (s *service) retryJob(ctx context.Context, a identity, id string) (any, err
 	if _, err = tx.Exec(ctx, "WITH retried AS (UPDATE ps_jobs SET state='queued',attempts=0,error=NULL,lease_until=NULL,lease_token=NULL,updated_at=now() WHERE tenant_id=$1 AND id=$2::uuid AND state='failed' RETURNING tenant_id,kind,payload) UPDATE ps_imports i SET state=CASE j.kind WHEN 'parse' THEN 'parsing' ELSE 'importing' END FROM retried j WHERE j.kind IN ('parse','import') AND i.tenant_id=j.tenant_id AND i.id::text=j.payload->>'import_id'", a.Tenant, id); err != nil {
 		return nil, err
 	}
-	out := Object{"job_id": id, "state": "queued"}
+	out := &JobSubmission{JobID: id, State: "queued"}
 	if err = saveReceipt(ctx, tx, a, out); err != nil {
 		return nil, err
 	}

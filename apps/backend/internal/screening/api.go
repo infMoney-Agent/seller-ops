@@ -146,11 +146,11 @@ func (s *service) listConfigsUsecase(ctx context.Context, a identity, kind strin
 	items, e := s.query(ctx, "SELECT to_jsonb(c)||jsonb_build_object('params',config) FROM ps_configs c WHERE tenant_id=$1 AND kind=$2 ORDER BY version DESC", a.Tenant, kind)
 	return Object{"items": items}, e
 }
-func (s *service) createScreenRunUsecase(ctx context.Context, a identity, body Object) (any, error) {
+func (s *service) createScreenRunUsecase(ctx context.Context, a identity, cmd EnqueueScreenCommand) (*JobSubmission, error) {
 	if e := s.ensurePolicy(ctx, a); e != nil {
 		return nil, e
 	}
-	return s.enqueueScreen(ctx, a, body, "")
+	return s.enqueueScreen(ctx, a, cmd, "")
 }
 func (s *service) productView(ctx context.Context, a identity, id string) (Object, error) {
 	q := newProductQuery(a, nil)

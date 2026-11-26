@@ -25,6 +25,11 @@ type referralRule struct {
 	Specific bool         `json:"specific"`
 }
 
+type ReferralCategoryOption struct {
+	ID    string `json:"id"`
+	Label string `json:"label"`
+}
+
 var referralRules = func() map[string]referralRule {
 	var rules map[string]referralRule
 	if err := json.Unmarshal(referralRulesJSON, &rules); err != nil {
@@ -47,10 +52,14 @@ var referralAliases = func() map[string]string {
 }()
 
 func inferReferral(p Object) string {
+	return inferReferralFromFacts(extractProductProfitFacts(p))
+}
+
+func inferReferralFromFacts(facts ProductProfitFacts) string {
 	aliases := referralAliases
-	for _, field := range []string{"category_path", "category", "main_category"} {
+	for _, rawField := range []string{facts.CategoryPath, facts.Category, facts.MainCategory} {
 		var first, specific string
-		for _, node := range referralPathSeparator.Split(str(p[field]), -1) {
+		for _, node := range referralPathSeparator.Split(rawField, -1) {
 			key := aliases[referralNormalize(node)]
 			if key == "" {
 				continue
@@ -71,25 +80,28 @@ func inferReferral(p Object) string {
 	}
 	return ""
 }
-func referralOptions() []Object {
-	items := []Object{}
+
+func referralOptions() []ReferralCategoryOption {
+	items := make([]ReferralCategoryOption, 0, len(referralRules))
 	for key, rule := range referralRules {
-		items = append(items, Object{"id": key, "label": rule.Label})
+		items = append(items, ReferralCategoryOption{ID: key, Label: rule.Label})
 	}
-	sort.Slice(items, func(i, j int) bool { return str(items[i]["id"]) < str(items[j]["id"]) })
+	sort.Slice(items, func(i, j int) bool { return items[i].ID < items[j].ID })
 	return items
 }
-func validateReferralInputs(in Object) error {
-	if mode := str(in["commission_mode"]); mode != "" && mode != "auto" && mode != "manual" {
+
+func validateReferralMode(mode, key string) error {
+	if mode != "" && mode != "auto" && mode != "manual" {
 		return fmt.Errorf("佣金模式无效")
 	}
-	if key := str(in["commission_category"]); key != "" {
+	if key != "" {
 		if _, ok := referralRules[key]; !ok {
 			return fmt.Errorf("佣金类目无效")
 		}
 	}
 	return nil
 }
+
 func referralTierRate(tier []*float64) *big.Rat { return big.NewRat(int64(*tier[1]), 100) }
 func referralFeeFor(rule referralRule, price *big.Rat) (rate, fee *big.Rat) {
 	lower, total := big.NewRat(0, 1), big.NewRat(0, 1)
@@ -128,50 +140,53 @@ func referralFeeFor(rule referralRule, price *big.Rat) (rate, fee *big.Rat) {
 }
 
 // Resolve only explicit known categories. Unknown browse paths remain unfilled.
-func resolveReferral(in, p Object) (Object, *big.Rat) {
-	meta := Object{"commission_source": "manual"}
-	if str(in["commission_mode"]) == "" {
-		if str(in["commission_rate"]) == "" {
-			in["commission_mode"] = "auto"
+func resolveReferralFromFacts(in *ProfitInputs, facts ProductProfitFacts) ReferralResolution {
+	res := ReferralResolution{Source: "manual"}
+	if stringValue(in.CommissionMode) == "" {
+		if in.Fee("commission_rate") == "" {
+			in.CommissionMode = stringPtr("auto")
 		} else {
-			in["commission_mode"] = "manual"
+			in.CommissionMode = stringPtr("manual")
 		}
+		in.markTouched("commission_mode", in.CommissionMode)
 	}
-	if str(in["commission_mode"]) != "auto" {
-		return meta, nil
+	if stringValue(in.CommissionMode) != "auto" {
+		return res
 	}
-	key := str(in["commission_category"])
+	key := stringValue(in.CommissionCategory)
 	if key == "" {
-		key = inferReferral(p)
+		key = inferReferralFromFacts(facts)
 	}
-	in["commission_rate"] = nil
-	meta["commission_source"] = "unmatched"
+	in.SetFee("commission_rate", nil)
+	res.Source = "unmatched"
 	rule, ok := referralRules[key]
 	if !ok {
-		return meta, nil
+		return res
 	}
-	meta["commission_category"] = key
-	meta["commission_category_label"] = rule.Label
-	meta["commission_rule_version"] = "us-referral-2026-11-22"
-	meta["commission_source"] = "auto"
-	price, pok := new(big.Rat).SetString(str(in["sale_price_usd"]))
-	discount, dok := new(big.Rat).SetString(str(in["discount_usd"]))
+	res.Category = stringPtr(key)
+	res.CategoryLabel = stringPtr(rule.Label)
+	res.RuleVersion = stringPtr("us-referral-2026-11-22")
+	res.Source = "auto"
+	price, pok := new(big.Rat).SetString(in.Fee("sale_price_usd"))
+	discount, dok := new(big.Rat).SetString(in.Fee("discount_usd"))
 	if !pok {
-		return meta, nil
+		return res
 	}
 	if !dok {
 		discount = big.NewRat(0, 1)
 	}
 	price = sub(price, discount)
 	if price.Sign() <= 0 {
-		return meta, nil
+		return res
 	}
 	rate, fee := referralFeeFor(rule, price)
-	in["commission_rate"] = rate.FloatString(6)
-	meta["commission_rate"] = rate.FloatString(6)
-	meta["commission_minimum_usd"] = rule.Minimum
-	meta["commission_usd"] = fee.FloatString(2)
-	return meta, div(fee, price)
+	rateStr := rate.FloatString(6)
+	in.SetFee("commission_rate", stringPtr(rateStr))
+	res.Rate = stringPtr(rateStr)
+	res.MinimumUSD = stringPtr(rule.Minimum)
+	res.FeeUSD = stringPtr(fee.FloatString(2))
+	res.EffectiveRate = div(fee, price)
+	return res
 }
 
 // Solve each price bracket and minimum-fee branch, then verify the candidate

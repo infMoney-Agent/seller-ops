@@ -21,30 +21,34 @@ func calculateWithFreight(in map[string]any, freightOverride *big.Rat) (map[stri
 	return calculateWithReferral(in, freightOverride, nil)
 }
 func calculateWithReferral(in map[string]any, freightOverride, commissionOverride *big.Rat) (map[string]any, error) {
-	allowed := map[string]bool{"name": true, "monthly_units": true, "fee_source": true, "note": true, "commission_mode": true, "commission_category": true, "storage_mode": true, "storage_days": true, "storage_month": true, "supplier_url": true, "freight_rate_cny_per_kg": true, "volumetric_divisor_cm3_per_kg": true}
-	if err := validateProfitExtras(in); err != nil {
+	parsed := parseProfitInputs(in)
+	out, err := calculateCoreTyped(parsed, freightOverride, commissionOverride)
+	parsed.applyTouchedToMap(in)
+	if err != nil {
 		return nil, err
 	}
-	for _, field := range profitFields {
-		allowed[field] = true
+	return out.ToMap(), nil
+}
+
+func calculateCoreTyped(in *ProfitInputs, freightOverride, commissionOverride *big.Rat) (*ProfitOutput, error) {
+	if err := in.validateExtras(); err != nil {
+		return nil, err
 	}
-	for field := range in {
-		if !allowed[field] {
-			return nil, fmt.Errorf("未知测算字段: %s", field)
-		}
+	if in.unknownKey != "" {
+		return nil, fmt.Errorf("未知测算字段: %s", in.unknownKey)
 	}
-	if in["name"] == nil {
-		in["name"] = "基准"
-	}
-	if name, ok := in["name"].(string); !ok || len([]rune(name)) == 0 || len([]rune(name)) > 100 {
+	if in.invalidName {
 		return nil, fmt.Errorf("方案名称无效")
 	}
-	for _, key := range []string{"fee_source", "note"} {
-		if in[key] != nil {
-			if value, ok := in[key].(string); !ok || len([]rune(value)) > 2000 {
-				return nil, fmt.Errorf("%s 无效", key)
-			}
-		}
+	if in.Name == nil {
+		in.Name = stringPtr("基准")
+		in.markTouched("name", in.Name)
+	}
+	if name := stringValue(in.Name); len([]rune(name)) == 0 || len([]rune(name)) > 100 {
+		return nil, fmt.Errorf("方案名称无效")
+	}
+	if in.invalidFieldErr != nil {
+		return nil, in.invalidFieldErr
 	}
 	vals := map[string]*big.Rat{}
 	missing := []string{}
@@ -57,12 +61,11 @@ func calculateWithReferral(in map[string]any, freightOverride, commissionOverrid
 			vals[key] = new(big.Rat).Set(freightOverride)
 			continue
 		}
-		raw := in[key]
-		if raw == nil || raw == "" {
+		text := in.Fee(key)
+		if in.FeePtr(key) == nil || text == "" {
 			missing = append(missing, key)
 			continue
 		}
-		text := fmt.Sprint(raw)
 		if !decimalPattern.MatchString(text) {
 			return nil, fmt.Errorf("%s 数值无效，最多6位小数", key)
 		}
@@ -78,8 +81,8 @@ func calculateWithReferral(in map[string]any, freightOverride, commissionOverrid
 		}
 		vals[key] = n
 	}
-	if raw := in["monthly_units"]; raw != nil {
-		n, ok := new(big.Rat).SetString(fmt.Sprint(raw))
+	if in.MonthlyUnits != nil {
+		n, ok := new(big.Rat).SetString(*in.MonthlyUnits)
 		if !ok || !n.IsInt() || n.Sign() < 0 || n.Cmp(big.NewRat(1000000000, 1)) > 0 {
 			return nil, fmt.Errorf("预计月销量无效")
 		}
@@ -87,10 +90,10 @@ func calculateWithReferral(in map[string]any, freightOverride, commissionOverrid
 	if vals["sale_price_usd"] != nil && vals["discount_usd"] != nil && sub(vals["sale_price_usd"], vals["discount_usd"]).Sign() <= 0 {
 		return nil, fmt.Errorf("优惠后售价必须大于零")
 	}
-	out := map[string]any{"formula_version": formulaVersion}
+	out := &ProfitOutput{FormulaVersion: formulaVersion}
 	if len(missing) > 0 {
-		out["state"] = "incomplete"
-		out["missing"] = missing
+		out.State = "incomplete"
+		out.Missing = missing
 		return out, nil
 	}
 	p := sub(vals["sale_price_usd"], vals["discount_usd"])
@@ -104,27 +107,22 @@ func calculateWithReferral(in map[string]any, freightOverride, commissionOverrid
 	}
 	denom := sub(sub(one, vals["commission_rate"]), vals["ad_rate"])
 	profit := sub(mul(p, denom), f)
-	out["state"] = "complete"
-	out["profit_usd"] = profit.FloatString(2)
-	out["profit_cny"] = mul(profit, vals["fx_cny_per_usd"]).FloatString(2)
-	out["commission_usd"] = mul(p, vals["commission_rate"]).FloatString(2)
-	out["freight_cny"] = vals["freight_cny"].FloatString(6)
-	out["margin"] = div(profit, p).FloatString(6)
-	out["roi"] = nil
+	out.State = "complete"
+	out.ProfitUSD = profit.FloatString(2)
+	out.ProfitCNY = mul(profit, vals["fx_cny_per_usd"]).FloatString(2)
+	out.CommissionUSD = stringPtr(mul(p, vals["commission_rate"]).FloatString(2))
+	out.FreightCNY = stringPtr(vals["freight_cny"].FloatString(6))
+	out.Margin = div(profit, p).FloatString(6)
 	if cost.Sign() > 0 {
-		out["roi"] = div(profit, cost).FloatString(6)
+		out.ROI = stringPtr(div(profit, cost).FloatString(6))
 	}
-	out["break_even_price_usd"] = nil
 	if denom.Sign() > 0 {
-		out["break_even_price_usd"] = div(f, denom).FloatString(2)
+		out.BreakEvenPriceUSD = stringPtr(div(f, denom).FloatString(2))
 	}
-	out["break_even_ad_rate"] = sub(sub(one, vals["commission_rate"]), div(f, p)).FloatString(6)
-	if raw := in["monthly_units"]; raw != nil {
-		n, ok := new(big.Rat).SetString(fmt.Sprint(raw))
-		if !ok || !n.IsInt() || n.Sign() < 0 || n.Cmp(big.NewRat(1000000000, 1)) > 0 {
-			return nil, fmt.Errorf("预计月销量无效")
-		}
-		out["monthly_profit_usd"] = mul(profit, n).FloatString(2)
+	out.BreakEvenAdRate = sub(sub(one, vals["commission_rate"]), div(f, p)).FloatString(6)
+	if in.MonthlyUnits != nil {
+		n, _ := new(big.Rat).SetString(*in.MonthlyUnits)
+		out.MonthlyProfitUSD = stringPtr(mul(profit, n).FloatString(2))
 	}
 	return out, nil
 }

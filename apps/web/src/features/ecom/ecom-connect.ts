@@ -1,13 +1,14 @@
 import 'server-only';
 import { createHmac } from 'node:crypto';
-import { createClient, Code, ConnectError, type CallOptions } from '@connectrpc/connect';
-import { createConnectTransport } from '@connectrpc/connect-node';
+import { Code, ConnectError, type CallOptions } from '@connectrpc/connect';
 import { fromJson, toJson, type Message, type JsonObject } from '@bufbuild/protobuf';
 import { EcomService } from '@/gen/sellerops/ecom/v1/ecom_pb';
 import { ErrorDetailSchema } from '@/gen/sellerops/common/v1/error_pb';
+import { getInternalConnectClient } from '@/lib/connect-transport';
 import { fromLegacyRPCJSON, legacyRPCJSON } from '@/lib/rpc-compat';
-import { commandBody } from './import-command-connect';
+import { commandBody } from '@/features/screening/import-command-connect';
 import { ecomRPCRoutes } from './ecom-rpc-routes';
+
 export async function connectEcom(request: Request, path: string, user: number) {
   const matched = ecomRPCRoutes
     .map((route) => ({
@@ -58,14 +59,10 @@ export async function connectEcom(request: Request, path: string, user: number) 
   const signature = createHmac('sha256', secret)
     .update([stamp, 'POST', procedure, String(user)].join('\n'))
     .digest('hex');
-  const client = createClient(
+  const client = getInternalConnectClient(
     EcomService,
-    createConnectTransport({
-      baseUrl: process.env.ECOM_API_URL || 'http://127.0.0.1:18080',
-      httpVersion: '1.1',
-      useBinaryFormat: false,
-      defaultTimeoutMs: 120000
-    })
+    process.env.ECOM_API_URL || 'http://127.0.0.1:18080',
+    120000
   ) as unknown as Record<string, (input: Message, options: CallOptions) => Promise<Message>>;
   const response = await client[method.localName](input, {
     signal: AbortSignal.timeout(120000),
@@ -76,6 +73,7 @@ export async function connectEcom(request: Request, path: string, user: number) 
   if (!schemaOut || !data) throw new Error('Incomplete RPC response');
   return legacyRPCJSON(schemaOut, data);
 }
+
 export function ecomConnectFailure(error: unknown) {
   if (!(error instanceof ConnectError))
     return { status: 502, body: { detail: '电商服务暂时不可用。' } };

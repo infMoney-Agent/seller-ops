@@ -411,6 +411,13 @@ func ratCompare(a, b string) int {
 	return x.Cmp(y)
 }
 func period(b Object, required bool) (Object, error) {
+	spec, err := resolveImportPeriod(b, required)
+	if err != nil {
+		return nil, err
+	}
+	return spec.ToMap(), nil
+}
+func resolveImportPeriod(b Object, required bool) (*ImportPeriodSpec, error) {
 	kind := str(b["period_type"])
 	if kind == "" {
 		kind = "calendar_month"
@@ -435,7 +442,7 @@ func period(b Object, required bool) (Object, error) {
 			if sourcePeriod != "" || required {
 				return nil, invalid("无法识别来源期，请填写YYYY-MM")
 			}
-			return pendingImportPeriod(b, kind, observed)
+			return pendingImportPeriodSpec(b, kind, observed)
 		}
 		d, _ := time.Parse("2006-01", month)
 		start = d.Format("2006-01-02")
@@ -445,7 +452,7 @@ func period(b Object, required bool) (Object, error) {
 			if required {
 				return nil, invalid("滚动30天必须提供观察日期")
 			}
-			return Object{"period_type": kind}, nil
+			return &ImportPeriodSpec{PeriodType: kind, MinimalPending: true}, nil
 		}
 		end = date.Format("2006-01-02")
 		start = date.AddDate(0, 0, -29).Format("2006-01-02")
@@ -478,7 +485,20 @@ func period(b Object, required bool) (Object, error) {
 	if scope != "child" && scope != "parent" && scope != "unknown" {
 		return nil, invalid("销量口径无效")
 	}
-	return Object{"period_type": kind, "period_start": start, "period_end": end, "stat_month": z.Format("2006-01") + "-01", "observed_on": nullableString(observed), "source_type": source, "source_period": sourcePeriod, "default_sales_scope": scope}, nil
+	var obsPtr *string
+	if observed != "" {
+		obsPtr = stringPtr(observed)
+	}
+	return &ImportPeriodSpec{
+		PeriodType:        kind,
+		PeriodStart:       stringPtr(start),
+		PeriodEnd:         stringPtr(end),
+		StatMonth:         z.Format("2006-01") + "-01",
+		ObservedOn:        obsPtr,
+		SourceType:        source,
+		SourcePeriod:      sourcePeriod,
+		DefaultSalesScope: scope,
+	}, nil
 }
 func nullableString(s string) any {
 	if s == "" {
@@ -515,13 +535,11 @@ func (s *service) upload(w http.ResponseWriter, r *http.Request) (any, error) {
 		b[key] = r.FormValue(key)
 	}
 	applyImportDefaults(b, name, time.Now())
-	meta, e := period(b, false)
+	meta, e := resolveImportPeriod(b, false)
 	if e != nil {
 		return nil, e
 	}
-	for k, v := range meta {
-		b[k] = v
-	}
+	meta.ApplyToBatch(b)
 	if b["source_type"] == nil || str(b["source_type"]) == "" {
 		b["source_type"] = "sellersprite"
 	}
@@ -568,23 +586,22 @@ func (s *service) upload(w http.ResponseWriter, r *http.Request) (any, error) {
 		var jobID string
 		var state string
 		e = s.db.QueryRow(r.Context(), "SELECT id::text,state FROM ps_jobs WHERE tenant_id=$1 AND kind='parse' AND payload->>'import_id'=$2 ORDER BY created_at DESC LIMIT 1", a.Tenant, actual).Scan(&jobID, &state)
-		return Object{"import_id": actual, "job_id": jobID, "state": state}, e
+		return &JobSubmission{ImportID: actual, JobID: jobID, State: state}, e
 	}
-	job, e := insertJob(r.Context(), tx, a, "parse", Object{"import_id": id, "generation": 1})
+	job, e := insertJobPayload(r.Context(), tx, a, "parse", ParseJobPayload{Engine: goEngine, ImportID: id, Generation: 1})
 	if e != nil {
 		return nil, e
 	}
 	if e = tx.Commit(r.Context()); e != nil {
 		return nil, e
 	}
-	job["import_id"] = id
+	job.ImportID = id
 	return job, nil
 }
-func insertJob(ctx context.Context, tx pgx.Tx, a identity, kind string, payload Object) (Object, error) {
+func insertJobPayload(ctx context.Context, tx pgx.Tx, a identity, kind string, payload any) (*JobSubmission, error) {
 	id := uuid()
-	payload["engine"] = goEngine
 	_, e := tx.Exec(ctx, "INSERT INTO ps_jobs(tenant_id,id,kind,idempotency_key,payload,created_by) VALUES($1,$2::uuid,$3,$2::text,$4,$5)", a.Tenant, id, kind, encoded(payload), a.User)
-	return Object{"job_id": id, "state": "queued"}, e
+	return &JobSubmission{JobID: id, State: "queued"}, e
 }
 
 func explanatorySheet(name string, headers []string, mapping Object) bool {

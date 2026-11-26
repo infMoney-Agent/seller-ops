@@ -177,8 +177,14 @@ func (s *server) GetSession(ctx context.Context, req *connect.Request[authv1.Get
 	if _, err = authRPCBody(req.Msg.Body); err != nil {
 		return nil, authRPCError(err)
 	}
-	result, err := s.sessionUsecase(ctx, identity.Principal)
-	return authRPCResponse(&authv1.GetSessionResponse{}, result, err, false)
+	profile, err := s.sessionUsecase(ctx, identity.Principal)
+	if err != nil {
+		return nil, authRPCError(err)
+	}
+	return connect.NewResponse(&authv1.GetSessionResponse{
+		StatusCode: 200,
+		Data:       profile,
+	}), nil
 }
 
 func (s *server) ListManagedProducts(ctx context.Context, req *connect.Request[authv1.ListManagedProductsRequest]) (*connect.Response[authv1.ListManagedProductsResponse], error) {

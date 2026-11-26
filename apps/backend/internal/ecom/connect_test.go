@@ -107,6 +107,28 @@ func TestEcomRPCContractsAndLegacyRemoved(t *testing.T) {
 	if w.Code != 401 {
 		t.Fatal("unsigned RPC accepted", w.Code)
 	}
+
+	// Verify binary protobuf Connect protocol (application/proto) used by Web BFF singleton transport.
+	binBody, err := proto.Marshal(&ecomv1.ScoreProductRequest{Asin: proto.String("B000000001")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	binReq := httptest.NewRequest(http.MethodPost, RPCPrefix+"ScoreProduct", bytes.NewReader(binBody))
+	binReq.Header = signed(s, "POST", RPCPrefix+"ScoreProduct", 1, nil).Header
+	binReq.Header.Set("Content-Type", "application/proto")
+	binReq.Header.Set("Connect-Protocol-Version", "1")
+	binRec := httptest.NewRecorder()
+	handler.ServeHTTP(binRec, binReq)
+	if binRec.Code != 200 {
+		t.Fatalf("binary Connect RPC failed: %d %s", binRec.Code, binRec.Body.String())
+	}
+	var scoreResp ecomv1.ScoreProductResponse
+	if err := proto.Unmarshal(binRec.Body.Bytes(), &scoreResp); err != nil {
+		t.Fatal(err)
+	}
+	if scoreResp.GetData().GetAsin() != "B000000001" || scoreResp.GetData().GetOverallScore() != 9.25 {
+		t.Fatalf("unexpected binary score response: %#v", scoreResp.GetData())
+	}
 }
 
 func TestRPCResourceASINRejectsPathSegments(t *testing.T) {

@@ -128,11 +128,11 @@ func TestPostgresWorkflow(t *testing.T) {
 	if _, e = pool.Exec(ctx, "UPDATE ps_configs SET active=true WHERE tenant_id=$1 AND id=$2", a.Tenant, pid); e != nil {
 		t.Fatal(e)
 	}
-	created, e := s.enqueueScreen(ctx, a, Object{"product_ids": []any{id}}, "")
+	created, e := s.enqueueScreen(ctx, a, parseEnqueueScreenCommand(Object{"product_ids": []any{id}}), "")
 	if e != nil {
 		t.Fatal(e)
 	}
-	jid := created.(Object)["job_id"]
+	jid := created.JobID
 	if _, e = pool.Exec(ctx, "UPDATE ps_jobs SET state='running',attempts=1,lease_until=now()-interval '1 minute',lease_token=$3 WHERE tenant_id=$1 AND id=$2", a.Tenant, jid, uuid()); e != nil {
 		t.Fatal(e)
 	}

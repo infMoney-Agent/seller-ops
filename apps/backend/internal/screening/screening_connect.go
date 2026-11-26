@@ -446,7 +446,7 @@ func (s *service) CreateScreenRun(ctx context.Context, req *connect.Request[scre
 	if err != nil {
 		return nil, rpcError(err)
 	}
-	value, err := s.createScreenRunUsecase(ctx, a, body)
+	value, err := s.createScreenRunUsecase(ctx, a, parseEnqueueScreenCommand(body))
 	return screeningRPCResponse(&screeningv1.CreateScreenRunResponse{}, value, err)
 }
 
@@ -455,7 +455,7 @@ func (s *service) CreateExport(ctx context.Context, req *connect.Request[screeni
 	if err != nil {
 		return nil, rpcError(err)
 	}
-	value, err := s.queueExport(ctx, a, body)
+	value, err := s.queueExport(ctx, a, parseSelectionCommand(body))
 	return screeningRPCResponse(&screeningv1.CreateExportResponse{}, value, err)
 }
 
@@ -464,7 +464,7 @@ func (s *service) CreateProfitBatch(ctx context.Context, req *connect.Request[sc
 	if err != nil {
 		return nil, rpcError(err)
 	}
-	value, err := s.queueProfit(ctx, a, body)
+	value, err := s.queueProfit(ctx, a, parseQueueProfitCommand(body))
 	return screeningRPCResponse(&screeningv1.CreateProfitBatchResponse{}, value, err)
 }
 

@@ -38,7 +38,7 @@ func applyImportDefaults(values Object, name string, now time.Time) {
 	}
 }
 
-func pendingImportPeriod(b Object, kind, observed string) (Object, error) {
+func pendingImportPeriodSpec(b Object, kind, observed string) (*ImportPeriodSpec, error) {
 	source := str(b["source_type"])
 	if source == "" {
 		source = "sellersprite"
@@ -53,5 +53,15 @@ func pendingImportPeriod(b Object, kind, observed string) (Object, error) {
 	if scope != "unknown" && scope != "child" && scope != "parent" {
 		return nil, invalid("销量口径无效")
 	}
-	return Object{"period_type": kind, "observed_on": nullableString(observed), "source_period": "", "period_start": nil, "period_end": nil, "source_type": source, "default_sales_scope": scope}, nil
+	var obsPtr *string
+	if observed != "" {
+		obsPtr = stringPtr(observed)
+	}
+	return &ImportPeriodSpec{
+		PeriodType:        kind,
+		ObservedOn:        obsPtr,
+		SourcePeriod:      "",
+		SourceType:        source,
+		DefaultSalesScope: scope,
+	}, nil
 }
