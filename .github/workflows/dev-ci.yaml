@@ -99,12 +99,6 @@ jobs:
           SCREENING_STORAGE_DIR: /tmp/screening-browser-data
           SCREENING_INTERNAL_SECRET: ci-browser-test-secret-with-at-least-32-characters
           SCREENING_BROWSER_FIXTURE: '1'
-          SCREENING_IMPORTS_TRANSPORT: connect
-          SCREENING_IMPORT_READS_TRANSPORT: connect
-          SCREENING_IMPORT_WRITES_TRANSPORT: connect
-          SCREENING_BUSINESS_TRANSPORT: connect
-          ECOM_TRANSPORT: connect
-          AUTH_TRANSPORT: connect
           ECOM_BROWSER_FIXTURE: '1'
           ECOM_INTERNAL_SECRET: ci-ecom-secret-with-at-least-32-characters
           ECOM_TEST_REDIS_URL: redis://127.0.0.1:6379/15

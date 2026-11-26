@@ -42,7 +42,7 @@
 - 修改契约后运行 npm run proto:gen、npm run proto:check、npm run proto:breaking，工具版本由脚本和 Web 锁文件固定。
 - 浏览器仍使用既有 HTTP/JSON；Next.js 验证会话后调用内部 RPC，禁止信任客户端传入的公司或角色。
 - 沿用 pgx 与原数据库结构，不因协议迁移引入 ORM、修改费用公式或恢复工作区切换/字段映射 UI。
-- 开关 SCREENING_IMPORTS_TRANSPORT 等六个 *_TRANSPORT 现均默认 connect（可显式设为 legacy 回滚），connect 失败不得静默回退；上线与回滚见 docs/proto-imports-pilot.md 与 docs/proto-connect-cutover-plan.md。
+- Web 侧已移除全部六个 *_TRANSPORT 过渡开关与旧元数据 HTTP 转发分支，所有业务与用户管理元数据接口唯一经由 Connect RPC 调用，失败不得静默回退；仅保留 4 个初筛文件流与登录/注册 Cookie HTTP 端点；演进与回滚见 docs/proto-connect-cutover-plan.md。
 
 - 新增普通业务或用户管理元数据 API 必须先定义具名 Proto 方法，禁止增加无契约业务入口或通用任意路径/JSON 转发 RPC。HTTP/Connect 共用纯 Go 用例；文件流、登录/注册 Cookie 流程除外。
 - 完整范围、独立开关和回滚见 docs/proto-migration-status.md。修改路由后运行 Web 的 test:imports-connect（含兼容与覆盖检查），并按涉及模块运行真实隔离集成测试。

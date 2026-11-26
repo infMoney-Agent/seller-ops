@@ -27,11 +27,7 @@ export async function authBackendResponse(path: string, init: RequestInit = {}):
   const methodName = init.method || 'GET',
     url = new URL(path, 'http://auth.internal'),
     matched = matchAuth(methodName, url.pathname);
-  const mode = process.env.AUTH_TRANSPORT || 'connect';
-  if (!matched || mode === 'legacy')
-    return fetch((process.env.SELLER_API_URL || 'http://127.0.0.1:8080') + path, init);
-  if (mode !== 'connect')
-    return Response.json({ success: false, message: '认证传输配置无效' }, { status: 503 });
+  if (!matched) return fetch((process.env.SELLER_API_URL || 'http://127.0.0.1:8080') + path, init);
   const headers = new Headers(init.headers),
     origins = (process.env.SELLER_APP_ORIGIN || '')
       .split(',')

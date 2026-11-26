@@ -2,11 +2,10 @@
 
 ## 1. 背景与目标
 
-截至当前基线，业务与认证服务已完成 80 个具名 Connect RPC 方法与 Proto 契约迁移（详见 [Proto 接口迁移状态](proto-migration-status.md)），CI 已在 6 个开关全量 `connect` 模式下通过浏览器与回归验收。但目前仍处于 **Legacy HTTP 与 Connect RPC 双轨并行** 阶段：
+截至当前基线，业务与认证服务已完成 80 个具名 Connect RPC 方法与 Proto 契约迁移（详见 [Proto 接口迁移状态](proto-migration-status.md)），并已完成 **Phase 2（Web 侧全量 Connect 收口与 6 个过渡开关拆除）**。当前剩余的过渡态主要集中在 Go 后端（Phase 3）：
 
-- `compose.yaml` 与 Web 代码中 6 个 `*_TRANSPORT` 开关默认仍为 `legacy`。
-- Web 代理层同时维护 Connect 调用分支与旧 HTTP HMAC 转发分支。
-- Go 后端同时暴露旧元数据 HTTP 路由和 Connect RPC，且 `ScreeningService` / `EcomService` 的 Connect 适配层仍通过 `rpccompat.Legacy` 转回 `map[string]any` 后再拼接路径字符串分发到 `executeScreening` / `executeEcom`。
+- Web 代理层已完成收口：6 个 `*_TRANSPORT` 开关与旧元数据 HTTP 转发分支已移除，仅保留 4 个初筛文件流端点及认证页面/Cookie HTTP 透传。
+- Go 后端仍同时暴露旧元数据 HTTP 路由和 Connect RPC，且 `ScreeningService` / `EcomService` 的 Connect 适配层仍通过 `rpccompat.Legacy` 转回 `map[string]any` 后再拼接路径字符串分发到 `executeScreening` / `executeEcom`。
 
 本方案的目标是**先平稳完成全量 Connect 切流，再分步拆除双轨过渡代码**，使系统收敛到单一、清晰的内部 RPC 架构，为后续 `screening` 核心域强类型化与错误解耦打下基础。
 
@@ -108,27 +107,27 @@
   - [apps/web/src/app/api/ecom/[...path]/route.ts](file:///data/workspace/yijiangli/seller-ops/apps/web/src/app/api/ecom/%5B...path%5D/route.ts#L60)
   - [apps/web/src/lib/auth-backend.ts](file:///data/workspace/yijiangli/seller-ops/apps/web/src/lib/auth-backend.ts#L30)
 
-### Step 2.2：移除 Web 侧 Legacy 代理分支与 6 个过渡开关
+### Step 2.2：移除 Web 侧 Legacy 代理分支与 6 个过渡开关（已完成）
 
-确认默认值切换稳定后，执行 Web 侧代码收口：
+> 状态：**已完成**（Web 侧 6 个过渡开关与旧元数据 HTTP 转发分支已移除，4 个初筛文件流与认证页面/Cookie HTTP 端点保留；配置、CI 与文档已同步更新）。
 
 1. **清理 `apps/web/src/app/api/ecom/[...path]/route.ts`**
-   - 删除 `ECOM_TRANSPORT` 判断与整个旧 HTTP 转发逻辑（`createHmac`、`ECOM_API_URL` fetch、`64KB` 旧 body buffer 读取）。
+   - 已删除 `ECOM_TRANSPORT` 判断与整个旧 HTTP 转发逻辑（`createHmac`、`ECOM_API_URL` fetch、`64KB` 旧 body buffer 读取）。
    - 该文件只负责：路由白名单校验 -> Origin 校验 -> 会话鉴权 -> `connectEcom(...)`。
 
 2. **清理 `apps/web/src/app/api/ecom/screening/[...path]/route.ts`**
-   - 删除 `SCREENING_BUSINESS_TRANSPORT`、`SCREENING_IMPORTS_TRANSPORT`、`SCREENING_IMPORT_READS_TRANSPORT`、`SCREENING_IMPORT_WRITES_TRANSPORT` 四个开关分支。
+   - 已删除 `SCREENING_BUSINESS_TRANSPORT`、`SCREENING_IMPORTS_TRANSPORT`、`SCREENING_IMPORT_READS_TRANSPORT`、`SCREENING_IMPORT_WRITES_TRANSPORT` 四个开关分支。
    - 46 个元数据路由直接按分类进入 `connectScreening` / `connectImportRead` / `connectImportCommand`。
-   - **显式收窄旧 HTTP 转发代码**：仅允许 4 个文件流端点（`POST imports`、`GET imports/{id}/source`、`GET imports/{id}/errors`、`GET exports/{id}/download`）走流式 `fetch` + HMAC 签名，其余未匹配路径直接返回 `404`（防止意外回落到旧 HTTP）。
+   - **已显式收窄旧 HTTP 转发代码**：仅允许 4 个文件流端点（`POST imports`、`GET imports/{id}/source`、`GET imports/{id}/errors`、`GET exports/{id}/download`）走流式 `fetch` + HMAC 签名，其余未匹配路径直接返回 `404`（同时移除旧 JSON 路径重复的 gzip 代码，保留 `screeningRPCResponse` 压缩逻辑）。
 
 3. **清理 `apps/web/src/lib/auth-backend.ts`**
-   - 删除 `AUTH_TRANSPORT` 判断。
+   - 已删除 `AUTH_TRANSPORT` 判断。
    - 命中 `authRPCRoutes`（20 个方法）一律走 `AuthService` Connect RPC；未命中的保留端点（登录/回调/注销/注册表单与 `registration/prepare`）继续透传 HTTP 到 `SELLER_API_URL`。
 
 4. **清理配置与 CI 环境变量**
-   - `compose.yaml`：移除 6 个已失效的 `*_TRANSPORT` 环境变量传递。
-   - `.github/workflows/dev-ci.yaml`：移除浏览器验收 job 中显式传入的 6 个 `*_TRANSPORT: connect`（已成唯一路径）。
-   - 同步更新 `docs/deployment.md`、`docs/proto-migration-status.md`、`AGENTS.md`。
+   - `compose.yaml`：已移除 6 个已失效的 `*_TRANSPORT` 环境变量传递。
+   - `.github/workflows/dev-ci.yaml`：已移除浏览器验收 job 中显式传入的 6 个 `*_TRANSPORT: connect`（已成唯一路径）。
+   - 已同步更新 `docs/deployment.md`、`docs/proto-migration-status.md`、`AGENTS.md`。
 
 ---
 

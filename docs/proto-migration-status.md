@@ -31,15 +31,13 @@ CI 将初筛页面暴露的 50 个方法/路径逐一分类：46 个 RPC 元数�
 - 公网网关不公开 /sellerops.* RPC 前缀。文件与登录流程继续沿用原传输。商品与分组查询继续压缩响应，防止传输性能回退。
 - 未修改数据库表、费用公式或人工复核规则。未迁移、删除业务数据。
 
-## 开关及发布顺序
+## 传输状态及发布顺序
 
-Web 服务端支持独立的 legacy/connect 开关，**六个开关现均默认 `connect`**（全量切流）；配置错误或 RPC 失败不会静默降级：
+Web 服务端已移除旧元数据 HTTP 转发分支及六个过渡开关（原 `SCREENING_IMPORTS_TRANSPORT`、`SCREENING_IMPORT_READS_TRANSPORT`、`SCREENING_IMPORT_WRITES_TRANSPORT`、`SCREENING_BUSINESS_TRANSPORT`、`ECOM_TRANSPORT`、`AUTH_TRANSPORT`），全部 80 个元数据接口唯一通过 Connect RPC 调用，RPC 失败不会静默降级；Web 仅对 4 个初筛文件流端点和登录/OIDC/注册表单与 `registration/prepare` 保留 HTTP 转发。
 
-SCREENING_IMPORTS_TRANSPORT、SCREENING_IMPORT_READS_TRANSPORT、SCREENING_IMPORT_WRITES_TRANSPORT、SCREENING_BUSINESS_TRANSPORT、ECOM_TRANSPORT、AUTH_TRANSPORT。
+部署须确保两个 Go 服务与公网网关运行在支持全部 80 个 RPC 的基线，并配置 Web `SELLER_APP_ORIGIN`。公网网关屏蔽 `/sellerops.*` 并将 `registration/status` 交给 Next 代理，其余注册 Cookie 流程仍交给认证服务。如需紧急回滚，恢复已备份的上一版本应用镜像或前端/Go 构建产物，不执行数据库降级。
 
-先确保两个 Go 服务与公网网关已升级到支持全部 80 个 RPC 的基线，再部署 Web（启用 `AUTH_TRANSPORT=connect` 须配置 `SELLER_APP_ORIGIN`）。公网网关要将 registration/status 交给 Next 代理，其余注册 Cookie 流程仍交给认证服务。如需紧急回滚，可将对应开关显式设为 `legacy` 并重启 Web；也可恢复已备份二进制与前端构建，无数据库降级。
-
-旧 HTTP 入口暂保留用于灰度观察和回滚，内部已经调用共享业务用例；保留这些兼容地址不代表对应业务尚未迁移。
+Go 后端旧 HTTP 元数据路由暂保留至 Phase 3 统一收口清理，内部已复用共享业务用例；保留这些兼容地址不代表对应业务尚未迁移。
 
 ## 本轮验证
 
