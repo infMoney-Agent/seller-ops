@@ -1,3 +1,6 @@
 
 # Keep the vendored guidance SHA-256 snapshot identical on Windows and Linux.
 .agents/skills/modern-web-guidance/** text eol=lf
+
+# Unified diff context intentionally includes leading spaces before Go tabs.
+apps/auth/casdoor/organization-policy.patch text eol=lf -whitespace

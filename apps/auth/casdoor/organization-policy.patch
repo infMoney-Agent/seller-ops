@@ -1,0 +1,174 @@
+diff --git a/object/organization.go b/object/organization.go
+index 027929f..eda31ac 100644
+--- a/object/organization.go
++++ b/object/organization.go
+@@ -258,6 +258,9 @@ func UpdateOrganization(id string, organization *Organization, isGlobalAdmin boo
+ 	if err != nil {
+ 		return false, err
+ 	}
++	if err := checkOrganizationNameImmutable(name, organization.Name); err != nil {
++		return false, err
++	}
+ 	org, err := getOrganization(owner, name)
+ 	if err != nil {
+ 		return false, err
+@@ -272,27 +275,11 @@ func UpdateOrganization(id string, organization *Organization, isGlobalAdmin boo
+ 		}
+ 	}
+ 
+-	if name == "built-in" {
+-		organization.Name = name
+-	}
+-
+ 	organization.Owner = org.Owner
+ 	if organization.PasswordType == "" {
+ 		organization.PasswordType = org.PasswordType
+ 	}
+ 
+-	if name != organization.Name {
+-		err = checkReservedOrganizationName(organization.Name)
+-		if err != nil {
+-			return false, err
+-		}
+-
+-		err = organizationChangeTrigger(name, organization.Name)
+-		if err != nil {
+-			return false, err
+-		}
+-	}
+-
+ 	organization.hashMasterPassword()
+ 
+ 	if !isGlobalAdmin {
+diff --git a/object/organization_identity.go b/object/organization_identity.go
+new file mode 100644
+index 0000000..3460804
+--- /dev/null
++++ b/object/organization_identity.go
+@@ -0,0 +1,11 @@
++package object
++
++import "fmt"
++
++// Organization names are identity keys shared with Seller Ops, not display names.
++func checkOrganizationNameImmutable(original, updated string) error {
++	if original != updated {
++		return fmt.Errorf("organization identifier cannot be changed; delete and create a new organization instead (组织标识创建后不可修改，请删除后新增；公司名称请修改显示名称)")
++	}
++	return nil
++}
+diff --git a/object/organization_identity_test.go b/object/organization_identity_test.go
+new file mode 100644
+index 0000000..8d8b016
+--- /dev/null
++++ b/object/organization_identity_test.go
+@@ -0,0 +1,24 @@
++package object
++
++import "testing"
++
++func TestOrganizationNameImmutable(t *testing.T) {
++	for _, test := range []struct {
++		name, original, updated string
++		allowed                 bool
++	}{
++		{"same organization", "organization_abcdef", "organization_abcdef", true},
++		{"rename", "organization_abcdef", "organization_ghijkl", false},
++		{"clear", "organization_abcdef", "", false},
++		{"case change", "organization_abcdef", "organization_ABCDEF", false},
++		{"built-in unchanged", "built-in", "built-in", true},
++		{"built-in rename", "built-in", "other", false},
++	} {
++		t.Run(test.name, func(t *testing.T) {
++			err := checkOrganizationNameImmutable(test.original, test.updated)
++			if (err == nil) != test.allowed {
++				t.Fatalf("allowed=%t, error=%v", test.allowed, err)
++			}
++		})
++	}
++}
+diff --git a/web/src/lib/organization-identity.ts b/web/src/lib/organization-identity.ts
+new file mode 100644
+index 0000000..d8b9389
+--- /dev/null
++++ b/web/src/lib/organization-identity.ts
+@@ -0,0 +1,7 @@
++// Identifiers are generated once when the add form opens; labels remain editable.
++export function newOrganizationIdentifier(): string {
++  const suffix = Array.from({length: 6}, () =>
++    String.fromCharCode(97 + Math.floor(Math.random() * 26)),
++  ).join("");
++  return `organization_${suffix}`;
++}
+diff --git a/web/src/pages/OrganizationEditPage.tsx b/web/src/pages/OrganizationEditPage.tsx
+index 6ebf5c5..5d1aa20 100644
+--- a/web/src/pages/OrganizationEditPage.tsx
++++ b/web/src/pages/OrganizationEditPage.tsx
+@@ -189,12 +189,20 @@ export default function OrganizationEditPage() {
+         </TabsList>
+ 
+         <TabsContent value="basic" className={formGridClass}>
+-          <FormRow labelKey="general:Name">
++          <FormRow labelKey="general:Name" htmlFor="organization-identifier">
+             <Input
++              id="organization-identifier"
+               value={organization.name ?? ""}
+-              disabled={organization.name === "built-in"}
++              readOnly={mode !== "add"}
++              autoCapitalize="none"
++              autoCorrect="off"
++              spellCheck={false}
++              aria-describedby="organization-name-help"
+               onChange={(e) => update("name", e.target.value)}
+             />
++            <p id="organization-name-help" className="text-sm text-muted-foreground">
++              组织标识创建后不可修改，请删除后新增。公司名称可在“显示名称”中修改。
++            </p>
+           </FormRow>
+           <FormRow labelKey="general:Display name">
+             <Input value={organization.displayName ?? ""} onChange={(e) => update("displayName", e.target.value)} />
+diff --git a/web/src/pages/organization-defaults.ts b/web/src/pages/organization-defaults.ts
+index 2aedc03..1211b72 100644
+--- a/web/src/pages/organization-defaults.ts
++++ b/web/src/pages/organization-defaults.ts
+@@ -1,15 +1,17 @@
+ import * as Setting from "@/lib/setting";
++import {newOrganizationIdentifier} from "@/lib/organization-identity";
+ 
+ /**
+  * Default object for a new organization, ported verbatim from the antd
+  * OrganizationListPage so that a freshly created organization looks the same.
+  */
+ export function newOrganization(createdTime: string) {
+-  const randomName = Setting.getRandomName();
++  const identifier = newOrganizationIdentifier();
++  const randomName = identifier.slice("organization_".length);
+   const DefaultMfaRememberInHours = 12;
+   return {
+     owner: "admin", // this.props.account.organizationname,
+-    name: `organization_${randomName}`,
++    name: identifier,
+     createdTime,
+     displayName: `New Organization - ${randomName}`,
+     websiteUrl: "https://door.casdoor.com",
+diff --git a/web/tests/organization-identity.test.mjs b/web/tests/organization-identity.test.mjs
+new file mode 100644
+index 0000000..5efc89d
+--- /dev/null
++++ b/web/tests/organization-identity.test.mjs
+@@ -0,0 +1,15 @@
++import assert from "node:assert/strict";
++import {test} from "node:test";
++import {newOrganizationIdentifier} from "../src/lib/organization-identity.ts";
++
++test("new identifiers use organization_ followed by exactly six lowercase letters", () => {
++  for (let i = 0; i < 1000; i++) {
++    assert.match(newOrganizationIdentifier(), /^organization_[a-z]{6}$/);
++  }
++});
++test("random boundaries remain lowercase letters", (t) => {
++  t.mock.method(Math, "random", () => 0);
++  assert.equal(newOrganizationIdentifier(), "organization_aaaaaa");
++  Math.random.mock.mockImplementation(() => 1 - Number.EPSILON);
++  assert.equal(newOrganizationIdentifier(), "organization_zzzzzz");
++});
