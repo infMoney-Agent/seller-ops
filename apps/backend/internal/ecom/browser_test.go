@@ -221,6 +221,15 @@ func TestBrowserScreening(t *testing.T) {
 		t.Fatal(e)
 	}
 	// Verify capability failures without changing the real system clipboard.
+	// The preceding source-data checks intentionally leave two modal dialogs open.
+	if e := chromedp.Run(ctx,
+		chromedp.Click(`button[aria-label="关闭来源原始数据"]`, chromedp.ByQuery),
+		chromedp.Poll(`document.querySelectorAll('[data-slot="dialog-content"][data-open]').length===1`, nil),
+		chromedp.KeyEvent("\u001b"),
+		chromedp.Poll(`document.querySelectorAll('[data-slot="dialog-content"]').length===0`, nil),
+	); e != nil {
+		t.Fatal("close data dialogs before exercising the table copy action", e)
+	}
 	clipboardScript := `(async()=>{
 		const button=document.querySelector('button[aria-label="复制 ASIN BROWSER001"]');
 		const descriptor=Object.getOwnPropertyDescriptor(navigator,'clipboard'), originalExec=document.execCommand;
