@@ -83,74 +83,61 @@ async function proxy(request: Request, { params }: { params: Promise<{ path: str
       return Response.json({ message: '工作区已切换，请刷新页面。' }, { status: 409 });
     }
     if (screeningRPCRoute(request.method, path)) {
-      const mode = process.env.SCREENING_BUSINESS_TRANSPORT || 'connect';
-      if (!['legacy', 'connect'].includes(mode))
-        return Response.json({ message: '业务传输配置无效。' }, { status: 503 });
-      if (mode === 'connect') {
-        const apiStarted = performance.now();
-        const responseHeaders = () => ({
-          'Cache-Control': 'no-store',
-          'Server-Timing': serverTiming(
-            authDuration,
-            performance.now() - apiStarted,
-            performance.now() - started
-          )
+      const apiStarted = performance.now();
+      const responseHeaders = () => ({
+        'Cache-Control': 'no-store',
+        'Server-Timing': serverTiming(
+          authDuration,
+          performance.now() - apiStarted,
+          performance.now() - started
+        )
+      });
+      try {
+        const result = await connectScreening(
+          request,
+          url,
+          path,
+          session,
+          secret,
+          write
+            ? AbortSignal.timeout(120000)
+            : AbortSignal.any([request.signal, AbortSignal.timeout(120000)])
+        );
+        return screeningRPCResponse(request, path, result.body, result.status, responseHeaders());
+      } catch (error) {
+        const failure = importConnectFailure(error);
+        return Response.json(failure.body, {
+          status: failure.status,
+          headers: responseHeaders()
         });
-        try {
-          const result = await connectScreening(
-            request,
-            url,
-            path,
-            session,
-            secret,
-            write
-              ? AbortSignal.timeout(120000)
-              : AbortSignal.any([request.signal, AbortSignal.timeout(120000)])
-          );
-          return screeningRPCResponse(request, path, result.body, result.status, responseHeaders());
-        } catch (error) {
-          const failure = importConnectFailure(error);
-          return Response.json(failure.body, {
-            status: failure.status,
-            headers: responseHeaders()
-          });
-        }
       }
     }
     const importRead = new RegExp(`^(?:imports/${uuid}(?:/preview)?|jobs/${uuid})$`).test(path);
     if (request.method === 'GET' && (path === 'imports' || importRead)) {
-      const mode =
-        (path === 'imports'
-          ? process.env.SCREENING_IMPORTS_TRANSPORT
-          : process.env.SCREENING_IMPORT_READS_TRANSPORT) || 'connect';
-      if (!['legacy', 'connect'].includes(mode))
-        return Response.json({ message: '导入查询传输配置无效。' }, { status: 503 });
-      if (mode === 'connect') {
-        const apiStarted = performance.now();
-        const responseHeaders = () => ({
-          'Cache-Control': 'no-store',
-          'Server-Timing': serverTiming(
-            authDuration,
-            performance.now() - apiStarted,
-            performance.now() - started
-          )
+      const apiStarted = performance.now();
+      const responseHeaders = () => ({
+        'Cache-Control': 'no-store',
+        'Server-Timing': serverTiming(
+          authDuration,
+          performance.now() - apiStarted,
+          performance.now() - started
+        )
+      });
+      try {
+        const result = await connectImportRead(
+          url,
+          path,
+          session,
+          secret,
+          AbortSignal.any([request.signal, AbortSignal.timeout(120000)])
+        );
+        return Response.json(result, { headers: responseHeaders() });
+      } catch (error) {
+        const failure = importConnectFailure(error);
+        return Response.json(failure.body, {
+          status: failure.status,
+          headers: responseHeaders()
         });
-        try {
-          const result = await connectImportRead(
-            url,
-            path,
-            session,
-            secret,
-            AbortSignal.any([request.signal, AbortSignal.timeout(120000)])
-          );
-          return Response.json(result, { headers: responseHeaders() });
-        } catch (error) {
-          const failure = importConnectFailure(error);
-          return Response.json(failure.body, {
-            status: failure.status,
-            headers: responseHeaders()
-          });
-        }
       }
     }
     const importCommand =
@@ -159,39 +146,41 @@ async function proxy(request: Request, { params }: { params: Promise<{ path: str
         `^(?:imports/${uuid}/(?:commit|mapping|removal-preview)|jobs/${uuid}/retry)$`
       ).test(path);
     if (importCommand) {
-      const mode = process.env.SCREENING_IMPORT_WRITES_TRANSPORT || 'connect';
-      if (!['legacy', 'connect'].includes(mode))
-        return Response.json({ message: '导入操作传输配置无效。' }, { status: 503 });
-      if (mode === 'connect') {
-        const apiStarted = performance.now();
-        const responseHeaders = () => ({
-          'Cache-Control': 'no-store',
-          'Server-Timing': serverTiming(
-            authDuration,
-            performance.now() - apiStarted,
-            performance.now() - started
-          )
+      const apiStarted = performance.now();
+      const responseHeaders = () => ({
+        'Cache-Control': 'no-store',
+        'Server-Timing': serverTiming(
+          authDuration,
+          performance.now() - apiStarted,
+          performance.now() - started
+        )
+      });
+      try {
+        const result = await connectImportCommand(
+          request,
+          url,
+          path,
+          session,
+          secret,
+          write
+            ? AbortSignal.timeout(120000)
+            : AbortSignal.any([request.signal, AbortSignal.timeout(120000)])
+        );
+        return Response.json(result.body, { status: result.status, headers: responseHeaders() });
+      } catch (error) {
+        const failure = importConnectFailure(error);
+        return Response.json(failure.body, {
+          status: failure.status,
+          headers: responseHeaders()
         });
-        try {
-          const result = await connectImportCommand(
-            request,
-            url,
-            path,
-            session,
-            secret,
-            write
-              ? AbortSignal.timeout(120000)
-              : AbortSignal.any([request.signal, AbortSignal.timeout(120000)])
-          );
-          return Response.json(result.body, { status: result.status, headers: responseHeaders() });
-        } catch (error) {
-          const failure = importConnectFailure(error);
-          return Response.json(failure.body, {
-            status: failure.status,
-            headers: responseHeaders()
-          });
-        }
       }
+    }
+    const upload = request.method === 'POST' && path === 'imports';
+    const download =
+      request.method === 'GET' &&
+      new RegExp(`^(?:imports/${uuid}/(?:source|errors)|exports/${uuid}/download)$`).test(path);
+    if (!upload && !download) {
+      return Response.json({ message: '初筛接口不存在。' }, { status: 404 });
     }
     const stamp = String(Math.floor(Date.now() / 1000));
     const targetPath = '/api/v1/screening/' + path + url.search;
@@ -218,7 +207,6 @@ async function proxy(request: Request, { params }: { params: Promise<{ path: str
     if (key) headers.set('idempotency-key', key);
     const contentType = request.headers.get('content-type');
     if (contentType) headers.set('content-type', contentType);
-    const upload = request.method === 'POST' && path === 'imports';
     const limit = upload ? 30 * 1024 * 1024 + 64 * 1024 : 256 * 1024;
     if (Number(request.headers.get('content-length') || 0) > limit)
       return Response.json({ message: '请求内容过大。' }, { status: 413 });
@@ -260,24 +248,7 @@ async function proxy(request: Request, { params }: { params: Promise<{ path: str
       const value = response.headers.get(name);
       if (value) responseHeaders.set(name, value);
     }
-    let responseBody = response.body;
-    const compressibleJSON =
-      ['products', 'profit/products', 'review-categories', 'review-workspace'].includes(path) ||
-      /^products\/[^/]+\/family$/.test(path);
-    if (
-      !write &&
-      compressibleJSON &&
-      response.ok &&
-      responseBody &&
-      response.headers.get('content-type')?.includes('application/json')
-    ) {
-      responseHeaders.set('Vary', 'Accept-Encoding');
-      if (acceptsGzip(request.headers.get('accept-encoding'))) {
-        responseHeaders.set('Content-Encoding', 'gzip');
-        responseBody = responseBody.pipeThrough(new CompressionStream('gzip'));
-      }
-    }
-    return new Response(responseBody, { status: response.status, headers: responseHeaders });
+    return new Response(response.body, { status: response.status, headers: responseHeaders });
   } catch (error) {
     console.error(
       'Screening proxy failed',
