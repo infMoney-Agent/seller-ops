@@ -1102,12 +1102,6 @@ export default function ScreeningPage() {
                   <Button
                     size='sm'
                     variant={allFamiliesExpanded ? 'secondary' : 'outline'}
-                    disabled={expandablePageIds.length === 0 && !expandAllMode}
-                    title={
-                      expandablePageIds.length === 0 && !expandAllMode
-                        ? '当前页暂无可展开的多子体商品'
-                        : undefined
-                    }
                     onClick={toggleExpandAllFamilies}
                   >
                     {allFamiliesExpanded ? '全部收起子体' : '全部展开子体'}
