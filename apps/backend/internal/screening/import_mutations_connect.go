@@ -65,6 +65,22 @@ func settingsBody(settings *screeningv1.ImportSettings) (Object, error) {
 	return b, nil
 }
 func rpcImportSubmission(value any) (*screeningv1.ImportJobSubmission, error) {
+	if sub, ok := value.(*JobSubmission); ok && sub != nil {
+		extra := Object{}
+		if sub.RunID != "" {
+			extra["run_id"] = sub.RunID
+		}
+		legacy, err := rpcStruct(extra)
+		if err != nil {
+			return nil, err
+		}
+		var importID *string
+		if sub.ImportID != "" {
+			cp := sub.ImportID
+			importID = &cp
+		}
+		return &screeningv1.ImportJobSubmission{JobId: sub.JobID, State: sub.State, ImportId: importID, LegacyFields: legacy}, nil
+	}
 	row, ok := value.(map[string]any)
 	if !ok {
 		return nil, internalFailure("任务结果无效")

@@ -1,9 +1,9 @@
 import 'server-only';
 import { createHmac } from 'node:crypto';
-import { createClient, Code, ConnectError, type CallOptions } from '@connectrpc/connect';
-import { createConnectTransport } from '@connectrpc/connect-node';
+import { Code, ConnectError, type CallOptions } from '@connectrpc/connect';
 import { fromJson, toJson, type Message, type JsonObject } from '@bufbuild/protobuf';
 import { ScreeningService } from '@/gen/sellerops/screening/v1/screening_pb';
+import { getInternalConnectClient } from '@/lib/connect-transport';
 import { fromLegacyRPCJSON, legacyRPCJSON } from '@/lib/rpc-compat';
 import type { SellerSession } from '@/features/auth/session';
 import { commandBody } from './import-command-connect';
@@ -80,16 +80,11 @@ export async function connectScreening(
       ].join('\n')
     )
     .digest('hex');
-  const transport = createConnectTransport({
-    baseUrl: process.env.SCREENING_API_URL || 'http://127.0.0.1:18090',
-    httpVersion: '1.1',
-    useBinaryFormat: false,
-    defaultTimeoutMs: 120000
-  });
-  const client = createClient(ScreeningService, transport) as unknown as Record<
-    string,
-    (input: Message, options: CallOptions) => Promise<Message>
-  >;
+  const client = getInternalConnectClient(
+    ScreeningService,
+    process.env.SCREENING_API_URL || 'http://127.0.0.1:18090',
+    120000
+  ) as unknown as Record<string, (input: Message, options: CallOptions) => Promise<Message>>;
   const response = await client[method.localName](input, {
     signal,
     headers: {

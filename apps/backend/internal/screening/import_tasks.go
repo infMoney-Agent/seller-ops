@@ -14,21 +14,24 @@ import (
 func newRat(s string) (*big.Rat, bool) { return new(big.Rat).SetString(s) }
 func (s *service) runParse(ctx context.Context, job Object, token string) error {
 	a := identity{Tenant: integer(job["tenant_id"]), User: integer(job["created_by"])}
-	payload := job["payload"].(map[string]any)
+	payload, e := decodeJobPayload[ParseJobPayload](job)
+	if e != nil {
+		return e
+	}
 	tx, e := s.db.Begin(ctx)
 	if e != nil {
 		return e
 	}
 	defer tx.Rollback(ctx)
 	var raw []byte
-	if e = tx.QueryRow(ctx, "SELECT to_jsonb(i) FROM ps_imports i WHERE tenant_id=$1 AND id=$2::uuid FOR UPDATE", a.Tenant, payload["import_id"]).Scan(&raw); e != nil {
+	if e = tx.QueryRow(ctx, "SELECT to_jsonb(i) FROM ps_imports i WHERE tenant_id=$1 AND id=$2::uuid FOR UPDATE", a.Tenant, payload.ImportID).Scan(&raw); e != nil {
 		return e
 	}
 	batch := decodeObject(raw)
 	if counts, ok := batch["counts"].(map[string]any); ok && counts["data_deleted_at"] != nil {
 		return s.finishJob(ctx, job, token, Object{"deleted": true}, "succeeded")
 	}
-	if integer(batch["parse_generation"]) != integer(payload["generation"]) {
+	if integer(batch["parse_generation"]) != payload.Generation {
 		return s.finishJob(ctx, job, token, Object{"superseded": true}, "succeeded")
 	}
 	if str(batch["state"]) != "parsing" && str(batch["state"]) != "failed" {
@@ -109,17 +112,17 @@ func (s *service) editImport(ctx context.Context, a identity, id string, b Objec
 		if state != "preview" {
 			return nil, conflict("请等待解析完成")
 		}
-		if _, e = period(batch, true); e != nil {
+		if _, e = resolveImportPeriod(batch, true); e != nil {
 			return nil, e
 		}
 		if _, e = tx.Exec(ctx, "UPDATE ps_imports SET state='importing' WHERE tenant_id=$1 AND id=$2::uuid", a.Tenant, id); e != nil {
 			return nil, e
 		}
-		result, e := insertJob(ctx, tx, a, "import", Object{"import_id": id})
+		result, e := insertJobPayload(ctx, tx, a, "import", ImportJobPayload{Engine: goEngine, ImportID: id})
 		if e != nil {
 			return nil, e
 		}
-		result["import_id"] = id
+		result.ImportID = id
 		if e = saveReceipt(ctx, tx, a, result); e != nil {
 			return nil, e
 		}
@@ -142,13 +145,11 @@ func (s *service) editImport(ctx context.Context, a identity, id string, b Objec
 		batch[key] = value
 	}
 	applyImportDefaults(batch, str(batch["file_name"]), time.Now())
-	meta, e := period(batch, false)
+	meta, e := resolveImportPeriod(batch, false)
 	if e != nil {
 		return nil, e
 	}
-	for k, v := range meta {
-		batch[k] = v
-	}
+	meta.ApplyToBatch(batch)
 	mapping, ok := batch["mapping"].(map[string]any)
 	if !ok || len(mapping) > len(normalConfig.Aliases) {
 		return nil, invalid("映射无效")
@@ -166,7 +167,7 @@ func (s *service) editImport(ctx context.Context, a identity, id string, b Objec
 	if e != nil {
 		return nil, e
 	}
-	result, e := insertJob(ctx, tx, a, "parse", Object{"import_id": id, "generation": integer(batch["parse_generation"]) + 1})
+	result, e := insertJobPayload(ctx, tx, a, "parse", ParseJobPayload{Engine: goEngine, ImportID: id, Generation: integer(batch["parse_generation"]) + 1})
 	if e != nil {
 		return nil, e
 	}
@@ -180,15 +181,18 @@ func (s *service) editImport(ctx context.Context, a identity, id string, b Objec
 }
 func (s *service) runImport(ctx context.Context, job Object, token string) error {
 	a := identity{Tenant: integer(job["tenant_id"]), User: integer(job["created_by"]), Role: "member"}
-	payload := job["payload"].(map[string]any)
-	batch, e := s.one(ctx, "SELECT to_jsonb(i) FROM ps_imports i WHERE tenant_id=$1 AND id=$2::uuid", a.Tenant, payload["import_id"])
+	payload, e := decodeJobPayload[ImportJobPayload](job)
+	if e != nil {
+		return e
+	}
+	batch, e := s.one(ctx, "SELECT to_jsonb(i) FROM ps_imports i WHERE tenant_id=$1 AND id=$2::uuid", a.Tenant, payload.ImportID)
 	if e != nil {
 		return e
 	}
 	if counts, ok := batch["counts"].(map[string]any); ok && counts["data_deleted_at"] != nil {
 		return s.finishJob(ctx, job, token, Object{"deleted": true}, "succeeded")
 	}
-	meta, e := period(batch, true)
+	meta, e := resolveImportPeriod(batch, true)
 	if e != nil {
 		return e
 	}
@@ -234,7 +238,7 @@ func (s *service) runImport(ctx context.Context, job Object, token string) error
 				tx.Rollback(ctx)
 				return fmt.Errorf("missing normalized row")
 			}
-			pid, e := importObservation(ctx, tx, a, batch, meta, row, normalized)
+			pid, e := importObservation(ctx, tx, a, batch, meta.ToMap(), row, normalized)
 			if e != nil {
 				tx.Rollback(ctx)
 				return e
@@ -274,7 +278,7 @@ func (s *service) runImport(ctx context.Context, job Object, token string) error
 	if e != nil {
 		return e
 	}
-	ids := []any{}
+	ids := []string{}
 	for rows.Next() {
 		var id string
 		if e = rows.Scan(&id); e != nil {
@@ -296,7 +300,7 @@ func (s *service) runImport(ctx context.Context, job Object, token string) error
 		}
 		a.RequestKey = "auto-screen-import:" + str(batch["id"])
 		a.RequestHash = shaDigest(encoded(ids))
-		screen, e := s.enqueueScreen(ctx, a, Object{"product_ids": ids}, "")
+		screen, e := s.enqueueScreen(ctx, a, EnqueueScreenCommand{Selection: ProductSelectionCommand{ProductIDs: ids, HasProductIDs: true}}, "")
 		if e != nil {
 			return e
 		}

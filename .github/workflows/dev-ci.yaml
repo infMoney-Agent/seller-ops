@@ -73,7 +73,7 @@ jobs:
         run: npm run test:web-guidance
       - run: npm run test:imports-connect
       - run: npm run typecheck
-      - run: ./node_modules/.bin/oxlint src/features/screening "src/app/api/ecom/[...path]/route.ts" "src/app/api/ecom/screening/[...path]/route.ts"
+      - run: ./node_modules/.bin/oxlint src/features/screening src/features/ecom src/lib/connect-transport.ts src/lib/workspace-session.ts "src/app/api/ecom/[...path]/route.ts" "src/app/api/ecom/screening/[...path]/route.ts"
       - name: Build Web
         run: |
           set +e

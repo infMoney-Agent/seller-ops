@@ -173,4 +173,40 @@ func TestTypedBatchShapesRoundTripViaRPCCompat(t *testing.T) {
 	if err := rpccompat.FromLegacy(applyResp, Object{"data": publicJSON(applyRes)}); err != nil {
 		t.Fatalf("ApplyReviewBatchResponse FromLegacy failed: %v", err)
 	}
+
+	// Verify typed ProfitOutput and JobSubmission round-trip cleanly through rpccompat.
+	in := profitTableFixture()
+	product := Object{"package_length_cm": "20", "package_width_cm": "10", "package_height_cm": "10", "package_weight_g": "300"}
+	profitOut, err := calculateProductProfitStructured(in, product)
+	if err != nil {
+		t.Fatalf("calculateProductProfitStructured failed: %v", err)
+	}
+	saveResp := &screeningv1.SaveProfitScenarioResponse{}
+	saved := &SavedProfitScenario{
+		ID:     "44444444-4444-4444-4444-444444444444",
+		Name:   stringPtr("基准"),
+		Inputs: in,
+		Output: profitOut,
+		Stale:  false,
+	}
+	if err := rpccompat.FromLegacy(saveResp, Object{"data": publicJSON(saved)}); err != nil {
+		t.Fatalf("SaveProfitScenarioResponse FromLegacy failed: %v", err)
+	}
+
+	screenResp := &screeningv1.CreateScreenRunResponse{}
+	sub := &JobSubmission{JobID: payload.ID, RunID: payload.ID, State: "queued"}
+	if err := rpccompat.FromLegacy(screenResp, Object{"data": publicJSON(sub)}); err != nil {
+		t.Fatalf("CreateScreenRunResponse FromLegacy failed: %v", err)
+	}
+
+	batchPayload := ProfitBatchJobPayload{
+		Engine:     goEngine,
+		ProductIDs: []string{payload.ID},
+		Targets:    []ProfitBatchTarget{{ID: payload.ID, DataRevision: 2, PriceUSD: stringPtr("19.99")}},
+		Inputs:     in,
+	}
+	decodedBatch, err := decodeJobPayload[ProfitBatchJobPayload](Object{"payload": batchPayload})
+	if err != nil || len(decodedBatch.Targets) != 1 || decodedBatch.Targets[0].DataRevision != 2 {
+		t.Fatalf("unexpected decoded ProfitBatchJobPayload: %#v %v", decodedBatch, err)
+	}
 }

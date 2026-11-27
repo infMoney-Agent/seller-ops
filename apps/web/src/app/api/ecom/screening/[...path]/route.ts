@@ -1,11 +1,10 @@
-import { authBackendResponse } from '@/lib/auth-backend';
 import { createHmac } from 'node:crypto';
 import { acceptsGzip, serverTiming } from '@/lib/http-performance';
 import { isAllowedAppOrigin } from '@/lib/backend';
+import { resolveWorkspaceSession } from '@/lib/workspace-session';
 import { connectImportRead, importConnectFailure } from '@/features/screening/import-connect';
 import { connectScreening, screeningRPCRoute } from '@/features/screening/screening-connect';
 import { connectImportCommand } from '@/features/screening/import-command-connect';
-import type { SellerSession } from '@/features/auth/session';
 
 export const runtime = 'nodejs';
 const uuid = '[0-9a-fA-F-]{36}';
@@ -53,35 +52,20 @@ async function proxy(request: Request, { params }: { params: Promise<{ path: str
   if (secret.length < 32) return Response.json({ message: '初筛服务尚未配置。' }, { status: 503 });
   let oversized = false;
   try {
-    const authStarted = performance.now();
-    const auth = await authBackendResponse('/api/auth/session', {
-      headers: { cookie: request.headers.get('cookie') || '' },
-      cache: 'no-store',
-      redirect: 'manual',
-      signal: AbortSignal.timeout(10000)
-    });
-    if (!auth.ok)
-      return Response.json(
-        { message: auth.status === 401 ? '请先登录。' : '身份服务暂不可用。' },
-        { status: auth.status === 401 ? 401 : 502 }
-      );
-    const session: SellerSession = await auth.json();
-    const authDuration = performance.now() - authStarted;
-    if (
-      !Number.isSafeInteger(session.id) ||
-      session.id <= 0 ||
-      !Number.isSafeInteger(session.workspaceId) ||
-      session.workspaceId <= 0 ||
-      !['owner', 'member'].includes(session.role)
-    ) {
-      return Response.json({ message: '账号尚未绑定租户，请联系管理员。' }, { status: 403 });
+    const authOutcome = await resolveWorkspaceSession(request);
+    if (!authOutcome.ok) {
+      if (authOutcome.reason === 'unauthenticated') {
+        return Response.json({ message: '请先登录。' }, { status: 401 });
+      }
+      if (authOutcome.reason === 'no_workspace') {
+        return Response.json({ message: '账号尚未绑定租户，请联系管理员。' }, { status: 403 });
+      }
+      if (authOutcome.reason === 'workspace_switched') {
+        return Response.json({ message: '工作区已切换，请刷新页面。' }, { status: 409 });
+      }
+      return Response.json({ message: '身份服务暂不可用。' }, { status: 502 });
     }
-    if (
-      request.headers.has('x-seller-workspace') &&
-      request.headers.get('x-seller-workspace') !== String(session.workspaceId)
-    ) {
-      return Response.json({ message: '工作区已切换，请刷新页面。' }, { status: 409 });
-    }
+    const { session, durationMs: authDuration } = authOutcome;
     if (screeningRPCRoute(request.method, path)) {
       const apiStarted = performance.now();
       const responseHeaders = () => ({

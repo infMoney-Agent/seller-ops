@@ -2,10 +2,12 @@ package main
 
 import (
 	"context"
+	"google.golang.org/protobuf/proto"
+	authv1 "seller-ops/contracts/sellerops/auth/v1"
 	"seller-ops/server/internal/auth"
 )
 
-func (s *server) sessionUsecase(ctx context.Context, a auth.Principal) (*auth.Result, error) {
+func (s *server) sessionUsecase(ctx context.Context, a auth.Principal) (*authv1.SessionProfile, error) {
 	var name, email string
 	var verified bool
 	if err := s.db.QueryRow(ctx, "SELECT name,email,email_verified FROM users WHERE id=$1", a.UserID).Scan(&name, &email, &verified); err != nil {
@@ -17,17 +19,29 @@ func (s *server) sessionUsecase(ctx context.Context, a auth.Principal) (*auth.Re
 		return nil, err
 	}
 	defer rows.Close()
-	workspaces := []map[string]any{}
+	workspaces := []*authv1.Workspace{}
 	for rows.Next() {
 		var id int64
 		var workspaceName, workspaceRole string
 		if err := rows.Scan(&id, &workspaceName, &workspaceRole); err != nil {
 			return nil, err
 		}
-		workspaces = append(workspaces, map[string]any{"id": id, "name": workspaceName, "role": workspaceRole})
+		workspaces = append(workspaces, &authv1.Workspace{
+			Id:   proto.Int64(id),
+			Name: proto.String(workspaceName),
+			Role: proto.String(workspaceRole),
+		})
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	return &auth.Result{Status: 200, Data: map[string]any{"id": a.UserID, "name": name, "email": email, "emailVerified": verified, "workspaceId": a.TenantID, "role": a.Role, "workspaces": workspaces}}, nil
+	return &authv1.SessionProfile{
+		Id:            proto.Int64(a.UserID),
+		Name:          proto.String(name),
+		Email:         proto.String(email),
+		EmailVerified: proto.Bool(verified),
+		WorkspaceId:   proto.Int64(a.TenantID),
+		Role:          proto.String(a.Role),
+		Workspaces:    workspaces,
+	}, nil
 }

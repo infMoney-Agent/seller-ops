@@ -256,9 +256,9 @@ func parseCalculateProfitCommand(b Object) CalculateProfitCommand {
 }
 
 type CalculatedScenarioItem struct {
-	Name   *string `json:"name"`
-	Inputs Object  `json:"inputs"`
-	Output Object  `json:"output"`
+	Name   *string       `json:"name"`
+	Inputs Object        `json:"inputs"`
+	Output *ProfitOutput `json:"output"`
 }
 
 type ProfitCalculationResult struct {
@@ -289,7 +289,7 @@ type SavedProfitScenario struct {
 	ID     string  `json:"id"`
 	Name   *string `json:"name"`
 	Inputs Object  `json:"inputs"`
-	Output Object  `json:"output"`
+	Output any     `json:"output"`
 	Stale  bool    `json:"stale"`
 }
 

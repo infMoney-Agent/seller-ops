@@ -1,9 +1,9 @@
 import 'server-only';
 import { fromJson, toJson, type Message, type JsonObject } from '@bufbuild/protobuf';
-import { createClient, Code, ConnectError, type CallOptions } from '@connectrpc/connect';
-import { createConnectTransport } from '@connectrpc/connect-node';
+import { Code, ConnectError, type CallOptions } from '@connectrpc/connect';
 import { AuthService } from '@/gen/sellerops/auth/v1/auth_pb';
 import { ErrorDetailSchema } from '@/gen/sellerops/common/v1/error_pb';
+import { getInternalConnectClient } from './connect-transport';
 import { fromLegacyRPCJSON, legacyRPCJSON } from './rpc-compat';
 import { authRPCRoutes } from './auth-rpc-routes';
 import { commandBody } from '@/features/screening/import-command-connect';
@@ -78,14 +78,10 @@ export async function authBackendResponse(path: string, init: RequestInit = {}):
     } catch {
       throw new ConnectError('invalid request', Code.InvalidArgument);
     }
-    const client = createClient(
+    const client = getInternalConnectClient(
       AuthService,
-      createConnectTransport({
-        baseUrl: process.env.SELLER_API_URL || 'http://127.0.0.1:8080',
-        httpVersion: '1.1',
-        useBinaryFormat: false,
-        defaultTimeoutMs: 30000
-      })
+      process.env.SELLER_API_URL || 'http://127.0.0.1:8080',
+      30000
     ) as unknown as Record<string, (input: Message, options: CallOptions) => Promise<Message>>;
     const response = (await client[method.localName](input, {
       signal: init.signal || AbortSignal.timeout(30000),

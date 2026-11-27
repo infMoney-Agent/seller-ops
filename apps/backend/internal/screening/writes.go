@@ -102,7 +102,7 @@ func (s *service) calculateProfit(ctx context.Context, a identity, cmd Calculate
 	}
 	items := make([]CalculatedScenarioItem, 0, len(cmd.Scenarios))
 	for _, in := range cmd.Scenarios {
-		out, e := calculateProductProfit(in, p)
+		out, e := calculateProductProfitStructured(in, p)
 		if e != nil {
 			return nil, invalid(e.Error())
 		}
@@ -160,7 +160,7 @@ func (s *service) saveProfit(ctx context.Context, a identity, id string, cmd Sav
 		return nil, invalid("测算输入无效")
 	}
 	in := cmd.Inputs
-	out, e := calculateProductProfit(in, p)
+	out, e := calculateProductProfitStructured(in, p)
 	if e != nil {
 		return nil, invalid(e.Error())
 	}

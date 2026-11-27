@@ -139,7 +139,11 @@ func (s *service) handler() http.Handler {
 		v, e := s.route(w, r)
 		if v != nil || e != nil {
 			if e == nil && r.Method == "POST" {
-				if result, ok := v.(map[string]any); ok && result["job_id"] != nil && result["state"] == "queued" {
+				if sub, ok := v.(*JobSubmission); ok && sub.JobID != "" && sub.State == "queued" {
+					w.Header().Set("Content-Type", "application/json; charset=utf-8")
+					w.Header().Set("Cache-Control", "no-store")
+					w.WriteHeader(http.StatusAccepted)
+				} else if result, ok := v.(map[string]any); ok && result["job_id"] != nil && result["state"] == "queued" {
 					w.Header().Set("Content-Type", "application/json; charset=utf-8")
 					w.Header().Set("Cache-Control", "no-store")
 					w.WriteHeader(http.StatusAccepted)
