@@ -49,6 +49,9 @@ func trademarkFacets(rows []Object) []Object {
 }
 
 func (s *service) trademarkOptionsUsecase(ctx context.Context, a identity, params url.Values) (any, error) {
+	if s.gormStore != nil {
+		return s.gormTrademarkOptionsUsecase(ctx, a, params)
+	}
 	values := cloneQuery(params)
 	values.Del("trademark")
 	values.Del("sort")

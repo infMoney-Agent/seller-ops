@@ -5,12 +5,16 @@ import (
 	"fmt"
 	"math/big"
 	"net/url"
+	"seller-ops/backend/internal/legacyprojection"
 	"sort"
 	"strings"
 )
 
 // Parent folding only changes browsing. Each child retains its own cost snapshot.
 func (s *service) profitProductsUsecase(ctx context.Context, a identity, params url.Values) (any, error) {
+	if s.gormStore != nil {
+		return s.gormProfitProductsUsecase(ctx, a, params)
+	}
 	values := cloneQuery(params)
 	sortBy := values.Get("sort")
 	grouped := values.Get("group_by_parent") == "true"
@@ -66,8 +70,8 @@ func (s *service) profitProductsUsecase(ctx context.Context, a identity, params 
 		q.args = append(q.args, family)
 		q.where += fmt.Sprintf(" AND EXISTS(SELECT 1 FROM ps_products anchor WHERE anchor.tenant_id=p.tenant_id AND anchor.id=$%d::uuid AND anchor.archived_at IS NULL AND anchor.marketplace=p.marketplace AND (anchor.id=p.id OR (NULLIF(anchor.parent_asin,'') IS NOT NULL AND anchor.parent_asin=p.parent_asin)))", len(q.args))
 	}
-	scenarioJoin := ` LEFT JOIN LATERAL(SELECT s.id,s.name,s.inputs,s.output,s.formula_version,s.product_data_revision,s.monthly_id,s.monthly_revision,s.template_id,s.created_by,s.created_at,s.revision,s.record_kind FROM ps_profit_scenarios s WHERE s.tenant_id=p.tenant_id AND s.product_id=p.id AND s.record_kind='calculated' ORDER BY s.created_at DESC,s.id DESC LIMIT 1)q ON true `
-	feeJoin := ` LEFT JOIN LATERAL(SELECT s.imported_fba_fee_usd,s.imported_gross_margin_rate,s.source_row_id FROM ps_profit_scenarios s WHERE s.tenant_id=p.tenant_id AND s.product_id=p.id AND s.record_kind='imported' AND (s.source_row_id=p.current_row_id OR s.monthly_id=m.id) ORDER BY (s.source_row_id=p.current_row_id) DESC,s.created_at DESC,s.id DESC LIMIT 1)fees ON true `
+	scenarioJoin := legacyprojection.ProfitScenarioJoin
+	feeJoin := legacyprojection.ProfitFeeJoin
 	joins := q.sets + scenarioJoin + feeJoin
 	countJoins := q.sets
 	if strings.Contains(q.where, "q.") {

@@ -95,7 +95,7 @@ func TestImportHTTPWorkflow(t *testing.T) {
 	if e = migrate(ctx, pool); e != nil {
 		t.Fatal(e)
 	}
-	s := &service{pool, Config{Storage: t.TempDir(), Secret: strings.Repeat("x", 32)}}
+	s := &service{db: pool, cfg: Config{Storage: t.TempDir(), Secret: strings.Repeat("x", 32)}}
 	a := identity{Tenant: 501, User: 7, Role: "owner"}
 	handler := s.handler()
 	workerCtx, cancel := context.WithCancel(ctx)

@@ -16,18 +16,22 @@ func rpcInput(value *structpb.Struct) Object {
 	return decodeObject(encoded(value.AsMap()))
 }
 func prepareImportMutation(ctx context.Context, id, method, suffix string, meta *screeningv1.ImportMutationMetadata, body Object) (identity, error) {
+	return (&service{}).prepareImportMutation(ctx, id, method, suffix, meta, body)
+}
+
+func (s *service) prepareImportMutation(ctx context.Context, id, method, suffix string, meta *screeningv1.ImportMutationMetadata, body Object) (identity, error) {
 	a, err := rpcActor(ctx)
 	if err != nil {
 		return a, err
 	}
-	if err = validImportResourceID(id); err != nil {
+	if err = s.validResourceID(id); err != nil {
 		return a, err
 	}
 	if method != "DELETE" {
 		if len(encoded(body)) > 256*1024 {
 			return a, payloadTooLarge("JSON 请求超过256KB")
 		}
-		if err = validateMutationBody(body); err != nil {
+		if err = s.validateMutationBody(body); err != nil {
 			return a, err
 		}
 	}
@@ -103,7 +107,7 @@ func (s *service) GetImportRemovalPreview(ctx context.Context, req *connect.Requ
 	if err != nil {
 		return nil, rpcError(err)
 	}
-	if err = validImportResourceID(req.Msg.Id); err != nil {
+	if err = s.validResourceID(req.Msg.Id); err != nil {
 		return nil, rpcError(err)
 	}
 	value, err := s.importRemovalPreview(ctx, a, req.Msg.Id)
@@ -115,7 +119,7 @@ func (s *service) GetImportRemovalPreview(ctx context.Context, req *connect.Requ
 }
 func (s *service) CommitImport(ctx context.Context, req *connect.Request[screeningv1.CommitImportRequest]) (*connect.Response[screeningv1.CommitImportResponse], error) {
 	b := rpcInput(req.Msg.LegacyFields)
-	a, err := prepareImportMutation(ctx, req.Msg.Id, "POST", "imports/"+req.Msg.Id+"/commit", req.Msg.Mutation, b)
+	a, err := s.prepareImportMutation(ctx, req.Msg.Id, "POST", "imports/"+req.Msg.Id+"/commit", req.Msg.Mutation, b)
 	if err != nil {
 		return nil, rpcError(err)
 	}
@@ -134,7 +138,7 @@ func (s *service) UpdateImportSettings(ctx context.Context, req *connect.Request
 	if err != nil {
 		return nil, rpcError(err)
 	}
-	a, err := prepareImportMutation(ctx, req.Msg.Id, "PUT", "imports/"+req.Msg.Id+"/mapping", req.Msg.Mutation, b)
+	a, err := s.prepareImportMutation(ctx, req.Msg.Id, "PUT", "imports/"+req.Msg.Id+"/mapping", req.Msg.Mutation, b)
 	if err != nil {
 		return nil, rpcError(err)
 	}
@@ -150,7 +154,7 @@ func (s *service) UpdateImportSettings(ctx context.Context, req *connect.Request
 }
 func (s *service) RetryImportJob(ctx context.Context, req *connect.Request[screeningv1.RetryImportJobRequest]) (*connect.Response[screeningv1.RetryImportJobResponse], error) {
 	b := rpcInput(req.Msg.LegacyFields)
-	a, err := prepareImportMutation(ctx, req.Msg.Id, "POST", "jobs/"+req.Msg.Id+"/retry", req.Msg.Mutation, b)
+	a, err := s.prepareImportMutation(ctx, req.Msg.Id, "POST", "jobs/"+req.Msg.Id+"/retry", req.Msg.Mutation, b)
 	if err != nil {
 		return nil, rpcError(err)
 	}
@@ -165,7 +169,7 @@ func (s *service) RetryImportJob(ctx context.Context, req *connect.Request[scree
 	return connect.NewResponse(&screeningv1.RetryImportJobResponse{Submission: submission}), nil
 }
 func (s *service) DeleteImport(ctx context.Context, req *connect.Request[screeningv1.DeleteImportRequest]) (*connect.Response[screeningv1.DeleteImportResponse], error) {
-	a, err := prepareImportMutation(ctx, req.Msg.Id, "DELETE", "imports/"+req.Msg.Id, req.Msg.Mutation, nil)
+	a, err := s.prepareImportMutation(ctx, req.Msg.Id, "DELETE", "imports/"+req.Msg.Id, req.Msg.Mutation, nil)
 	if err != nil {
 		return nil, rpcError(err)
 	}

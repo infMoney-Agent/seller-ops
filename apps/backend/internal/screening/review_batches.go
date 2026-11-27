@@ -18,6 +18,9 @@ func txProduct(ctx context.Context, tx pgx.Tx, a identity, id string, lock bool)
 }
 
 func (s *service) previewBatch(ctx context.Context, a identity, cmd PreviewBatchCommand) (*ReviewBatchPayload, error) {
+	if s.gormStore != nil {
+		return s.gormPreviewBatch(ctx, a, cmd)
+	}
 	tx, e := s.db.Begin(ctx)
 	if e != nil {
 		return nil, e
@@ -181,6 +184,9 @@ func decodeBatchResult(raw any) (*BatchApplyResult, error) {
 }
 
 func (s *service) applyBatch(ctx context.Context, a identity, id string, undo bool) (*BatchApplyResult, error) {
+	if s.gormStore != nil {
+		return s.gormApplyBatch(ctx, a, id, undo)
+	}
 	tx, e := s.db.Begin(ctx)
 	if e != nil {
 		return nil, e

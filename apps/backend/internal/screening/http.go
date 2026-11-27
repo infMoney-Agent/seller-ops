@@ -12,8 +12,10 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"gorm.io/gorm"
 	"log"
 	"net/http"
+	"seller-ops/backend/internal/storage/gormrepo"
 	"strconv"
 	"strings"
 	"time"
@@ -27,8 +29,9 @@ type identity struct {
 }
 type identityKey struct{}
 type service struct {
-	db  *pgxpool.Pool
-	cfg Config
+	db        *pgxpool.Pool
+	gormStore *gormrepo.Store
+	cfg       Config
 }
 
 func uuid() string {
@@ -63,9 +66,12 @@ func respond(w http.ResponseWriter, v any, e error) {
 		} else if errors.As(e, &pg) && (pg.Code == "23505" || pg.Code == "23514" || pg.Code == "23503") {
 			status = 409
 			message = str(workError(e)["message"])
-		} else if errors.Is(e, pgx.ErrNoRows) {
+		} else if errors.Is(e, pgx.ErrNoRows) || errors.Is(e, gorm.ErrRecordNotFound) {
 			status = 404
 			message = "资源不存在"
+		} else if errors.Is(e, gorm.ErrDuplicatedKey) {
+			status = 409
+			message = "记录已存在"
 		} else {
 			log.Printf("screening request failed: %T", e)
 		}
@@ -116,7 +122,7 @@ func (s *service) handler() http.Handler {
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 		defer cancel()
-		e := s.db.Ping(ctx)
+		e := s.ping(ctx)
 		if e != nil {
 			w.WriteHeader(503)
 			return

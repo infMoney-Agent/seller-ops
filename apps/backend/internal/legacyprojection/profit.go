@@ -1,0 +1,5 @@
+package legacyprojection
+
+const ProfitSourceProjection = `jsonb_build_object('profit_source',(SELECT jsonb_build_object('storage_usd',coalesce(r.raw_data->>'亚马逊仓租($)',r.raw_data->>'仓租($)',r.raw_data->>'Storage Fee($)'),'tier',r.raw_data->>'包装尺寸分段') FROM ps_import_rows r WHERE r.tenant_id=p.tenant_id AND r.id=p.current_row_id))`
+const ProfitScenarioJoin = ` LEFT JOIN LATERAL(SELECT s.id,s.name,s.inputs,s.output,s.formula_version,s.product_data_revision,s.monthly_id,s.monthly_revision,s.template_id,s.created_by,s.created_at,s.revision,s.record_kind FROM ps_profit_scenarios s WHERE s.tenant_id=p.tenant_id AND s.product_id=p.id AND s.record_kind='calculated' ORDER BY s.created_at DESC,s.id DESC LIMIT 1)q ON true `
+const ProfitFeeJoin = ` LEFT JOIN LATERAL(SELECT s.imported_fba_fee_usd,s.imported_gross_margin_rate,s.source_row_id FROM ps_profit_scenarios s WHERE s.tenant_id=p.tenant_id AND s.product_id=p.id AND s.record_kind='imported' AND (s.source_row_id=p.current_row_id OR s.monthly_id=m.id) ORDER BY (s.source_row_id=p.current_row_id) DESC,s.created_at DESC,s.id DESC LIMIT 1)fees ON true `

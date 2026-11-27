@@ -3,6 +3,7 @@ package screening
 import (
 	"fmt"
 	"math/big"
+	"seller-ops/backend/internal/legacyprojection"
 	"sort"
 	"strings"
 	"time"
@@ -169,4 +170,4 @@ func resolveStorageFromFacts(in *ProfitInputs, facts ProductProfitFacts) Storage
 	return res
 }
 
-const profitSourceProjection = `jsonb_build_object('profit_source',(SELECT jsonb_build_object('storage_usd',coalesce(r.raw_data->>'亚马逊仓租($)',r.raw_data->>'仓租($)',r.raw_data->>'Storage Fee($)'),'tier',r.raw_data->>'包装尺寸分段') FROM ps_import_rows r WHERE r.tenant_id=p.tenant_id AND r.id=p.current_row_id))`
+const profitSourceProjection = legacyprojection.ProfitSourceProjection

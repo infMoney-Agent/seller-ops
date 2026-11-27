@@ -60,6 +60,9 @@ func reviewCandidateValues(a identity, params url.Values, ignoreCategory bool) (
 	return q, nil
 }
 func (s *service) reviewCategoriesUsecase(ctx context.Context, a identity, params url.Values) (any, error) {
+	if s.gormStore != nil {
+		return s.gormReviewCategoriesUsecase(ctx, a, params)
+	}
 	q, e := reviewCandidateValues(a, params, true)
 	if e != nil {
 		return nil, e

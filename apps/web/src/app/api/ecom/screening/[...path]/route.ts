@@ -8,6 +8,8 @@ import { connectImportCommand } from '@/features/screening/import-command-connec
 
 export const runtime = 'nodejs';
 const uuid = '[0-9a-fA-F-]{36}';
+// PostgreSQL uses UUIDs; MySQL uses positive bigint resource IDs.
+const resourceId = `(?:[1-9][0-9]{0,19}|${uuid})`;
 const routes = [
   [
     'GET',
@@ -17,19 +19,22 @@ const routes = [
     'POST',
     'imports|policies|screen-runs|review-batches/preview|profit/calculate|profit/templates|profit/batches|exports'
   ],
-  ['GET', `products/${uuid}(/(family|observations|monthly|history|references|profit-scenarios))?`],
-  ['GET', `products/${uuid}/observations/${uuid}`],
-  ['GET', `imports/${uuid}(/(preview|errors|source|removal-preview))?`],
   [
     'GET',
-    `screen-runs/${uuid}|review-batches/${uuid}|jobs/${uuid}|exports/${uuid}/download|groups/[a-f0-9]{64}/products`
+    `products/${resourceId}(/(family|observations|monthly|history|references|profit-scenarios))?`
   ],
-  ['PATCH', `products/${uuid}/(review|category|parameters)`],
-  ['PUT', `imports/${uuid}/mapping`],
-  ['DELETE', `imports/${uuid}`],
+  ['GET', `products/${resourceId}/observations/${resourceId}`],
+  ['GET', `imports/${resourceId}(/(preview|errors|source|removal-preview))?`],
+  [
+    'GET',
+    `screen-runs/${resourceId}|review-batches/${resourceId}|jobs/${resourceId}|exports/${resourceId}/download|groups/[a-f0-9]{64}/products`
+  ],
+  ['PATCH', `products/${resourceId}/(review|category|parameters)`],
+  ['PUT', `imports/${resourceId}/mapping`],
+  ['DELETE', `imports/${resourceId}`],
   [
     'POST',
-    `imports/${uuid}/commit|policies/${uuid}/(test|activate)|review-batches/${uuid}/(apply|undo)|products/${uuid}/profit-scenarios|jobs/${uuid}/retry`
+    `imports/${resourceId}/commit|policies/${resourceId}/(test|activate)|review-batches/${resourceId}/(apply|undo)|products/${resourceId}/profit-scenarios|jobs/${resourceId}/retry`
   ]
 ] as const;
 
@@ -96,7 +101,9 @@ async function proxy(request: Request, { params }: { params: Promise<{ path: str
         });
       }
     }
-    const importRead = new RegExp(`^(?:imports/${uuid}(?:/preview)?|jobs/${uuid})$`).test(path);
+    const importRead = new RegExp(
+      `^(?:imports/${resourceId}(?:/preview)?|jobs/${resourceId})$`
+    ).test(path);
     if (request.method === 'GET' && (path === 'imports' || importRead)) {
       const apiStarted = performance.now();
       const responseHeaders = () => ({
@@ -125,9 +132,9 @@ async function proxy(request: Request, { params }: { params: Promise<{ path: str
       }
     }
     const importCommand =
-      (request.method === 'DELETE' && new RegExp(`^imports/${uuid}$`).test(path)) ||
+      (request.method === 'DELETE' && new RegExp(`^imports/${resourceId}$`).test(path)) ||
       new RegExp(
-        `^(?:imports/${uuid}/(?:commit|mapping|removal-preview)|jobs/${uuid}/retry)$`
+        `^(?:imports/${resourceId}/(?:commit|mapping|removal-preview)|jobs/${resourceId}/retry)$`
       ).test(path);
     if (importCommand) {
       const apiStarted = performance.now();
@@ -162,7 +169,9 @@ async function proxy(request: Request, { params }: { params: Promise<{ path: str
     const upload = request.method === 'POST' && path === 'imports';
     const download =
       request.method === 'GET' &&
-      new RegExp(`^(?:imports/${uuid}/(?:source|errors)|exports/${uuid}/download)$`).test(path);
+      new RegExp(
+        `^(?:imports/${resourceId}/(?:source|errors)|exports/${resourceId}/download)$`
+      ).test(path);
     if (!upload && !download) {
       return Response.json({ message: '初筛接口不存在。' }, { status: 404 });
     }

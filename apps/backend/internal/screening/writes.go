@@ -10,6 +10,9 @@ var parameterColumns = []string{"parent_asin", "material", "product_length_cm", 
 var decimalPattern = regexp.MustCompile(`^[0-9]{1,12}(\.[0-9]{1,6})?$`)
 
 func (s *service) reviewProduct(ctx context.Context, a identity, id string, cmd ReviewProductCommand) (Object, error) {
+	if s.gormStore != nil {
+		return s.gormReviewProduct(ctx, a, id, cmd)
+	}
 	return s.mutateLockedProduct(ctx, a, id, cmd.ExpectedDataRevision, cmd.ExpectedReviewRevision, true, func(baseSet string, baseArgs []any) (string, []any, error) {
 		if err := cmd.validate(); err != nil {
 			return "", nil, err
@@ -20,6 +23,9 @@ func (s *service) reviewProduct(ctx context.Context, a identity, id string, cmd 
 }
 
 func (s *service) updateProductCategory(ctx context.Context, a identity, id string, cmd UpdateCategoryCommand) (Object, error) {
+	if s.gormStore != nil {
+		return s.gormUpdateProductCategory(ctx, a, id, cmd)
+	}
 	return s.mutateLockedProduct(ctx, a, id, cmd.ExpectedDataRevision, cmd.ExpectedReviewRevision, true, func(baseSet string, baseArgs []any) (string, []any, error) {
 		if err := cmd.validate(); err != nil {
 			return "", nil, err
@@ -30,6 +36,9 @@ func (s *service) updateProductCategory(ctx context.Context, a identity, id stri
 }
 
 func (s *service) updateProductParameters(ctx context.Context, a identity, id string, cmd UpdateParametersCommand) (Object, error) {
+	if s.gormStore != nil {
+		return s.gormUpdateProductParameters(ctx, a, id, cmd)
+	}
 	return s.mutateLockedProduct(ctx, a, id, cmd.ExpectedDataRevision, nil, false, cmd.buildUpdate)
 }
 
@@ -82,6 +91,9 @@ func (s *service) mutateLockedProduct(ctx context.Context, a identity, id string
 }
 
 func (s *service) calculateProfit(ctx context.Context, a identity, cmd CalculateProfitCommand) (*ProfitCalculationResult, error) {
+	if s.gormStore != nil {
+		return s.gormCalculateProfit(ctx, a, cmd)
+	}
 	p, e := s.one(ctx, "SELECT to_jsonb(p)||"+profitSourceProjection+" FROM ps_products p WHERE tenant_id=$1 AND id=$2::uuid AND archived_at IS NULL", a.Tenant, cmd.ProductID)
 	if e != nil {
 		return nil, e
@@ -139,6 +151,9 @@ func (s *service) monthlyReference(ctx context.Context, a identity, p Object, re
 }
 
 func (s *service) saveProfit(ctx context.Context, a identity, id string, cmd SaveProfitScenarioCommand) (*SavedProfitScenario, error) {
+	if s.gormStore != nil {
+		return s.gormSaveProfit(ctx, a, id, cmd)
+	}
 	// Lock the product while taking source and parameter snapshots.
 	tx, e := s.db.Begin(ctx)
 	if e != nil {
@@ -211,6 +226,9 @@ func nullableJSON(v any) any {
 }
 
 func (s *service) createConfig(ctx context.Context, a identity, cmd CreateConfigCommand) (*ConfigRecord, error) {
+	if s.gormStore != nil {
+		return s.gormCreateConfig(ctx, a, cmd)
+	}
 	if a.Role != "owner" {
 		return nil, forbidden("只有所有者可管理公共配置")
 	}

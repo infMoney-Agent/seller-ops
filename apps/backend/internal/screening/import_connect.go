@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
+	"gorm.io/gorm"
 	"net/http"
 	commonv1 "seller-ops/contracts/sellerops/common/v1"
 	screeningv1 "seller-ops/contracts/sellerops/screening/v1"
@@ -46,8 +47,11 @@ func rpcError(err error) *connect.Error {
 	if errors.As(err, &pg) && (pg.Code == "23505" || pg.Code == "23514" || pg.Code == "23503") {
 		code, message, reason = connect.CodeAborted, str(workError(err)["message"]), "CONFLICT"
 	}
-	if errors.Is(err, pgx.ErrNoRows) {
+	if errors.Is(err, pgx.ErrNoRows) || errors.Is(err, gorm.ErrRecordNotFound) {
 		code, message, reason = connect.CodeNotFound, "资源不存在", "NOT_FOUND"
+	}
+	if errors.Is(err, gorm.ErrDuplicatedKey) {
+		code, message, reason = connect.CodeAborted, "记录已存在", "CONFLICT"
 	}
 	if errors.Is(err, context.Canceled) {
 		code, message, reason = connect.CodeCanceled, "请求已取消", "CANCELED"

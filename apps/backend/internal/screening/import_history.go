@@ -8,12 +8,18 @@ import (
 )
 
 func (s *service) importRemovalPreview(ctx context.Context, a identity, id string) (any, error) {
+	if s.gormStore != nil {
+		return s.gormImportRemovalPreview(ctx, a, id)
+	}
 	if _, err := s.one(ctx, "SELECT to_jsonb(i) FROM ps_imports i WHERE tenant_id=$1 AND id=$2::uuid AND NOT(counts ? 'data_deleted_at')", a.Tenant, id); err != nil {
 		return nil, err
 	}
 	return s.one(ctx, `WITH affected AS(SELECT DISTINCT product_id FROM ps_import_rows WHERE tenant_id=$1 AND import_id=$2::uuid AND product_id IS NOT NULL) SELECT jsonb_build_object('products',count(*),'exclusive_products',count(*) FILTER(WHERE NOT EXISTS(SELECT 1 FROM ps_import_rows r JOIN ps_imports i ON i.tenant_id=r.tenant_id AND i.id=r.import_id WHERE r.tenant_id=$1 AND r.product_id=affected.product_id AND r.import_id<>$2::uuid AND r.state='committed' AND NOT(i.counts ? 'data_deleted_at'))),'source_rows',(SELECT count(*) FROM ps_import_rows WHERE tenant_id=$1 AND import_id=$2::uuid)) FROM affected`, a.Tenant, id)
 }
 func (s *service) removeImportHistory(ctx context.Context, a identity, id string) (any, error) {
+	if s.gormStore != nil {
+		return s.gormRemoveImportHistory(ctx, a, id)
+	}
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, err

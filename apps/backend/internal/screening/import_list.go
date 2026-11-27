@@ -56,6 +56,9 @@ func normalizeImportPage(p, n int) (int, int) {
 	return p, n
 }
 func (s *service) listImports(ctx context.Context, a identity, p, n int) (*ImportList, error) {
+	if s.gormStore != nil {
+		return s.gormListImports(ctx, a, p, n)
+	}
 	p, n = normalizeImportPage(p, n)
 	var total int64
 	const where = "tenant_id=$1 AND NOT(counts ? 'data_deleted_at')"
@@ -112,12 +115,18 @@ func validImportResourceID(id string) error {
 	return nil
 }
 func (s *service) getImport(ctx context.Context, a identity, id string) (Object, error) {
+	if s.gormStore != nil {
+		return s.gormGetImport(ctx, a, id)
+	}
 	if err := validImportResourceID(id); err != nil {
 		return nil, err
 	}
 	return s.one(ctx, "SELECT to_jsonb(i)||jsonb_build_object('latest_job_id',(SELECT j.id FROM ps_jobs j WHERE j.tenant_id=i.tenant_id AND j.kind IN ('parse','import') AND j.payload->>'import_id'=i.id::text ORDER BY j.updated_at DESC,j.id DESC LIMIT 1)) FROM ps_imports i WHERE tenant_id=$1 AND id=$2::uuid AND NOT(counts ? 'data_deleted_at')", a.Tenant, id)
 }
 func (s *service) importRows(ctx context.Context, a identity, id string, p, n int) (any, error) {
+	if s.gormStore != nil {
+		return s.gormImportRows(ctx, a, id, p, n)
+	}
 	if err := validImportResourceID(id); err != nil {
 		return nil, err
 	}
@@ -127,6 +136,9 @@ func (s *service) importRows(ctx context.Context, a identity, id string, p, n in
 	return s.listPage(ctx, p, n, "ps_import_rows", "tenant_id=$1 AND import_id=$2::uuid", a.Tenant, id)
 }
 func (s *service) getPublicJob(ctx context.Context, a identity, id string) (Object, error) {
+	if s.gormStore != nil {
+		return s.gormGetPublicJob(ctx, a, id)
+	}
 	if err := validImportResourceID(id); err != nil {
 		return nil, err
 	}

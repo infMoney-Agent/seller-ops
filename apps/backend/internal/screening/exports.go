@@ -59,6 +59,9 @@ func (s *service) selection(ctx context.Context, a identity, cmd ProductSelectio
 	return ids, rows.Err()
 }
 func (s *service) queueExport(ctx context.Context, a identity, cmd ProductSelectionCommand) (*JobSubmission, error) {
+	if s.gormStore != nil {
+		return s.gormQueueExport(ctx, a, cmd)
+	}
 	ids, e := s.selection(ctx, a, cmd)
 	if e != nil {
 		return nil, e
@@ -66,6 +69,9 @@ func (s *service) queueExport(ctx context.Context, a identity, cmd ProductSelect
 	return s.queue(ctx, a, "export", ExportJobPayload{Engine: goEngine, ProductIDs: ids})
 }
 func (s *service) queueProfit(ctx context.Context, a identity, cmd QueueProfitBatchCommand) (*JobSubmission, error) {
+	if s.gormStore != nil {
+		return s.gormQueueProfit(ctx, a, cmd)
+	}
 	ids, e := s.selection(ctx, a, cmd.Selection)
 	if e != nil {
 		return nil, e
@@ -401,6 +407,9 @@ func (s *service) exportDownload(w http.ResponseWriter, r *http.Request, id stri
 	return nil, s.serveStored(w, r, str(result["storage_key"]), "产品初筛.xlsx")
 }
 func (s *service) retryJob(ctx context.Context, a identity, id string) (any, error) {
+	if s.gormStore != nil {
+		return s.gormRetryJob(ctx, a, id)
+	}
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, err

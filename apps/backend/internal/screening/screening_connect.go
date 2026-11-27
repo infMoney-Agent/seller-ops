@@ -50,7 +50,7 @@ func decodeScreeningBody(body proto.Message) (Object, error) {
 	}
 	return b, nil
 }
-func prepareScreeningBody(ctx context.Context, body proto.Message) (identity, Object, error) {
+func (s *service) prepareScreeningBody(ctx context.Context, body proto.Message) (identity, Object, error) {
 	a, err := rpcActor(ctx)
 	if err != nil {
 		return a, nil, err
@@ -59,13 +59,13 @@ func prepareScreeningBody(ctx context.Context, body proto.Message) (identity, Ob
 	if err != nil {
 		return a, nil, err
 	}
-	if err = validateMutationBody(b); err != nil {
+	if err = validateMutationBody(b, s.gormStore != nil); err != nil {
 		return a, nil, err
 	}
 	return a, b, nil
 }
-func prepareScreeningMutation(ctx context.Context, method, canonicalPath string, q *screeningv1.ScreeningQuery, meta *screeningv1.ImportMutationMetadata, body proto.Message) (identity, Object, error) {
-	a, b, err := prepareScreeningBody(ctx, body)
+func (s *service) prepareScreeningMutation(ctx context.Context, method, canonicalPath string, q *screeningv1.ScreeningQuery, meta *screeningv1.ImportMutationMetadata, body proto.Message) (identity, Object, error) {
+	a, b, err := s.prepareScreeningBody(ctx, body)
 	if err != nil {
 		return a, nil, err
 	}
@@ -122,7 +122,7 @@ func (s *service) GetSummary(ctx context.Context, req *connect.Request[screening
 }
 
 func (s *service) GetProduct(ctx context.Context, req *connect.Request[screeningv1.GetProductRequest]) (*connect.Response[screeningv1.GetProductResponse], error) {
-	a, err := validateScreeningResourceArgs(ctx, req.Msg.GetId())
+	a, err := s.validateScreeningResourceArgs(ctx, req.Msg.GetId())
 	if err != nil {
 		return nil, rpcError(err)
 	}
@@ -131,7 +131,7 @@ func (s *service) GetProduct(ctx context.Context, req *connect.Request[screening
 }
 
 func (s *service) GetProductFamily(ctx context.Context, req *connect.Request[screeningv1.GetProductFamilyRequest]) (*connect.Response[screeningv1.GetProductFamilyResponse], error) {
-	a, err := validateScreeningResourceArgs(ctx, req.Msg.GetId())
+	a, err := s.validateScreeningResourceArgs(ctx, req.Msg.GetId())
 	if err != nil {
 		return nil, rpcError(err)
 	}
@@ -140,7 +140,7 @@ func (s *service) GetProductFamily(ctx context.Context, req *connect.Request[scr
 }
 
 func (s *service) ListProductMonthly(ctx context.Context, req *connect.Request[screeningv1.ListProductMonthlyRequest]) (*connect.Response[screeningv1.ListProductMonthlyResponse], error) {
-	a, err := validateScreeningResourceArgs(ctx, req.Msg.GetId())
+	a, err := s.validateScreeningResourceArgs(ctx, req.Msg.GetId())
 	if err != nil {
 		return nil, rpcError(err)
 	}
@@ -149,7 +149,7 @@ func (s *service) ListProductMonthly(ctx context.Context, req *connect.Request[s
 }
 
 func (s *service) ListProductObservations(ctx context.Context, req *connect.Request[screeningv1.ListProductObservationsRequest]) (*connect.Response[screeningv1.ListProductObservationsResponse], error) {
-	a, err := validateScreeningResourceArgs(ctx, req.Msg.GetId())
+	a, err := s.validateScreeningResourceArgs(ctx, req.Msg.GetId())
 	if err != nil {
 		return nil, rpcError(err)
 	}
@@ -158,7 +158,7 @@ func (s *service) ListProductObservations(ctx context.Context, req *connect.Requ
 }
 
 func (s *service) GetObservationSource(ctx context.Context, req *connect.Request[screeningv1.GetObservationSourceRequest]) (*connect.Response[screeningv1.GetObservationSourceResponse], error) {
-	a, err := validateScreeningResourceArgs(ctx, req.Msg.GetId(), req.Msg.GetRowId())
+	a, err := s.validateScreeningResourceArgs(ctx, req.Msg.GetId(), req.Msg.GetRowId())
 	if err != nil {
 		return nil, rpcError(err)
 	}
@@ -167,7 +167,7 @@ func (s *service) GetObservationSource(ctx context.Context, req *connect.Request
 }
 
 func (s *service) ListProductHistory(ctx context.Context, req *connect.Request[screeningv1.ListProductHistoryRequest]) (*connect.Response[screeningv1.ListProductHistoryResponse], error) {
-	a, err := validateScreeningResourceArgs(ctx, req.Msg.GetId())
+	a, err := s.validateScreeningResourceArgs(ctx, req.Msg.GetId())
 	if err != nil {
 		return nil, rpcError(err)
 	}
@@ -176,7 +176,7 @@ func (s *service) ListProductHistory(ctx context.Context, req *connect.Request[s
 }
 
 func (s *service) ListProductReferences(ctx context.Context, req *connect.Request[screeningv1.ListProductReferencesRequest]) (*connect.Response[screeningv1.ListProductReferencesResponse], error) {
-	a, err := validateScreeningResourceArgs(ctx, req.Msg.GetId())
+	a, err := s.validateScreeningResourceArgs(ctx, req.Msg.GetId())
 	if err != nil {
 		return nil, rpcError(err)
 	}
@@ -185,7 +185,7 @@ func (s *service) ListProductReferences(ctx context.Context, req *connect.Reques
 }
 
 func (s *service) ListProfitScenarios(ctx context.Context, req *connect.Request[screeningv1.ListProfitScenariosRequest]) (*connect.Response[screeningv1.ListProfitScenariosResponse], error) {
-	a, err := validateScreeningResourceArgs(ctx, req.Msg.GetId())
+	a, err := s.validateScreeningResourceArgs(ctx, req.Msg.GetId())
 	if err != nil {
 		return nil, rpcError(err)
 	}
@@ -257,7 +257,7 @@ func (s *service) ListReviewBatches(ctx context.Context, req *connect.Request[sc
 }
 
 func (s *service) GetReviewBatch(ctx context.Context, req *connect.Request[screeningv1.GetReviewBatchRequest]) (*connect.Response[screeningv1.GetReviewBatchResponse], error) {
-	a, err := validateScreeningResourceArgs(ctx, req.Msg.GetId())
+	a, err := s.validateScreeningResourceArgs(ctx, req.Msg.GetId())
 	if err != nil {
 		return nil, rpcError(err)
 	}
@@ -293,7 +293,7 @@ func (s *service) ListProfitProducts(ctx context.Context, req *connect.Request[s
 }
 
 func (s *service) GetScreenRun(ctx context.Context, req *connect.Request[screeningv1.GetScreenRunRequest]) (*connect.Response[screeningv1.GetScreenRunResponse], error) {
-	a, err := validateScreeningResourceArgs(ctx, req.Msg.GetId())
+	a, err := s.validateScreeningResourceArgs(ctx, req.Msg.GetId())
 	if err != nil {
 		return nil, rpcError(err)
 	}
@@ -303,10 +303,10 @@ func (s *service) GetScreenRun(ctx context.Context, req *connect.Request[screeni
 
 func (s *service) ReviewProduct(ctx context.Context, req *connect.Request[screeningv1.ReviewProductRequest]) (*connect.Response[screeningv1.ReviewProductResponse], error) {
 	id := req.Msg.GetId()
-	if _, err := validateScreeningResourceArgs(ctx, id); err != nil {
+	if _, err := s.validateScreeningResourceArgs(ctx, id); err != nil {
 		return nil, rpcError(err)
 	}
-	a, body, err := prepareScreeningMutation(ctx, "PATCH", "products/"+id+"/review", req.Msg.Query, req.Msg.Mutation, req.Msg.Body)
+	a, body, err := s.prepareScreeningMutation(ctx, "PATCH", "products/"+id+"/review", req.Msg.Query, req.Msg.Mutation, req.Msg.Body)
 	if err != nil {
 		return nil, rpcError(err)
 	}
@@ -316,10 +316,10 @@ func (s *service) ReviewProduct(ctx context.Context, req *connect.Request[screen
 
 func (s *service) UpdateProductCategory(ctx context.Context, req *connect.Request[screeningv1.UpdateProductCategoryRequest]) (*connect.Response[screeningv1.UpdateProductCategoryResponse], error) {
 	id := req.Msg.GetId()
-	if _, err := validateScreeningResourceArgs(ctx, id); err != nil {
+	if _, err := s.validateScreeningResourceArgs(ctx, id); err != nil {
 		return nil, rpcError(err)
 	}
-	a, body, err := prepareScreeningMutation(ctx, "PATCH", "products/"+id+"/category", req.Msg.Query, req.Msg.Mutation, req.Msg.Body)
+	a, body, err := s.prepareScreeningMutation(ctx, "PATCH", "products/"+id+"/category", req.Msg.Query, req.Msg.Mutation, req.Msg.Body)
 	if err != nil {
 		return nil, rpcError(err)
 	}
@@ -329,10 +329,10 @@ func (s *service) UpdateProductCategory(ctx context.Context, req *connect.Reques
 
 func (s *service) UpdateProductParameters(ctx context.Context, req *connect.Request[screeningv1.UpdateProductParametersRequest]) (*connect.Response[screeningv1.UpdateProductParametersResponse], error) {
 	id := req.Msg.GetId()
-	if _, err := validateScreeningResourceArgs(ctx, id); err != nil {
+	if _, err := s.validateScreeningResourceArgs(ctx, id); err != nil {
 		return nil, rpcError(err)
 	}
-	a, body, err := prepareScreeningMutation(ctx, "PATCH", "products/"+id+"/parameters", req.Msg.Query, req.Msg.Mutation, req.Msg.Body)
+	a, body, err := s.prepareScreeningMutation(ctx, "PATCH", "products/"+id+"/parameters", req.Msg.Query, req.Msg.Mutation, req.Msg.Body)
 	if err != nil {
 		return nil, rpcError(err)
 	}
@@ -342,10 +342,10 @@ func (s *service) UpdateProductParameters(ctx context.Context, req *connect.Requ
 
 func (s *service) SaveProfitScenario(ctx context.Context, req *connect.Request[screeningv1.SaveProfitScenarioRequest]) (*connect.Response[screeningv1.SaveProfitScenarioResponse], error) {
 	id := req.Msg.GetId()
-	if _, err := validateScreeningResourceArgs(ctx, id); err != nil {
+	if _, err := s.validateScreeningResourceArgs(ctx, id); err != nil {
 		return nil, rpcError(err)
 	}
-	a, body, err := prepareScreeningMutation(ctx, "POST", "products/"+id+"/profit-scenarios", req.Msg.Query, req.Msg.Mutation, req.Msg.Body)
+	a, body, err := s.prepareScreeningMutation(ctx, "POST", "products/"+id+"/profit-scenarios", req.Msg.Query, req.Msg.Mutation, req.Msg.Body)
 	if err != nil {
 		return nil, rpcError(err)
 	}
@@ -354,7 +354,7 @@ func (s *service) SaveProfitScenario(ctx context.Context, req *connect.Request[s
 }
 
 func (s *service) CalculateProfit(ctx context.Context, req *connect.Request[screeningv1.CalculateProfitRequest]) (*connect.Response[screeningv1.CalculateProfitResponse], error) {
-	a, body, err := prepareScreeningBody(ctx, req.Msg.Body)
+	a, body, err := s.prepareScreeningBody(ctx, req.Msg.Body)
 	if err != nil {
 		return nil, rpcError(err)
 	}
@@ -363,7 +363,7 @@ func (s *service) CalculateProfit(ctx context.Context, req *connect.Request[scre
 }
 
 func (s *service) CreateReviewPreview(ctx context.Context, req *connect.Request[screeningv1.CreateReviewPreviewRequest]) (*connect.Response[screeningv1.CreateReviewPreviewResponse], error) {
-	a, body, err := prepareScreeningMutation(ctx, "POST", "review-batches/preview", req.Msg.Query, req.Msg.Mutation, req.Msg.Body)
+	a, body, err := s.prepareScreeningMutation(ctx, "POST", "review-batches/preview", req.Msg.Query, req.Msg.Mutation, req.Msg.Body)
 	if err != nil {
 		return nil, rpcError(err)
 	}
@@ -373,10 +373,10 @@ func (s *service) CreateReviewPreview(ctx context.Context, req *connect.Request[
 
 func (s *service) ApplyReviewBatch(ctx context.Context, req *connect.Request[screeningv1.ApplyReviewBatchRequest]) (*connect.Response[screeningv1.ApplyReviewBatchResponse], error) {
 	id := req.Msg.GetId()
-	if _, err := validateScreeningResourceArgs(ctx, id); err != nil {
+	if _, err := s.validateScreeningResourceArgs(ctx, id); err != nil {
 		return nil, rpcError(err)
 	}
-	a, _, err := prepareScreeningMutation(ctx, "POST", "review-batches/"+id+"/apply", req.Msg.Query, req.Msg.Mutation, req.Msg.Body)
+	a, _, err := s.prepareScreeningMutation(ctx, "POST", "review-batches/"+id+"/apply", req.Msg.Query, req.Msg.Mutation, req.Msg.Body)
 	if err != nil {
 		return nil, rpcError(err)
 	}
@@ -386,10 +386,10 @@ func (s *service) ApplyReviewBatch(ctx context.Context, req *connect.Request[scr
 
 func (s *service) UndoReviewBatch(ctx context.Context, req *connect.Request[screeningv1.UndoReviewBatchRequest]) (*connect.Response[screeningv1.UndoReviewBatchResponse], error) {
 	id := req.Msg.GetId()
-	if _, err := validateScreeningResourceArgs(ctx, id); err != nil {
+	if _, err := s.validateScreeningResourceArgs(ctx, id); err != nil {
 		return nil, rpcError(err)
 	}
-	a, _, err := prepareScreeningMutation(ctx, "POST", "review-batches/"+id+"/undo", req.Msg.Query, req.Msg.Mutation, req.Msg.Body)
+	a, _, err := s.prepareScreeningMutation(ctx, "POST", "review-batches/"+id+"/undo", req.Msg.Query, req.Msg.Mutation, req.Msg.Body)
 	if err != nil {
 		return nil, rpcError(err)
 	}
@@ -398,7 +398,7 @@ func (s *service) UndoReviewBatch(ctx context.Context, req *connect.Request[scre
 }
 
 func (s *service) CreatePolicy(ctx context.Context, req *connect.Request[screeningv1.CreatePolicyRequest]) (*connect.Response[screeningv1.CreatePolicyResponse], error) {
-	a, body, err := prepareScreeningMutation(ctx, "POST", "policies", req.Msg.Query, req.Msg.Mutation, req.Msg.Body)
+	a, body, err := s.prepareScreeningMutation(ctx, "POST", "policies", req.Msg.Query, req.Msg.Mutation, req.Msg.Body)
 	if err != nil {
 		return nil, rpcError(err)
 	}
@@ -407,7 +407,7 @@ func (s *service) CreatePolicy(ctx context.Context, req *connect.Request[screeni
 }
 
 func (s *service) CreateProfitTemplate(ctx context.Context, req *connect.Request[screeningv1.CreateProfitTemplateRequest]) (*connect.Response[screeningv1.CreateProfitTemplateResponse], error) {
-	a, body, err := prepareScreeningMutation(ctx, "POST", "profit/templates", req.Msg.Query, req.Msg.Mutation, req.Msg.Body)
+	a, body, err := s.prepareScreeningMutation(ctx, "POST", "profit/templates", req.Msg.Query, req.Msg.Mutation, req.Msg.Body)
 	if err != nil {
 		return nil, rpcError(err)
 	}
@@ -417,10 +417,10 @@ func (s *service) CreateProfitTemplate(ctx context.Context, req *connect.Request
 
 func (s *service) TestPolicy(ctx context.Context, req *connect.Request[screeningv1.TestPolicyRequest]) (*connect.Response[screeningv1.TestPolicyResponse], error) {
 	id := req.Msg.GetId()
-	if _, err := validateScreeningResourceArgs(ctx, id); err != nil {
+	if _, err := s.validateScreeningResourceArgs(ctx, id); err != nil {
 		return nil, rpcError(err)
 	}
-	a, body, err := prepareScreeningMutation(ctx, "POST", "policies/"+id+"/test", req.Msg.Query, req.Msg.Mutation, req.Msg.Body)
+	a, body, err := s.prepareScreeningMutation(ctx, "POST", "policies/"+id+"/test", req.Msg.Query, req.Msg.Mutation, req.Msg.Body)
 	if err != nil {
 		return nil, rpcError(err)
 	}
@@ -430,10 +430,10 @@ func (s *service) TestPolicy(ctx context.Context, req *connect.Request[screening
 
 func (s *service) ActivatePolicy(ctx context.Context, req *connect.Request[screeningv1.ActivatePolicyRequest]) (*connect.Response[screeningv1.ActivatePolicyResponse], error) {
 	id := req.Msg.GetId()
-	if _, err := validateScreeningResourceArgs(ctx, id); err != nil {
+	if _, err := s.validateScreeningResourceArgs(ctx, id); err != nil {
 		return nil, rpcError(err)
 	}
-	a, _, err := prepareScreeningMutation(ctx, "POST", "policies/"+id+"/activate", req.Msg.Query, req.Msg.Mutation, req.Msg.Body)
+	a, _, err := s.prepareScreeningMutation(ctx, "POST", "policies/"+id+"/activate", req.Msg.Query, req.Msg.Mutation, req.Msg.Body)
 	if err != nil {
 		return nil, rpcError(err)
 	}
@@ -442,7 +442,7 @@ func (s *service) ActivatePolicy(ctx context.Context, req *connect.Request[scree
 }
 
 func (s *service) CreateScreenRun(ctx context.Context, req *connect.Request[screeningv1.CreateScreenRunRequest]) (*connect.Response[screeningv1.CreateScreenRunResponse], error) {
-	a, body, err := prepareScreeningMutation(ctx, "POST", "screen-runs", req.Msg.Query, req.Msg.Mutation, req.Msg.Body)
+	a, body, err := s.prepareScreeningMutation(ctx, "POST", "screen-runs", req.Msg.Query, req.Msg.Mutation, req.Msg.Body)
 	if err != nil {
 		return nil, rpcError(err)
 	}
@@ -451,7 +451,7 @@ func (s *service) CreateScreenRun(ctx context.Context, req *connect.Request[scre
 }
 
 func (s *service) CreateExport(ctx context.Context, req *connect.Request[screeningv1.CreateExportRequest]) (*connect.Response[screeningv1.CreateExportResponse], error) {
-	a, body, err := prepareScreeningMutation(ctx, "POST", "exports", req.Msg.Query, req.Msg.Mutation, req.Msg.Body)
+	a, body, err := s.prepareScreeningMutation(ctx, "POST", "exports", req.Msg.Query, req.Msg.Mutation, req.Msg.Body)
 	if err != nil {
 		return nil, rpcError(err)
 	}
@@ -460,7 +460,7 @@ func (s *service) CreateExport(ctx context.Context, req *connect.Request[screeni
 }
 
 func (s *service) CreateProfitBatch(ctx context.Context, req *connect.Request[screeningv1.CreateProfitBatchRequest]) (*connect.Response[screeningv1.CreateProfitBatchResponse], error) {
-	a, body, err := prepareScreeningMutation(ctx, "POST", "profit/batches", req.Msg.Query, req.Msg.Mutation, req.Msg.Body)
+	a, body, err := s.prepareScreeningMutation(ctx, "POST", "profit/batches", req.Msg.Query, req.Msg.Mutation, req.Msg.Body)
 	if err != nil {
 		return nil, rpcError(err)
 	}
@@ -468,13 +468,13 @@ func (s *service) CreateProfitBatch(ctx context.Context, req *connect.Request[sc
 	return screeningRPCResponse(&screeningv1.CreateProfitBatchResponse{}, value, err)
 }
 
-func validateScreeningResourceArgs(ctx context.Context, ids ...string) (identity, error) {
+func (s *service) validateScreeningResourceArgs(ctx context.Context, ids ...string) (identity, error) {
 	a, err := rpcActor(ctx)
 	if err != nil {
 		return a, err
 	}
 	for _, id := range ids {
-		if err := validImportResourceID(id); err != nil {
+		if err := s.validResourceID(id); err != nil {
 			return a, err
 		}
 	}

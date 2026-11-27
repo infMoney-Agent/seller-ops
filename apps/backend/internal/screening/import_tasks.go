@@ -84,6 +84,9 @@ func (s *service) finishJob(ctx context.Context, job Object, token string, resul
 	return e
 }
 func (s *service) editImport(ctx context.Context, a identity, id string, b Object, commit bool) (any, error) {
+	if s.gormStore != nil {
+		return s.gormEditImport(ctx, a, id, b, commit)
+	}
 	tx, e := s.db.Begin(ctx)
 	if e != nil {
 		return nil, e

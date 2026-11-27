@@ -55,8 +55,11 @@ func (s *service) route(w http.ResponseWriter, r *http.Request) (any, error) {
 		return s.importDownload(w, r, parts[1], parts[2])
 	}
 	if r.Method == "GET" && len(parts) == 3 && parts[0] == "exports" && parts[2] == "download" {
-		if err := validImportResourceID(parts[1]); err != nil {
+		if err := s.validResourceID(parts[1]); err != nil {
 			return nil, err
+		}
+		if s.gormStore != nil {
+			return s.gormExportDownload(w, r, parts[1])
 		}
 		return s.exportDownload(w, r, parts[1])
 	}
@@ -64,24 +67,36 @@ func (s *service) route(w http.ResponseWriter, r *http.Request) (any, error) {
 }
 
 func (s *service) getProductUsecase(ctx context.Context, a identity, id string) (any, error) {
+	if s.gormStore != nil {
+		return s.gormGetProductUsecase(ctx, a, id)
+	}
 	if _, e := s.product(ctx, a, id); e != nil {
 		return nil, e
 	}
 	return s.productView(ctx, a, id)
 }
 func (s *service) getProductFamilyUsecase(ctx context.Context, a identity, id string, query url.Values) (any, error) {
+	if s.gormStore != nil {
+		return s.gormGetProductFamilyUsecase(ctx, a, id, query)
+	}
 	if _, e := s.product(ctx, a, id); e != nil {
 		return nil, e
 	}
 	return s.familyUsecase(ctx, a, query, id)
 }
 func (s *service) getProductMonthlyUsecase(ctx context.Context, a identity, id string, query url.Values) (any, error) {
+	if s.gormStore != nil {
+		return s.gormGetProductMonthlyUsecase(ctx, a, id, query)
+	}
 	if _, e := s.product(ctx, a, id); e != nil {
 		return nil, e
 	}
 	return s.monthlyListUsecase(ctx, a, query, id)
 }
 func (s *service) listProductObservationsUsecase(ctx context.Context, a identity, id string, query url.Values) (any, error) {
+	if s.gormStore != nil {
+		return s.gormListProductObservationsUsecase(ctx, a, id, query)
+	}
 	if _, e := s.product(ctx, a, id); e != nil {
 		return nil, e
 	}
@@ -95,6 +110,9 @@ func (s *service) getProductObservationSourceUsecase(ctx context.Context, a iden
 	return s.observationSource(ctx, a, id, rowID)
 }
 func (s *service) listProductHistoryUsecase(ctx context.Context, a identity, id string, query url.Values) (any, error) {
+	if s.gormStore != nil {
+		return s.gormListProductHistoryUsecase(ctx, a, id, query)
+	}
 	if _, e := s.product(ctx, a, id); e != nil {
 		return nil, e
 	}
@@ -102,6 +120,9 @@ func (s *service) listProductHistoryUsecase(ctx context.Context, a identity, id 
 	return s.listPage(ctx, p, n, "ps_review_events", "tenant_id=$1 AND product_id=$2::uuid", a.Tenant, id)
 }
 func (s *service) listProductReferencesUsecase(ctx context.Context, a identity, id string) (any, error) {
+	if s.gormStore != nil {
+		return s.gormListProductReferencesUsecase(ctx, a, id)
+	}
 	if _, e := s.product(ctx, a, id); e != nil {
 		return nil, e
 	}
@@ -109,12 +130,18 @@ func (s *service) listProductReferencesUsecase(ctx context.Context, a identity, 
 	return Object{"items": items}, e
 }
 func (s *service) listProductProfitScenariosUsecase(ctx context.Context, a identity, id string, query url.Values) (any, error) {
+	if s.gormStore != nil {
+		return s.gormListProductProfitScenariosUsecase(ctx, a, id, query)
+	}
 	if _, e := s.product(ctx, a, id); e != nil {
 		return nil, e
 	}
 	return s.profitScenariosUsecase(ctx, a, query, id)
 }
 func (s *service) listParentMonthlyUsecase(ctx context.Context, a identity, query url.Values) (any, error) {
+	if s.gormStore != nil {
+		return s.gormListParentMonthlyUsecase(ctx, a, query)
+	}
 	p, n := queryPage(query)
 	where := "tenant_id=$1"
 	args := []any{a.Tenant}
@@ -127,17 +154,29 @@ func (s *service) listParentMonthlyUsecase(ctx context.Context, a identity, quer
 	return s.listPage(ctx, p, n, "ps_parent_monthly", where, args...)
 }
 func (s *service) listMonthsUsecase(ctx context.Context, a identity) (any, error) {
+	if s.gormStore != nil {
+		return s.gormListMonthsUsecase(ctx, a)
+	}
 	items, e := s.query(ctx, "SELECT jsonb_build_object('stat_month',stat_month,'period_type',period_type,'source_type',source_type,'products',count(DISTINCT product_id)) FROM ps_product_monthly WHERE tenant_id=$1 GROUP BY stat_month,period_type,source_type ORDER BY stat_month DESC", a.Tenant)
 	return Object{"items": items}, e
 }
 func (s *service) listReviewBatchesUsecase(ctx context.Context, a identity, query url.Values) (any, error) {
+	if s.gormStore != nil {
+		return s.gormListReviewBatchesPersisted(ctx, a, query)
+	}
 	p, n := queryPage(query)
 	return s.listPage(ctx, p, n, "ps_jobs", "tenant_id=$1 AND kind='review'", a.Tenant)
 }
 func (s *service) getReviewBatchUsecase(ctx context.Context, a identity, id string) (any, error) {
+	if s.gormStore != nil {
+		return s.gormGetReviewBatchUsecase(ctx, a, id)
+	}
 	return s.one(ctx, "SELECT to_jsonb(j)-'lease_token' FROM ps_jobs j WHERE tenant_id=$1 AND id=$2::uuid AND kind='review'", a.Tenant, id)
 }
 func (s *service) listConfigsUsecase(ctx context.Context, a identity, kind string) (any, error) {
+	if s.gormStore != nil {
+		return s.gormListConfigsPersisted(ctx, a, kind)
+	}
 	if kind == "screening" {
 		if e := s.ensurePolicy(ctx, a); e != nil {
 			return nil, e
@@ -147,6 +186,9 @@ func (s *service) listConfigsUsecase(ctx context.Context, a identity, kind strin
 	return Object{"items": items}, e
 }
 func (s *service) createScreenRunUsecase(ctx context.Context, a identity, cmd EnqueueScreenCommand) (*JobSubmission, error) {
+	if s.gormStore != nil {
+		return s.gormEnqueueScreen(ctx, a, cmd, "")
+	}
 	if e := s.ensurePolicy(ctx, a); e != nil {
 		return nil, e
 	}
@@ -159,7 +201,11 @@ func (s *service) productView(ctx context.Context, a identity, id string) (Objec
 	return s.one(ctx, "SELECT "+productProjection+"||"+profitSourceProjection+" FROM ps_products p "+q.joins+" WHERE "+q.where, q.args...)
 }
 
-func validateMutationBody(body Object) error {
+func (s *service) validateMutationBody(body Object) error {
+	return validateMutationBody(body, s.gormStore != nil)
+}
+
+func validateMutationBody(body Object, numericIDs ...bool) error {
 	for _, key := range []string{"expected_data_revision", "expected_review_revision", "expected_monthly_revision"} {
 		if raw, present := body[key]; present {
 			if raw == nil && key == "expected_monthly_revision" {
@@ -175,10 +221,19 @@ func validateMutationBody(body Object) error {
 		}
 	}
 	for _, key := range []string{"product_id", "monthly_id", "template_id", "reference_product_id"} {
-		if raw := body[key]; raw != nil && !uuidPattern.MatchString(str(raw)) {
-			return invalid("商品或引用ID无效")
+		if raw := body[key]; raw != nil {
+			id, ok := raw.(string)
+			valid := ok && uuidPattern.MatchString(id)
+			if !valid && ok && len(numericIDs) > 0 && numericIDs[0] {
+				n, e := strconv.ParseUint(id, 10, 64)
+				valid = e == nil && n > 0 && strconv.FormatUint(n, 10) == id
+			}
+			if !valid {
+				return invalid("商品或引用ID无效")
+			}
 		}
 	}
+
 	return nil
 }
 

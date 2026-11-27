@@ -20,6 +20,9 @@ func workspacePage(raw string) (int, error) {
 	return n, nil
 }
 func (s *service) reviewWorkspaceUsecase(ctx context.Context, a identity, params url.Values) (any, error) {
+	if s.gormStore != nil {
+		return s.gormReviewWorkspaceUsecase(ctx, a, params)
+	}
 	v := params
 	mp, e := workspacePage(v.Get("member_page"))
 	if e != nil {

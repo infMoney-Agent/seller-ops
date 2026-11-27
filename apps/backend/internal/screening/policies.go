@@ -46,6 +46,9 @@ func (s *service) loadValidatedPolicy(ctx context.Context, a identity, id string
 }
 
 func (s *service) testPolicy(ctx context.Context, a identity, id string, cmd TestPolicyCommand) (*PolicyTestResult, error) {
+	if s.gormStore != nil {
+		return s.gormTestPolicy(ctx, a, id, cmd)
+	}
 	config, e := s.loadValidatedPolicy(ctx, a, id)
 	if e != nil {
 		return nil, e
@@ -67,6 +70,9 @@ func (s *service) testPolicy(ctx context.Context, a identity, id string, cmd Tes
 }
 
 func (s *service) activatePolicy(ctx context.Context, a identity, id string) (any, error) {
+	if s.gormStore != nil {
+		return s.gormActivatePolicy(ctx, a, id)
+	}
 	if _, e := s.loadValidatedPolicy(ctx, a, id); e != nil {
 		return nil, e
 	}
