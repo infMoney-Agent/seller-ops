@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 	"seller-ops/backend/internal/model"
@@ -773,55 +774,67 @@ func (s *service) gormGetProductMonthlyUsecase(ctx context.Context, a identity, 
 	if err != nil {
 		return nil, err
 	}
+	grouped, err := s.gormStore.MonthlyMetrics().ListByItemIDs(ctx, wsID, []uint64{itemID})
+	if err != nil {
+		return nil, err
+	}
+	dbRows := grouped[itemID]
+
+	merged := []Object{}
+	seenMonths := map[string]bool{}
 	var source Object
 	decoder := json.NewDecoder(bytes.NewReader(item.SourceData))
 	decoder.UseNumber()
 	if decoder.Decode(&source) == nil {
 		if raw, ok := source["source_monthly_history"].([]any); ok {
-			p, n := queryPage(params)
-			selected := []Object{}
-			cutoff := ""
-			if params.Get("recent_months") == "12" && len(raw) > 0 {
-				first := raw[0].(map[string]any)
-				if t, e := time.Parse("2006-01-02", str(first["stat_month"])); e == nil {
-					cutoff = t.AddDate(0, -11, 0).Format("2006-01-02")
-				}
-			}
 			for _, v := range raw {
-				row := v.(map[string]any)
-				month := str(row["stat_month"])
-				if cutoff != "" && month < cutoff {
+				row, ok := v.(map[string]any)
+				if !ok {
 					continue
 				}
-				if m := params.Get("stat_month"); m != "" && !strings.HasPrefix(month, normalizeQueryMonth(m)) {
-					continue
+				monthKey := normalizeQueryMonth(str(row["stat_month"]))
+				if monthKey != "" {
+					seenMonths[monthKey] = true
 				}
-				row = gormArchivedMonthlyToObject(row, id)
-				selected = append(selected, row)
+				merged = append(merged, gormArchivedMonthlyToObject(row, id))
 			}
-			total := len(selected)
-			start := (p - 1) * n
-			if start > total {
-				start = total
-			}
-			end := start + n
-			if end > total {
-				end = total
-			}
-			return Object{"items": selected[start:end], "total": total, "page": p, "page_size": n}, nil
 		}
 	}
-
-	grouped, err := s.gormStore.MonthlyMetrics().ListByItemIDs(ctx, wsID, []uint64{itemID})
-	if err != nil {
-		return nil, err
+	for _, m := range dbRows {
+		monthKey := normalizeQueryMonth(m.StatMonth)
+		if monthKey != "" && seenMonths[monthKey] {
+			continue
+		}
+		if monthKey != "" {
+			seenMonths[monthKey] = true
+		}
+		merged = append(merged, gormMonthlyToObject(m))
 	}
-	rows := grouped[itemID]
-	if params.Get("recent_months") == "12" && len(rows) > 12 {
-		rows = rows[:12]
+	sort.SliceStable(merged, func(i, j int) bool {
+		return normalizeQueryMonth(str(merged[i]["stat_month"])) > normalizeQueryMonth(str(merged[j]["stat_month"]))
+	})
+
+	cutoff := ""
+	if params.Get("recent_months") == "12" && len(merged) > 0 {
+		firstMonth := normalizeQueryMonth(str(merged[0]["stat_month"]))
+		if t, e := time.Parse("2006-01", firstMonth); e == nil {
+			cutoff = t.AddDate(0, -11, 0).Format("2006-01")
+		}
+	}
+	filterMonth := normalizeQueryMonth(params.Get("stat_month"))
+	selected := make([]Object, 0, len(merged))
+	for _, row := range merged {
+		monthKey := normalizeQueryMonth(str(row["stat_month"]))
+		if cutoff != "" && monthKey != "" && monthKey < cutoff {
+			continue
+		}
+		if filterMonth != "" && monthKey != filterMonth {
+			continue
+		}
+		selected = append(selected, row)
 	}
 	p, n := queryPage(params)
-	total := len(rows)
+	total := len(selected)
 	start := (p - 1) * n
 	if start > total {
 		start = total
@@ -830,11 +843,7 @@ func (s *service) gormGetProductMonthlyUsecase(ctx context.Context, a identity, 
 	if end > total {
 		end = total
 	}
-	items := make([]Object, 0, end-start)
-	for _, m := range rows[start:end] {
-		items = append(items, gormMonthlyToObject(m))
-	}
-	return Object{"items": items, "total": total, "page": p, "page_size": n}, nil
+	return Object{"items": selected[start:end], "total": total, "page": p, "page_size": n}, nil
 }
 
 func (s *service) gormListProductHistoryUsecase(ctx context.Context, a identity, id string, params url.Values) (any, error) {
@@ -947,11 +956,21 @@ func (s *service) gormUpdateProductCategory(ctx context.Context, a identity, id 
 	if err != nil {
 		return nil, err
 	}
+	existing, err := s.gormStore.Screening().GetByID(ctx, wsID, itemID)
+	if err != nil {
+		return nil, err
+	}
+	updates := map[string]any{"category_zh": cmd.Category}
+	if len(existing.SourceData) > 0 {
+		source := decodeObject(existing.SourceData)
+		source["category"] = cmd.Category
+		updates["source_data"] = datatypes.JSON(encoded(source))
+	}
 	res := s.gormStore.DB().WithContext(ctx).
 		Model(&model.ScreeningItem{}).
 		Scopes(gormrepo.WithWorkspace(wsID)).
 		Where(clause.Eq{Column: clause.Column{Name: "id"}, Value: itemID}).
-		Updates(map[string]any{"category_zh": cmd.Category})
+		Updates(updates)
 	if res.Error != nil {
 		return nil, res.Error
 	}
@@ -1085,7 +1104,9 @@ func (s *service) gormGetImport(ctx context.Context, a identity, id string) (Obj
 	if err != nil {
 		return nil, err
 	}
-	return gormImportTaskToObject(*t), nil
+	obj := gormImportTaskToObject(*t)
+	s.enrichGORMImportObject(ctx, wsID, id, obj)
+	return obj, nil
 }
 
 func (s *service) gormImportRows(ctx context.Context, a identity, id string, p, n int) (any, error) {
@@ -1107,21 +1128,28 @@ func (s *service) gormImportRows(ctx context.Context, a identity, id string, p, 
 	}
 	items := make([]Object, 0, len(rows))
 	for _, r := range rows {
-		rawObj := Object{}
-		_ = json.Unmarshal(r.RawPayload, &rawObj)
+		rawObj, _, memberPath, sheetName, origRowNo, errs := unpackImportRecordPayload(r.RawPayload)
 		state := "committed"
-		if r.Status == "failed" {
+		switch r.Status {
+		case "failed":
 			state = "invalid"
+		case "valid":
+			state = "valid"
+		}
+		rowNum := origRowNo
+		if rowNum == 0 {
+			rowNum = r.RowNo
 		}
 		items = append(items, Object{
 			"id":            strconv.FormatUint(r.ID, 10),
 			"import_id":     strconv.FormatUint(r.TaskID, 10),
-			"member_path":   "",
-			"sheet_name":    "",
-			"row_no":        r.RowNo,
+			"member_path":   memberPath,
+			"sheet_name":    sheetName,
+			"row_no":        rowNum,
 			"asin":          r.ASIN,
 			"state":         state,
 			"raw_data":      rawObj,
+			"errors":        errs,
 			"error_message": r.ErrorMessage,
 		})
 	}
@@ -1335,15 +1363,26 @@ func (s *service) gormListProductObservationsUsecase(ctx context.Context, a iden
 	}
 	items := make([]Object, 0, len(rows))
 	for _, r := range rows {
-		rawObj := Object{}
-		_ = json.Unmarshal(r.RawPayload, &rawObj)
+		rawObj, _, memberPath, sheetName, origRowNo, _ := unpackImportRecordPayload(r.RawPayload)
+		rowNum := origRowNo
+		if rowNum == 0 {
+			rowNum = r.RowNo
+		}
+		state := "committed"
+		if r.Status == "failed" {
+			state = "invalid"
+		} else if r.Status == "valid" {
+			state = "valid"
+		}
 		items = append(items, Object{
-			"id":        strconv.FormatUint(r.ID, 10),
-			"import_id": strconv.FormatUint(r.TaskID, 10),
-			"row_no":    r.RowNo,
-			"asin":      r.ASIN,
-			"state":     "committed",
-			"raw_data":  rawObj,
+			"id":          strconv.FormatUint(r.ID, 10),
+			"import_id":   strconv.FormatUint(r.TaskID, 10),
+			"member_path": memberPath,
+			"sheet_name":  sheetName,
+			"row_no":      rowNum,
+			"asin":        r.ASIN,
+			"state":       state,
+			"raw_data":    rawObj,
 		})
 	}
 	return Object{"items": items, "total": total, "page": p, "page_size": n}, nil

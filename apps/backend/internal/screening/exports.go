@@ -363,6 +363,9 @@ func (s *service) serveStored(w http.ResponseWriter, r *http.Request, key, name 
 	return nil
 }
 func (s *service) importDownload(w http.ResponseWriter, r *http.Request, id, kind string) (any, error) {
+	if s.gormStore != nil {
+		return s.gormImportDownload(w, r, id, kind)
+	}
 	a := actor(r)
 	batch, e := s.one(r.Context(), "SELECT to_jsonb(i) FROM ps_imports i WHERE tenant_id=$1 AND id=$2::uuid", a.Tenant, id)
 	if e != nil {

@@ -85,6 +85,7 @@ func (r *gormScreeningRepo) BatchUpsertItems(ctx context.Context, workspaceID ui
 	}
 	for i := range items {
 		items[i].WorkspaceID = workspaceID
+		items[i].DeletedAt = gorm.DeletedAt{}
 		if items[i].Currency == "" {
 			items[i].Currency = "USD"
 		}
@@ -98,6 +99,7 @@ func (r *gormScreeningRepo) BatchUpsertItems(ctx context.Context, workspaceID ui
 			items[i].ProfitCalcStatus = "pending"
 		}
 	}
+	// 增量写入严禁覆盖已有的人工复核结论与利润测算结果，且冲突时恢复 deleted_at=NULL。
 	return r.db.WithContext(ctx).Clauses(clause.OnConflict{
 		Columns: []clause.Column{{Name: "workspace_id"}, {Name: "asin"}},
 		DoUpdates: clause.AssignmentColumns([]string{
@@ -108,9 +110,7 @@ func (r *gormScreeningRepo) BatchUpsertItems(ctx context.Context, workspaceID ui
 			"rating", "review_count",
 			"item_dimensions", "package_dimensions", "net_weight_grams", "gross_weight_grams",
 			"machine_result", "machine_rule_version", "machine_reasons",
-			"manual_status", "manual_note", "reviewed_by", "reviewed_at",
-			"profit_calc_status", "latest_calc_id", "profit_margin", "estimated_profit",
-			"last_import_task_id", "updated_at",
+			"last_import_task_id", "deleted_at", "updated_at",
 		}),
 	}).CreateInBatches(items, DefaultBatchSize).Error
 }

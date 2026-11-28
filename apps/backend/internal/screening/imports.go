@@ -507,6 +507,9 @@ func nullableString(s string) any {
 	return s
 }
 func (s *service) upload(w http.ResponseWriter, r *http.Request) (any, error) {
+	if s.gormStore != nil {
+		return s.gormUpload(w, r)
+	}
 	a := actor(r)
 	r.Body = http.MaxBytesReader(w, r.Body, maxUpload+64*1024)
 	if e := r.ParseMultipartForm(1024 * 1024); e != nil {

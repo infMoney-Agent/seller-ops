@@ -26,6 +26,7 @@ func (r *gormMonthlyMetricRepo) BatchUpsert(ctx context.Context, workspaceID uin
 	}
 	for i := range metrics {
 		metrics[i].WorkspaceID = workspaceID
+		metrics[i].DeletedAt = gorm.DeletedAt{}
 		if metrics[i].Currency == "" {
 			metrics[i].Currency = "USD"
 		}
@@ -38,7 +39,7 @@ func (r *gormMonthlyMetricRepo) BatchUpsert(ctx context.Context, workspaceID uin
 		},
 		DoUpdates: clause.AssignmentColumns([]string{
 			"item_id", "parent_asin", "selling_price", "currency",
-			"monthly_sales", "child_sales", "bsr_rank", "source_task_id", "updated_at",
+			"monthly_sales", "child_sales", "bsr_rank", "source_task_id", "deleted_at", "updated_at",
 		}),
 	}).CreateInBatches(metrics, DefaultBatchSize).Error
 }

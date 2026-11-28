@@ -132,13 +132,57 @@ func (s *service) gormUpdateProductParameters(ctx context.Context, a identity, i
 		updates["package_dimensions"] = dims
 	}
 
-	// 其余数值参数仅做合法性校验（如 units_per_pack、carton_*）
-	for _, key := range []string{"units_per_pack", "carton_units", "carton_weight_g", "carton_length_cm", "carton_width_cm", "carton_height_cm"} {
-		if p, ok := cmd.Patches[key]; ok && !p.Clear && strings.TrimSpace(p.Raw) != "" {
-			if _, err := parseDimVal(p); err != nil {
-				return nil, err
+	// 其余数值参数校验并同步写入 source_data，保证增量参数修改无损持久化且不被旧快照覆盖
+	source := Object{}
+	if len(existing.SourceData) > 0 {
+		source = decodeObject(existing.SourceData)
+	}
+	sourceChanged := false
+	for _, key := range []string{"units_per_pack", "carton_units", "carton_weight_g", "carton_length_cm", "carton_width_cm", "carton_height_cm", "product_length_cm", "product_width_cm", "product_height_cm", "package_length_cm", "package_width_cm", "package_height_cm"} {
+		if p, ok := cmd.Patches[key]; ok {
+			if p.Clear || strings.TrimSpace(p.Raw) == "" {
+				source[key] = nil
+				sourceChanged = true
+			} else {
+				raw, err := parseDimVal(p)
+				if err != nil {
+					return nil, err
+				}
+				source[key] = raw
+				sourceChanged = true
 			}
 		}
+	}
+	if v, ok := updates["parent_asin"]; ok {
+		source["parent_asin"] = nullableString(str(v))
+		sourceChanged = true
+	}
+	if v, ok := updates["net_weight_grams"]; ok {
+		if p := cmd.Patches["weight_g"]; p.Clear {
+			source["weight_g"] = nil
+		} else {
+			source["weight_g"] = v
+		}
+		sourceChanged = true
+	}
+	if v, ok := updates["gross_weight_grams"]; ok {
+		if p := cmd.Patches["package_weight_g"]; p.Clear {
+			source["package_weight_g"] = nil
+		} else {
+			source["package_weight_g"] = v
+		}
+		sourceChanged = true
+	}
+	if v, ok := updates["item_dimensions"]; ok {
+		source["product_dimensions"] = v
+		sourceChanged = true
+	}
+	if v, ok := updates["package_dimensions"]; ok {
+		source["package_dimensions"] = v
+		sourceChanged = true
+	}
+	if sourceChanged {
+		updates["source_data"] = datatypes.JSON(encoded(source))
 	}
 
 	if len(updates) > 0 {

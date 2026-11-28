@@ -363,8 +363,22 @@ func (s *service) gormRemoveImportHistory(ctx context.Context, a identity, id st
 	}
 
 	var removedMonthly int64
+	var affectedItemIDs []uint64
 	err = s.gormStore.Transaction(ctx, func(txStore *gormrepo.Store) error {
 		tx := txStore.DB()
+		var metricItems []model.ScreeningItemMonthlyMetric
+		if err := tx.Select("DISTINCT item_id").
+			Scopes(gormrepo.WithWorkspace(wsID)).
+			Where(clause.Eq{Column: clause.Column{Name: "source_task_id"}, Value: taskID}).
+			Find(&metricItems).Error; err != nil {
+			return err
+		}
+		for _, m := range metricItems {
+			if m.ItemID > 0 {
+				affectedItemIDs = append(affectedItemIDs, m.ItemID)
+			}
+		}
+
 		resM := tx.Scopes(gormrepo.WithWorkspace(wsID)).
 			Where(clause.Eq{Column: clause.Column{Name: "source_task_id"}, Value: taskID}).
 			Delete(&model.ScreeningItemMonthlyMetric{})
@@ -378,9 +392,41 @@ func (s *service) gormRemoveImportHistory(ctx context.Context, a identity, id st
 			Delete(&model.ImportRecord{}).Error; err != nil {
 			return err
 		}
-		return tx.Scopes(gormrepo.WithWorkspace(wsID)).
+		if err := tx.Scopes(gormrepo.WithWorkspace(wsID)).
 			Where(clause.Eq{Column: clause.Column{Name: "id"}, Value: taskID}).
-			Delete(&model.ImportTask{}).Error
+			Delete(&model.ImportTask{}).Error; err != nil {
+			return err
+		}
+		if len(affectedItemIDs) > 0 {
+			vals := make([]any, len(affectedItemIDs))
+			for i, itemID := range affectedItemIDs {
+				vals[i] = itemID
+			}
+			var items []model.ScreeningItem
+			if err := tx.Scopes(gormrepo.WithWorkspace(wsID)).
+				Where(clause.IN{Column: clause.Column{Name: "id"}, Values: vals}).
+				Find(&items).Error; err != nil {
+				return err
+			}
+			for _, it := range items {
+				if len(it.SourceData) == 0 {
+					continue
+				}
+				src := decodeObject(it.SourceData)
+				if removeImportFromSourceMonthlyHistory(src, id) {
+					if err := tx.Model(&model.ScreeningItem{}).
+						Scopes(gormrepo.WithWorkspace(wsID)).
+						Where(clause.Eq{Column: clause.Column{Name: "id"}, Value: it.ID}).
+						Updates(map[string]any{"source_data": datatypes.JSON(encoded(src))}).Error; err != nil {
+						return err
+					}
+				}
+			}
+			if err := txStore.MonthlyMetrics().SyncLatestToItems(ctx, wsID, affectedItemIDs); err != nil {
+				return err
+			}
+		}
+		return nil
 	})
 	if err != nil {
 		return nil, err
@@ -427,40 +473,8 @@ func (s *service) gormRetryJob(ctx context.Context, a identity, id string) (*Job
 	return &JobSubmission{JobID: id, State: "queued"}, nil
 }
 
-func (s *service) gormEditImport(ctx context.Context, a identity, id string, b Object, commit bool) (*JobSubmission, error) {
-	wsID, err := s.resolveWorkspaceID(ctx, a)
-	if err != nil {
-		return nil, err
-	}
-	taskID, err := parseUintID(id)
-	if err != nil {
-		return nil, err
-	}
-	if _, err := s.gormStore.Imports().GetTaskByID(ctx, wsID, taskID); err != nil {
-		return nil, err
-	}
-	kind := "parse"
-	if commit {
-		kind = "import"
-	}
-	job := &model.ScreeningJob{
-		WorkspaceID:    wsID,
-		Kind:           kind,
-		State:          "succeeded",
-		Progress:       100,
-		IdempotencyKey: a.RequestKey,
-		Payload:        datatypes.JSON(encoded(Object{"import_id": id, "settings": b})),
-		Result:         datatypes.JSON(encoded(Object{"import_id": id})),
-		CreatedBy:      fmt.Sprintf("user-%d", a.User),
-	}
-	if err := s.gormStore.DB().WithContext(ctx).Create(job).Error; err != nil {
-		return nil, err
-	}
-	return &JobSubmission{JobID: strconv.FormatUint(job.ID, 10), ImportID: id, State: "succeeded"}, nil
-}
-
 // ---------------------------------------------------------------------------
-// MySQL GORM 后台任务处理循环（export / profit_batch / screen）
+// MySQL GORM 后台任务处理循环（parse / import / export / profit_batch / screen）
 // ---------------------------------------------------------------------------
 
 func (s *service) gormWorker(ctx context.Context) error {
@@ -487,7 +501,7 @@ func (s *service) gormProcessNextJob(ctx context.Context) (bool, error) {
 	var job model.ScreeningJob
 	err := gdb.
 		Where(clause.Eq{Column: clause.Column{Name: "state"}, Value: "queued"}).
-		Where(clause.IN{Column: clause.Column{Name: "kind"}, Values: []any{"export", "profit_batch", "screen"}}).
+		Where(clause.IN{Column: clause.Column{Name: "kind"}, Values: []any{"parse", "import", "export", "profit_batch", "screen"}}).
 		Clauses(clause.OrderBy{Columns: []clause.OrderByColumn{{Column: clause.Column{Name: "id"}}}}).
 		First(&job).Error
 	if err != nil {
@@ -510,6 +524,10 @@ func (s *service) gormProcessNextJob(ctx context.Context) (bool, error) {
 	var runErr error
 	var result Object
 	switch job.Kind {
+	case "parse":
+		result, runErr = s.gormExecuteParseJob(ctx, job)
+	case "import":
+		result, runErr = s.gormExecuteImportJob(ctx, job)
 	case "export":
 		result, runErr = s.gormExecuteExportJob(ctx, job)
 	case "profit_batch":

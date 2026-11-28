@@ -54,8 +54,9 @@ services:
         condition: service_healthy
     environment: &backend-env
       BACKEND_ADDR: :8000
-      AUTH_DATABASE_NAME: seller_ops
-      SCREENING_DATABASE_URL: postgresql://seller_screening:${SCREENING_DB_PASSWORD:?Set SCREENING_DB_PASSWORD}@db:5432/seller_screening?sslmode=disable
+      APP_ENV: ${APP_ENV:-prod}
+      MYSQL_DSN: ${MYSQL_DSN:?Set MYSQL_DSN}
+      MIGRATE_MODE: ${MIGRATE_MODE:-verify}
       SCREENING_INTERNAL_SECRET: ${SCREENING_INTERNAL_SECRET:?Set SCREENING_INTERNAL_SECRET}
       SCREENING_STORAGE_DIR: /screening-data
       ECOM_INTERNAL_SECRET: ${ECOM_INTERNAL_SECRET:?Set ECOM_INTERNAL_SECRET}
@@ -86,26 +87,12 @@ services:
       dockerfile: apps/backend/Dockerfile
     environment: *backend-env
     command: [migrate]
-    depends_on:
-      screening-db-init:
-        condition: service_completed_successfully
   screening-storage-init:
     profiles: [app]
     image: alpine:3.22
     user: root
     volumes: ["screening-data:/screening-data"]
     command: [sh, -c, "chown -R 10001:10001 /screening-data"]
-  screening-db-init:
-    profiles: [app]
-    image: postgres:17.7-alpine
-    depends_on:
-      db:
-        condition: service_healthy
-    environment:
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
-      SCREENING_DB_PASSWORD: ${SCREENING_DB_PASSWORD:?Set SCREENING_DB_PASSWORD}
-    volumes: ["./apps/backend/scripts/init-db.sh:/init-screening-db.sh:ro"]
-    entrypoint: [sh, /init-screening-db.sh]
   casdoor:
     image: ${CASDOOR_IMAGE:-casbin/casdoor:v4.25.0}
     depends_on:

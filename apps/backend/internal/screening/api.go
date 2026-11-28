@@ -46,7 +46,7 @@ func (s *service) route(w http.ResponseWriter, r *http.Request) (any, error) {
 		return s.upload(w, r)
 	}
 	if r.Method == "GET" && len(parts) == 3 && parts[0] == "imports" && (parts[2] == "source" || parts[2] == "errors") {
-		if err := validImportResourceID(parts[1]); err != nil {
+		if err := s.validResourceID(parts[1]); err != nil {
 			return nil, err
 		}
 		if _, err := s.getImport(ctx, a, parts[1]); err != nil {
@@ -104,6 +104,9 @@ func (s *service) listProductObservationsUsecase(ctx context.Context, a identity
 	return s.listPage(ctx, p, n, "ps_import_rows", "tenant_id=$1 AND product_id=$2::uuid AND import_id IN (SELECT id FROM ps_imports WHERE tenant_id=$1 AND NOT(counts ? 'data_deleted_at'))", a.Tenant, id)
 }
 func (s *service) getProductObservationSourceUsecase(ctx context.Context, a identity, id, rowID string) (any, error) {
+	if s.gormStore != nil {
+		return s.gormGetProductObservationSourceUsecase(ctx, a, id, rowID)
+	}
 	if _, e := s.product(ctx, a, id); e != nil {
 		return nil, e
 	}

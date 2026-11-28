@@ -31,12 +31,13 @@ func (r *gormImportRepo) UpsertTask(ctx context.Context, task *model.ImportTask)
 	if task.Status == "" {
 		task.Status = "pending"
 	}
+	task.DeletedAt = gorm.DeletedAt{}
 	err := r.db.WithContext(ctx).Clauses(clause.OnConflict{
 		Columns: []clause.Column{{Name: "task_no"}},
 		DoUpdates: clause.AssignmentColumns([]string{
 			"file_name", "source_type", "status", "total_rows",
 			"success_rows", "failed_rows", "skipped_rows",
-			"error_message", "operator_id", "finished_at", "updated_at",
+			"error_message", "operator_id", "finished_at", "deleted_at", "updated_at",
 		}),
 	}).Create(task).Error
 	if err != nil {
@@ -113,6 +114,7 @@ func (r *gormImportRepo) BatchUpsertRecords(ctx context.Context, workspaceID uin
 	}
 	for i := range records {
 		records[i].WorkspaceID = workspaceID
+		records[i].DeletedAt = gorm.DeletedAt{}
 		if records[i].Status == "" {
 			records[i].Status = "success"
 		}
@@ -123,7 +125,7 @@ func (r *gormImportRepo) BatchUpsertRecords(ctx context.Context, workspaceID uin
 	return r.db.WithContext(ctx).Clauses(clause.OnConflict{
 		Columns: []clause.Column{{Name: "task_id"}, {Name: "row_no"}},
 		DoUpdates: clause.AssignmentColumns([]string{
-			"asin", "raw_payload", "status", "error_message", "updated_at",
+			"asin", "raw_payload", "status", "error_message", "deleted_at", "updated_at",
 		}),
 	}).CreateInBatches(records, DefaultBatchSize).Error
 }

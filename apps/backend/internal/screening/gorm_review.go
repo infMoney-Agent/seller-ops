@@ -169,7 +169,7 @@ func (s *service) gormReviewMembers(ctx context.Context, ws uint64, params url.V
 		}
 		for _, pair := range [][2]string{{"profit_min", ">="}, {"profit_max", "<="}} {
 			if value := params.Get(pair[0]); value != "" {
-				q = q.Where("CAST(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(source_data,'$.profit_output.profit_usd')),'null') AS DECIMAL(20,6)) "+pair[1]+" CAST(? AS DECIMAL(20,6))", value)
+				q = q.Where("COALESCE(estimated_profit, CAST(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(source_data,'$.profit_output.profit_usd')),'null') AS DECIMAL(20,6))) "+pair[1]+" CAST(? AS DECIMAL(20,6))", value)
 			}
 		}
 	}
